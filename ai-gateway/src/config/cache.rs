@@ -28,9 +28,13 @@ impl crate::tests::TestDefault for CacheConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Eq, PartialEq, Hash)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
+#[serde(rename_all = "kebab-case", tag = "type")]
 pub enum CacheStore {
+    Redis {
+        #[serde(rename = "host-url", default = "default_host_url")]
+        host_url: String,
+    },
     InMemory {
         // apparently container-level `rename_all` for enums doesn't
         // apply to the fields of the enum, so we need to rename the field
@@ -38,22 +42,6 @@ pub enum CacheStore {
         #[serde(rename = "max-size", default = "default_max_size")]
         max_size: usize,
     },
-}
-
-impl CacheStore {
-    #[must_use]
-    pub fn merge(&self, other: &Self) -> Self {
-        match (self, other) {
-            (
-                Self::InMemory { max_size },
-                Self::InMemory {
-                    max_size: other_max_size,
-                },
-            ) => Self::InMemory {
-                max_size: *max_size.max(other_max_size),
-            },
-        }
-    }
 }
 
 impl Default for CacheStore {
@@ -71,4 +59,8 @@ fn default_max_size() -> usize {
 
 fn default_buckets() -> u8 {
     1
+}
+
+fn default_host_url() -> String {
+    "redis://localhost:6379".to_string()
 }

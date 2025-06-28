@@ -26,6 +26,7 @@ use tracing::{Level, info};
 
 use crate::{
     app_state::{AppState, InnerAppState},
+    cache::{InternalCacheManager, RedisCacheManager},
     cli,
     config::{Config, cache::CacheStore, minio::Minio, server::TlsConfig},
     control_plane::control_plane_state::ControlPlaneState,
@@ -206,7 +207,7 @@ impl App {
                     );
                 })?;
 
-        let moka_manager = setup_cache(&config, metrics.clone());
+        let cache_manager = setup_cache(&config, metrics.clone());
 
         let app_state = AppState(Arc::new(InnerAppState {
             config,
@@ -225,7 +226,7 @@ impl App {
             rate_limit_monitors: rate_limit_monitor,
             rate_limit_senders: RwLock::new(HashMap::default()),
             rate_limit_receivers: RwLock::new(HashMap::default()),
-            moka_manager,
+            cache_manager,
         }));
 
         let otel_metrics_layer =
@@ -440,25 +441,7 @@ where
     }
 }
 
-fn setup_cache(config: &Config, metrics: Metrics) -> Option<MokaManager> {
-    // Check if global caching is enabled
-    let global_cache_config = config.global.cache.as_ref();
-
-    // Check if any router has caching enabled
-    let any_router_has_cache = config
-        .routers
-        .as_ref()
-        .values()
-        .any(|router_config| router_config.cache.is_some());
-
-    // If neither global nor any router config has caching enabled, return None
-    if global_cache_config.is_none() && !any_router_has_cache {
-        return None;
-    }
-    let capacity = match config.cache_store {
-        CacheStore::InMemory { max_size } => max_size,
-    };
-
+fn setup_moka_cache(capacity: usize, metrics: Metrics) -> MokaManager {
     let listener = move |_k, _v, cause| {
         use moka::notification::RemovalCause;
         // RemovalCause::Size means that the cache reached its maximum
@@ -475,5 +458,44 @@ fn setup_cache(config: &Config, metrics: Metrics) -> Option<MokaManager> {
         .max_capacity(u64::try_from(capacity).unwrap_or(u64::MAX))
         .eviction_listener(listener)
         .build();
-    Some(MokaManager::new(cache))
+    MokaManager::new(cache)
+}
+
+fn setup_redis_cache(host_url: String) -> RedisCacheManager {
+    RedisCacheManager::new(host_url)
+}
+
+fn setup_cache(
+    config: &Config,
+    metrics: Metrics,
+) -> Option<InternalCacheManager> {
+    // Check if global caching is enabled
+    let global_cache_config = config.global.cache.as_ref();
+
+    // Check if any router has caching enabled
+    let any_router_has_cache = config
+        .routers
+        .as_ref()
+        .values()
+        .any(|router_config| router_config.cache.is_some());
+
+    // If neither global nor any router config has caching enabled, return None
+    if global_cache_config.is_none() && !any_router_has_cache {
+        return None;
+    }
+
+    let manager: InternalCacheManager = match &config.cache_store {
+        CacheStore::InMemory { max_size } => {
+            tracing::info!("Using in-memory cache");
+            let moka_manager = setup_moka_cache(*max_size, metrics);
+            InternalCacheManager::Moka(moka_manager)
+        }
+        CacheStore::Redis { host_url } => {
+            tracing::info!("Using redis cache");
+            let redis_manager = setup_redis_cache(host_url.clone());
+            InternalCacheManager::Redis(redis_manager)
+        }
+    };
+
+    Some(manager)
 }

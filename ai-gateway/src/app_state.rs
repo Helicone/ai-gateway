@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use http_cache::MokaManager;
 use rustc_hash::FxHashMap as HashMap;
 use tokio::sync::{
     RwLock,
@@ -8,6 +7,7 @@ use tokio::sync::{
 };
 
 use crate::{
+    cache::InternalCacheManager,
     config::{
         Config, minio::Minio, rate_limit::RateLimiterConfig,
         response_headers::ResponseHeadersConfig, router::RouterConfig,
@@ -52,7 +52,7 @@ pub struct InnerAppState {
     pub control_plane_state: Arc<RwLock<ControlPlaneState>>,
     pub direct_proxy_api_keys: ProviderKeys,
     pub provider_keys: RwLock<HashMap<RouterId, ProviderKeys>>,
-    pub moka_manager: Option<MokaManager>,
+    pub cache_manager: Option<InternalCacheManager>,
     pub global_rate_limit: Option<Arc<RateLimiterConfig>>,
     pub router_rate_limits: RwLock<HashMap<RouterId, Arc<RateLimiterConfig>>>,
     /// Top level metrics which are exported to OpenTelemetry.
