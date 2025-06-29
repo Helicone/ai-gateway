@@ -60,4 +60,6 @@ pub enum InitError {
     CacheNotConfigured,
     /// Minio not configured
     MinioNotConfigured,
+    /// Database connection error: {0}
+    DatabaseConnection(sqlx::Error),
 }

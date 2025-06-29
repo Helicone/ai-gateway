@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use ai_gateway::{
     app::App,
-    config::Config,
+    config::{Config, database::DatabaseListener},
     control_plane::websocket::ControlPlaneClient,
     discover::monitor::{
         health::provider::HealthMonitor, rate_limit::RateLimitMonitor,
@@ -87,6 +87,7 @@ async fn main() -> Result<(), RuntimeError> {
         "provider-health-monitor",
         "provider-rate-limit-monitor",
         "system-metrics",
+        "database-listener",
     ];
     let mut meltdown = Meltdown::new().register(TaggedService::new(
         "shutdown-signals",
@@ -102,6 +103,11 @@ async fn main() -> Result<(), RuntimeError> {
         tasks.push("control-plane-client");
     }
 
+    println!("app.state: {:?}", app.state.0.config.database);
+    // Create database listener service
+    let database_listener =
+        DatabaseListener::new(app.state.0.config.database.clone()).await?;
+
     meltdown = meltdown
         .register(TaggedService::new("gateway", app))
         .register(TaggedService::new(
@@ -112,7 +118,8 @@ async fn main() -> Result<(), RuntimeError> {
             "provider-rate-limit-monitor",
             rate_limit_monitor,
         ))
-        .register(TaggedService::new("system-metrics", SystemMetrics));
+        .register(TaggedService::new("system-metrics", SystemMetrics))
+        .register(TaggedService::new("database-listener", database_listener));
 
     if let Some(rate_limiting_cleanup_service) = rate_limiting_cleanup_service {
         meltdown = meltdown.register(TaggedService::new(

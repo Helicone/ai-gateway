@@ -1,5 +1,6 @@
 pub mod balance;
 pub mod cache;
+pub mod database;
 pub mod discover;
 pub mod dispatcher;
 pub mod helicone;
@@ -69,6 +70,7 @@ pub struct Config {
     pub telemetry: telemetry::Config,
     pub server: self::server::ServerConfig,
     pub minio: self::minio::Config,
+    pub database: self::database::DatabaseConfig,
     pub dispatcher: self::dispatcher::DispatcherConfig,
     pub discover: self::discover::DiscoverConfig,
     pub response_headers: self::response_headers::ResponseHeadersConfig,
@@ -180,6 +182,7 @@ impl crate::tests::TestDefault for Config {
             telemetry,
             server: self::server::ServerConfig::test_default(),
             minio: self::minio::Config::test_default(),
+            database: self::database::DatabaseConfig::test_default(),
             dispatcher: self::dispatcher::DispatcherConfig::test_default(),
             default_model_mapping:
                 self::model_mapping::ModelMappingConfig::default(),

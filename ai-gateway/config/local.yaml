@@ -8,6 +8,8 @@ helicone:
   authentication: true
   observability: true
 
+deployment-target: cloud
+
 routers:
   default:
     load-balance:

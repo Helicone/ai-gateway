@@ -91,6 +91,7 @@ uuid = { workspace = true, features = ["serde", "v7"] }
 weighted-balance = { workspace = true }
 workspace_root = { workspace = true, optional = true }
 ts-rs = { workspace = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
 
 [dev-dependencies]
 cargo-husky = { workspace = true, features = ["user-hooks"] }
@@ -153,8 +154,4 @@ required-features = ["testing"]
 
 [[test]]
 name = "health_check"
-required-features = ["testing"]
-
-[[test]]
-name = "error_format"
 required-features = ["testing"]
