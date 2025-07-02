@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use reqwest::Client;
-use rusty_s3::{Bucket, Credentials, actions::PutObject};
+use rusty_s3::{Bucket, Credentials, actions::{GetObject, PutObject}};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -110,6 +110,17 @@ impl Minio {
         'client: 'obj,
     {
         PutObject::new(&self.bucket, Some(&self.credentials), object)
+    }
+
+    #[must_use]
+    pub fn get_object<'obj, 'client>(
+        &'client self,
+        object: &'obj str,
+    ) -> GetObject<'obj>
+    where
+        'client: 'obj,
+    {
+        GetObject::new(&self.bucket, Some(&self.credentials), object)
     }
 }
 
