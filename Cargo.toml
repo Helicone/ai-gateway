@@ -70,6 +70,7 @@ derive_more = { version = "2.0.1", features = ['as_ref', 'constructor', 'debug',
 displaydoc = "0.2.5"
 dotenvy = { version = "0.15.7" }
 eventsource-stream = "0.2.3"
+flate2 = "1.1.2"
 futures = "0.3.31"
 governor = "0.8.1"
 heck = "0.5.0"
