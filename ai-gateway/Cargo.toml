@@ -34,10 +34,14 @@ displaydoc = { workspace = true }
 dotenvy = { workspace = true }
 eventsource-stream = { workspace = true }
 <<<<<<< HEAD
+<<<<<<< HEAD
 flate2 = { workspace = true }
 =======
 flate2 = "1.0.35"
 >>>>>>> 9ee7418 (feat: pulling s3 prompt body in middleware)
+=======
+flate2 = { workspace = true }
+>>>>>>> 9676759 (chore: fmt)
 futures = { workspace = true }
 governor = { workspace = true }
 heck = { workspace = true }
