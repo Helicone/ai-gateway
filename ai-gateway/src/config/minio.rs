@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use reqwest::Client;
-use rusty_s3::{Bucket, Credentials, actions::{GetObject, PutObject}};
+use rusty_s3::{
+    Bucket, Credentials,
+    actions::{GetObject, PutObject},
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
 

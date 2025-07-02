@@ -21,7 +21,9 @@ use crate::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
     },
-    middleware::{prompts::PromptLayer, cache::CacheLayer, rate_limit, request_context},
+    middleware::{
+        cache::CacheLayer, prompts::PromptLayer, rate_limit, request_context,
+    },
     router::direct::DirectProxyService,
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
