@@ -65,6 +65,7 @@ dependencies = [
  "displaydoc",
  "dotenvy",
  "eventsource-stream",
+ "flate2",
  "futures",
  "governor",
  "heck 0.5.0",

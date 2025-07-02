@@ -73,6 +73,10 @@ pub enum InternalError {
     RedisError(redis::RedisError),
     /// Pool error: {0}
     PoolError(r2d2::Error),
+    /// Prompt error: {0}
+    PromptError(#[from] crate::error::prompts::PromptError),
+    /// Failed to complete prompt task: {0}
+    PromptTaskError(tokio::task::JoinError),
 }
 
 impl IntoResponse for InternalError {
@@ -148,6 +152,8 @@ pub enum InternalErrorMetric {
     RedisError,
     /// Pool error
     PoolError,
+    /// Prompt error
+    PromptError,
 }
 
 impl From<&InternalError> for InternalErrorMetric {
@@ -185,6 +191,8 @@ impl From<&InternalError> for InternalErrorMetric {
             InternalError::CacheError(_) => Self::CacheError,
             InternalError::RedisError(_) => Self::RedisError,
             InternalError::PoolError(_) => Self::PoolError,
+            InternalError::PromptError(_) => Self::PromptError,
+            InternalError::PromptTaskError(_) => Self::TokioTaskError,
         }
     }
 }
