@@ -128,135 +128,138 @@ async fn build_prompt_request(
         .map_err(InternalError::CollectBodyError)?
         .to_bytes();
 
-    if app_state.config().helicone.is_observability_enabled() {
-        // Should return an error here, since prompts requires authentication
-        // if !app_state.config().helicone.authentication {
-        //     tracing::warn!("Authentication is disabled, ??? cannot get prompt body");
-        //     // ???
-        // }
-        let auth_ctx =
-            parts.extensions.get::<AuthContext>().cloned().ok_or(
-                InternalError::ExtensionNotFound("AuthContext"),
-            )?;
+    if !app_state.config().helicone.is_observability_enabled() {
+        // should return an error here
+    }
+    let mut request_json: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
-        // PARSE BODY TO GET PROMPT ID (AND OPTIONALLY VERSION ID)
+    tracing::debug!("Original request body: {}", serde_json::to_string_pretty(&request_json).unwrap_or_default());
 
+    let Some(prompt_id) = request_json.get("promptId").and_then(|v| v.as_str()).map(|s| s.to_string()) else {
+        let req = Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
+        return Ok(req);
+    };
 
-        // GIVEN PROMPT ID, FIND PRODUCTION VERSION FROM PG DB
-        let prompt_id = "ROyT8F"; // placeholder
-        let endpoint_url = app_state
-            .config()
-            .helicone
-            .base_url
-            .join("/v1/prompt-2025/query/production-version")
-            .map_err(|_| InternalError::Internal)?;
-        
-        tracing::info!("fetching production version from: {}", endpoint_url);
+    // Removing the promptId is unnecessary? eventually we should keep it in the request body and update the type
+    request_json.as_object_mut().unwrap().remove("promptId");
 
-        let jawn_response = app_state
-            .0
-            .jawn_http_client
-            .request_client
-            .post(endpoint_url)
-            .json(&serde_json::json!({
-                "promptId": prompt_id
-            }))
-            .header(
-                "authorization",
-                format!("Bearer {}", auth_ctx.api_key.expose()),
-            )
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::debug!(error = %e, "failed to send request to helicone");
-                ApiError::Internal(InternalError::PromptError(PromptError::FailedToSendRequest(e)))
-            })?
-            .error_for_status()
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to get production version from helicone");
-                ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetProductionVersion(e)))
-            })?;
-        
-        let version_response = jawn_response.json::<Prompt2025VersionResponse>().await
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to parse version response");
-                ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetProductionVersion(e)))
-            })?;
-
-        tracing::info!("got version response: {:?}", version_response);
-
-        // PULL PROMPT BODY
-        let object_path = format!(
-            "organizations/{}/prompts/{}/versions/{}/prompt_body",
-            auth_ctx.org_id.as_ref(),
-            prompt_id,
-            version_response.data.id,
-        );
-        tracing::info!("using S3 object path: {}", object_path);
-
-        let minio = &app_state.0.minio;
-        let signed_url = minio.get_object(&object_path).sign(Duration::from_secs(120));
-        tracing::info!("generated signed S3 URL: {}", signed_url);
-
-        let s3_response = minio.client
-            .get(signed_url)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::debug!(error = %e, "failed to send request to S3");
-                ApiError::Internal(InternalError::PromptError(PromptError::FailedToSendRequest(e)))
-            })?;
-
-        tracing::info!("s3 response status: {}", s3_response.status());
-        
-        let s3_response = s3_response
-            .error_for_status()
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to get prompt body from S3");
-                ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetPromptBody(e)))
-            })?;
-
-        let response_bytes = s3_response.bytes().await
-            .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetPromptBody(e))))?;
-
-        tracing::info!("S3 response bytes length: {}", response_bytes.len());
-
-        // TEMPORARY CODE TO DEBUG S3 PROMPT BODY
-        
-        let decompressed_bytes = if response_bytes.len() >= 2 && response_bytes[0] == 31 && response_bytes[1] == 139 {
-            tracing::info!("Detected gzip compression, decompressing...");
-            use std::io::Read;
-            let mut decoder = flate2::read::GzDecoder::new(&response_bytes[..]);
-            let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed)
-                .map_err(|e| {
-                    tracing::error!(error = %e, "failed to decompress gzip data");
-                    ApiError::Internal(InternalError::Internal)
-                })?;
-            decompressed
-        } else {
-            response_bytes.to_vec()
-        };
-
-        match serde_json::from_slice::<serde_json::Value>(&decompressed_bytes) {
-            Ok(json_value) => {
-                tracing::info!("Successfully parsed as JSON: {}", serde_json::to_string_pretty(&json_value).unwrap_or_default());
-            }
-            Err(_) => {
-                match String::from_utf8(decompressed_bytes) {
-                    Ok(text) => {
-                        tracing::info!("Content as text: {}", text);
-                    }
-                    Err(_) => {
-                        tracing::info!("Content is still binary after decompression");
-                    }
-                }
-            }
-        }
+    if !app_state.config().helicone.is_observability_enabled() {
+        let req = Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
+        return Ok(req);
     }
 
-    // fail the request here? or pass it through, since it will fail later?
-    // remove this, we should reassemble the request body using the prompt body
-    let req = Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
+    let auth_ctx = parts.extensions.get::<AuthContext>().cloned()
+        .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
+
+    let version_response = get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?;
+    let prompt_body_json = fetch_prompt_body(&app_state, &prompt_id, &version_response.data.id, &auth_ctx).await?;
+    
+    tracing::debug!("Prompt body from S3: {}", serde_json::to_string_pretty(&prompt_body_json).unwrap_or_default());
+    
+    let merged_body = merge_prompt_with_request(prompt_body_json, request_json)?;
+    
+    tracing::debug!("Merged body: {}", serde_json::to_string_pretty(&merged_body).unwrap_or_default());
+    
+    let merged_bytes = serde_json::to_vec(&merged_body)
+        .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+
+    let req = Request::from_parts(parts, axum_core::body::Body::from(merged_bytes));
     Ok(req)
+}
+
+async fn get_prompt_version(
+    app_state: &AppState,
+    prompt_id: &str,
+    auth_ctx: &AuthContext,
+) -> Result<Prompt2025VersionResponse, ApiError> {
+    let endpoint_url = app_state
+        .config()
+        .helicone
+        .base_url
+        .join("/v1/prompt-2025/query/production-version")
+        .map_err(|_| InternalError::Internal)?;
+
+    let response = app_state
+        .0
+        .jawn_http_client
+        .request_client
+        .post(endpoint_url)
+        .json(&serde_json::json!({ "promptId": prompt_id }))
+        .header("authorization", format!("Bearer {}", auth_ctx.api_key.expose()))
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get prompt version");
+            ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetProductionVersion(e)))
+        })?
+        .error_for_status()
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetProductionVersion(e))))?;
+
+    response.json::<Prompt2025VersionResponse>().await
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetProductionVersion(e))))
+}
+
+async fn fetch_prompt_body(
+    app_state: &AppState,
+    prompt_id: &str,
+    version_id: &str,
+    auth_ctx: &AuthContext,
+) -> Result<serde_json::Value, ApiError> {
+    let object_path = format!(
+        "organizations/{}/prompts/{}/versions/{}/prompt_body",
+        auth_ctx.org_id.as_ref(),
+        prompt_id,
+        version_id,
+    );
+
+    let signed_url = app_state.0.minio.get_object(&object_path).sign(Duration::from_secs(120));
+
+    let response_bytes = app_state.0.minio.client
+        .get(signed_url)
+        .send()
+        .await
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToSendRequest(e))))?
+        .error_for_status()
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetPromptBody(e))))?
+        .bytes()
+        .await
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(PromptError::FailedToGetPromptBody(e))))?;
+
+    let decompressed_bytes = decompress_if_gzipped(&response_bytes)?;
+    
+    serde_json::from_slice(&decompressed_bytes)
+        .map_err(|_| ApiError::Internal(InternalError::Internal))
+}
+
+fn decompress_if_gzipped(bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
+    if bytes.len() >= 2 && bytes[0] == 31 && bytes[1] == 139 { // is there a more robust way to do this?
+        use std::io::Read;
+        let mut decoder = flate2::read::GzDecoder::new(bytes);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)
+            .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+        Ok(decompressed)
+    } else {
+        Ok(bytes.to_vec())
+    }
+}
+
+fn merge_prompt_with_request(
+    mut prompt_body: serde_json::Value,
+    request_body: serde_json::Value,
+) -> Result<serde_json::Value, ApiError> {
+    let Some(prompt_obj) = prompt_body.as_object_mut() else {
+        return Err(ApiError::Internal(InternalError::Internal));
+    };
+    
+    let Some(request_obj) = request_body.as_object() else {
+        return Err(ApiError::Internal(InternalError::Internal));
+    };
+
+    for (key, value) in request_obj {
+        prompt_obj.insert(key.clone(), value.clone());
+    }
+
+    Ok(prompt_body)
 }
