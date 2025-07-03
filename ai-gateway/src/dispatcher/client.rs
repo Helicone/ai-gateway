@@ -11,9 +11,8 @@ use crate::{
     dispatcher::{
         SSEStream, anthropic_client::Client as AnthropicClient,
         bedrock_client::Client as BedrockClient,
-        google_gemini_client::Client as GoogleGeminiClient,
         ollama_client::Client as OllamaClient,
-        openai_client::Client as OpenAIClient,
+        openai_compatible_client::Client as OpenAICompatibleClient,
         service::record_stream_err_metrics,
     },
     endpoints::ApiEndpoint,
@@ -51,9 +50,8 @@ impl ProviderClient for Client {
 
 #[derive(Debug, Clone)]
 pub enum Client {
-    OpenAI(OpenAIClient),
+    OpenAICompatible(OpenAICompatibleClient),
     Anthropic(AnthropicClient),
-    GoogleGemini(GoogleGeminiClient),
     Ollama(OllamaClient),
     Bedrock(BedrockClient),
 }
@@ -79,7 +77,7 @@ impl Client {
 
     fn new_inner(
         app_state: &AppState,
-        inference_provider: InferenceProvider,
+        inference_provider: &InferenceProvider,
         api_key: Option<&ProviderKey>,
     ) -> Result<Self, InitError> {
         // connection timeout, timeout, etc.
@@ -89,16 +87,19 @@ impl Client {
             .tcp_nodelay(true);
 
         match inference_provider {
-            InferenceProvider::OpenAI => Ok(Self::OpenAI(OpenAIClient::new(
-                app_state,
-                base_client,
-                api_key,
-            )?)),
+            InferenceProvider::OpenAI
+            | InferenceProvider::Named(_)
+            | InferenceProvider::GoogleGemini => {
+                let openai_compatible_client = OpenAICompatibleClient::new(
+                    app_state,
+                    base_client,
+                    inference_provider,
+                    api_key,
+                )?;
+                Ok(Self::OpenAICompatible(openai_compatible_client))
+            }
             InferenceProvider::Anthropic => Ok(Self::Anthropic(
                 AnthropicClient::new(app_state, base_client, api_key)?,
-            )),
-            InferenceProvider::GoogleGemini => Ok(Self::GoogleGemini(
-                GoogleGeminiClient::new(app_state, base_client, api_key)?,
             )),
             InferenceProvider::Bedrock => Ok(Self::Bedrock(
                 BedrockClient::new(app_state, base_client, api_key)?,
@@ -106,23 +107,19 @@ impl Client {
             InferenceProvider::Ollama => {
                 Ok(Self::Ollama(OllamaClient::new(app_state, base_client)?))
             }
-            // will be implemented in future PR
-            InferenceProvider::Named(_) => {
-                Err(InitError::ProviderNotSupported(inference_provider))
-            }
         }
     }
 
     pub(crate) async fn new_for_router(
         app_state: &AppState,
-        inference_provider: InferenceProvider,
+        inference_provider: &InferenceProvider,
         router_id: &RouterId,
     ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
+        if *inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
         let api_key = &app_state
-            .get_provider_api_key_for_router(router_id, &inference_provider)
+            .get_provider_api_key_for_router(router_id, inference_provider)
             .await?;
 
         Self::new_inner(app_state, inference_provider, api_key.as_ref())
@@ -130,28 +127,28 @@ impl Client {
 
     pub(crate) fn new_for_direct_proxy(
         app_state: &AppState,
-        inference_provider: InferenceProvider,
+        inference_provider: &InferenceProvider,
     ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
+        if *inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
         let api_key = &app_state
-            .get_provider_api_key_for_direct_proxy(&inference_provider)?;
+            .get_provider_api_key_for_direct_proxy(inference_provider)?;
 
         Self::new_inner(app_state, inference_provider, api_key.as_ref())
     }
 
     pub(crate) fn new_for_unified_api(
         app_state: &AppState,
-        inference_provider: InferenceProvider,
+        inference_provider: &InferenceProvider,
     ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
+        if *inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
         // we're cheating here but this will be changed soon for cloud hosted
         // version
         let api_key = &app_state
-            .get_provider_api_key_for_direct_proxy(&inference_provider)?;
+            .get_provider_api_key_for_direct_proxy(inference_provider)?;
 
         Self::new_inner(app_state, inference_provider, api_key.as_ref())
     }
@@ -160,9 +157,8 @@ impl Client {
 impl AsRef<reqwest::Client> for Client {
     fn as_ref(&self) -> &reqwest::Client {
         match self {
-            Client::OpenAI(client) => &client.0,
+            Client::OpenAICompatible(client) => &client.0,
             Client::Anthropic(client) => &client.0,
-            Client::GoogleGemini(client) => &client.0,
             Client::Ollama(client) => &client.0,
             Client::Bedrock(client) => &client.inner,
         }

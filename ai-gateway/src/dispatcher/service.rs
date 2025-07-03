@@ -75,8 +75,7 @@ impl Dispatcher {
         provider: InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
         let client =
-            Client::new_for_router(&app_state, provider.clone(), router_id)
-                .await?;
+            Client::new_for_router(&app_state, &provider, router_id).await?;
         let rate_limit_tx = app_state.get_rate_limit_tx(router_id).await?;
 
         let dispatcher = Self {
@@ -109,8 +108,7 @@ impl Dispatcher {
         app_state: AppState,
         provider: InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
-        let client =
-            Client::new_for_direct_proxy(&app_state, provider.clone())?;
+        let client = Client::new_for_direct_proxy(&app_state, &provider)?;
 
         let dispatcher = Self {
             client,
@@ -139,7 +137,7 @@ impl Dispatcher {
         app_state: AppState,
         provider: InferenceProvider,
     ) -> Result<DispatcherServiceWithoutMapper, InitError> {
-        let client = Client::new_for_unified_api(&app_state, provider.clone())?;
+        let client = Client::new_for_unified_api(&app_state, &provider)?;
 
         let dispatcher = Self {
             client,

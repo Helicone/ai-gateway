@@ -62,13 +62,17 @@ pub trait AiRequest {
     fn model(&self) -> Result<ModelId, MapperError>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ApiEndpoint {
     OpenAI(OpenAI),
     Anthropic(Anthropic),
     Google(Google),
     Ollama(Ollama),
     Bedrock(Bedrock),
+    OpenAICompatible {
+        provider: InferenceProvider,
+        openai_endpoint: OpenAI,
+    },
 }
 
 impl ApiEndpoint {
@@ -88,6 +92,12 @@ impl ApiEndpoint {
             }
             (Self::OpenAI(source), InferenceProvider::OpenAI) => {
                 Ok(Self::OpenAI(source))
+            }
+            (Self::OpenAI(source), InferenceProvider::Named(_provider)) => {
+                Ok(Self::OpenAICompatible {
+                    provider: target_provider.clone(),
+                    openai_endpoint: source,
+                })
             }
             (Self::OpenAI(source), InferenceProvider::GoogleGemini) => {
                 Ok(Self::Google(Google::from(source)))
@@ -115,6 +125,7 @@ impl ApiEndpoint {
             Self::Google(_) => InferenceProvider::GoogleGemini,
             Self::Ollama(_) => InferenceProvider::Ollama,
             Self::Bedrock(_) => InferenceProvider::Bedrock,
+            Self::OpenAICompatible { provider, .. } => provider.clone(),
         }
     }
 
@@ -125,6 +136,9 @@ impl ApiEndpoint {
     ) -> Result<String, InternalError> {
         match self {
             Self::OpenAI(openai) => Ok(openai.path().to_string()),
+            Self::OpenAICompatible {
+                openai_endpoint, ..
+            } => Ok(openai_endpoint.path().to_string()),
             Self::Anthropic(anthropic) => Ok(anthropic.path().to_string()),
             Self::Google(google) => Ok(google.path().to_string()),
             Self::Ollama(ollama) => Ok(ollama.path().to_string()),
@@ -143,6 +157,9 @@ impl ApiEndpoint {
     pub fn endpoint_type(&self) -> EndpointType {
         match self {
             Self::OpenAI(openai) => openai.endpoint_type(),
+            Self::OpenAICompatible {
+                openai_endpoint, ..
+            } => openai_endpoint.endpoint_type(),
             Self::Anthropic(anthropic) => anthropic.endpoint_type(),
             Self::Google(google) => google.endpoint_type(),
             Self::Ollama(ollama) => ollama.endpoint_type(),

@@ -47,6 +47,8 @@ pub enum InvalidRequestError {
     InvalidCacheConfig,
     /// Too many requests: {0}
     TooManyRequests(TooManyRequestsError),
+    /// Invalid request header: {0}
+    InvalidRequestHeader(http::header::ToStrError),
 }
 
 impl IntoResponse for InvalidRequestError {
@@ -157,7 +159,8 @@ impl From<&InvalidRequestError> for InvalidRequestErrorMetric {
             }
             InvalidRequestError::NotFound(_)
             | InvalidRequestError::RouterIdNotFound(_)
-            | InvalidRequestError::MissingRouterId => Self::NotFound,
+            | InvalidRequestError::MissingRouterId
+            | InvalidRequestError::InvalidRequestHeader(_) => Self::NotFound,
             InvalidRequestError::InvalidRequest(_)
             | InvalidRequestError::UnsupportedEndpoint(_)
             | InvalidRequestError::InvalidCacheConfig => Self::InvalidRequest,

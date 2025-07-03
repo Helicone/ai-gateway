@@ -2,3 +2,6 @@ pub mod direct;
 pub mod meta;
 pub mod service;
 pub mod unified_api;
+
+pub(in crate::router) const FORCED_ROUTING_HEADER: http::HeaderName =
+    http::HeaderName::from_static("helicone-forced-routing");
