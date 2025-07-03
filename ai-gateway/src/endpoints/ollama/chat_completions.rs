@@ -33,9 +33,6 @@ impl AiRequest for CreateChatCompletionRequestOllama {
     }
 
     fn model(&self) -> Result<ModelId, MapperError> {
-        ModelId::from_str_and_provider(
-            &InferenceProvider::Ollama,
-            &self.0.model,
-        )
+        ModelId::from_str_and_provider(InferenceProvider::Ollama, &self.0.model)
     }
 }

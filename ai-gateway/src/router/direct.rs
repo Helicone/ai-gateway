@@ -32,10 +32,8 @@ impl DirectProxies {
         let provider_keys = app_state.0.direct_proxy_api_keys.clone();
         for (provider, _provider_config) in app_state.config().providers.iter()
         {
-            let direct_proxy_dispatcher = Dispatcher::new_direct_proxy(
-                app_state.clone(),
-                provider.clone(),
-            )?;
+            let direct_proxy_dispatcher =
+                Dispatcher::new_direct_proxy(app_state.clone(), *provider)?;
 
             let direct_proxy = ServiceBuilder::new()
                 // TODO: should we change how global configs work for rate
@@ -51,7 +49,7 @@ impl DirectProxies {
                 // .map_err(|e| crate::error::api::Error::Box(e))
                 .service(direct_proxy_dispatcher);
 
-            direct_proxies.insert(provider.clone(), direct_proxy);
+            direct_proxies.insert(*provider, direct_proxy);
         }
         Ok(Self(Arc::new(direct_proxies)))
     }
@@ -76,10 +74,8 @@ impl DirectProxiesWithoutMapper {
         let provider_keys = app_state.0.direct_proxy_api_keys.clone();
         for (provider, _provider_config) in app_state.config().providers.iter()
         {
-            let direct_proxy_dispatcher = Dispatcher::new_without_mapper(
-                app_state.clone(),
-                provider.clone(),
-            )?;
+            let direct_proxy_dispatcher =
+                Dispatcher::new_without_mapper(app_state.clone(), *provider)?;
 
             let direct_proxy = ServiceBuilder::new()
                 // TODO: should we change how global configs work for rate
@@ -95,7 +91,7 @@ impl DirectProxiesWithoutMapper {
                 // .map_err(|e| crate::error::api::Error::Box(e))
                 .service(direct_proxy_dispatcher);
 
-            direct_proxies.insert(provider.clone(), direct_proxy);
+            direct_proxies.insert(*provider, direct_proxy);
         }
         Ok(Self(Arc::new(direct_proxies)))
     }

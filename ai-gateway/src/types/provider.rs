@@ -1,6 +1,5 @@
 use std::{str::FromStr, sync::Arc};
 
-use compact_str::CompactString;
 use rustc_hash::FxHashMap as HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use strum::{EnumIter, IntoEnumIterator};
@@ -60,25 +59,25 @@ impl Serialize for ModelProvider {
     Debug,
     Clone,
     Default,
+    Copy,
     Eq,
     Hash,
     PartialEq,
     EnumIter,
-    serde::Serialize,
-    serde::Deserialize,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
 )]
-#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum InferenceProvider {
     #[default]
-    #[serde(rename = "openai")]
+    #[strum(serialize = "openai")]
     OpenAI,
     Anthropic,
     Bedrock,
     Ollama,
-    #[serde(rename = "gemini")]
+    #[strum(serialize = "gemini")]
     GoogleGemini,
-    #[serde(untagged)]
-    Named(CompactString),
 }
 
 impl InferenceProvider {
@@ -110,47 +109,26 @@ impl InferenceProvider {
                     .map(ApiEndpoint::Bedrock)
                     .collect()
             }
-            InferenceProvider::Named(_name) => Vec::new(),
         }
     }
 }
 
-impl FromStr for InferenceProvider {
-    type Err = std::convert::Infallible;
-
-    fn from_str(
-        s: &str,
-    ) -> ::core::result::Result<InferenceProvider, Self::Err> {
-        match s {
-            "openai" => Ok(InferenceProvider::OpenAI),
-            "anthropic" => Ok(InferenceProvider::Anthropic),
-            "bedrock" => Ok(InferenceProvider::Bedrock),
-            "ollama" => Ok(InferenceProvider::Ollama),
-            "gemini" => Ok(InferenceProvider::GoogleGemini),
-            s => Ok(InferenceProvider::Named(s.into())),
-        }
+impl<'de> Deserialize<'de> for InferenceProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        InferenceProvider::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
-impl AsRef<str> for InferenceProvider {
-    fn as_ref(&self) -> &str {
-        match self {
-            InferenceProvider::Named(name) => name.as_ref(),
-            InferenceProvider::OpenAI => "openai",
-            InferenceProvider::Anthropic => "anthropic",
-            InferenceProvider::Bedrock => "bedrock",
-            InferenceProvider::Ollama => "ollama",
-            InferenceProvider::GoogleGemini => "gemini",
-        }
-    }
-}
-
-impl std::fmt::Display for InferenceProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InferenceProvider::Named(name) => write!(f, "{name}"),
-            _ => write!(f, "{}", self.as_ref()),
-        }
+impl Serialize for InferenceProvider {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_ref())
     }
 }
 
@@ -187,8 +165,8 @@ impl ProviderKey {
     }
 
     #[must_use]
-    pub fn from_env(provider: &InferenceProvider) -> Option<Self> {
-        if *provider == InferenceProvider::Bedrock {
+    pub fn from_env(provider: InferenceProvider) -> Option<Self> {
+        if provider == InferenceProvider::Bedrock {
             if let (Ok(access_key), Ok(secret_key)) = (
                 std::env::var("AWS_ACCESS_KEY"),
                 std::env::var("AWS_SECRET_KEY"),
@@ -236,8 +214,8 @@ impl ProviderKeys {
                 // ollama doesn't require an API key
                 continue;
             }
-            if let Some(key) = ProviderKey::from_env(&provider) {
-                keys.insert(provider.clone(), key);
+            if let Some(key) = ProviderKey::from_env(provider) {
+                keys.insert(provider, key);
             }
         }
 
@@ -249,7 +227,7 @@ impl ProviderKeys {
     ) -> Result<Self, ProviderError> {
         let mut keys = Self::from_env_inner(&router_config.load_balance);
         let default_provider = SDK;
-        if let Some(key) = ProviderKey::from_env(&default_provider) {
+        if let Some(key) = ProviderKey::from_env(default_provider) {
             tracing::debug!(provider = %default_provider, "got llm provider key");
             keys.insert(default_provider, key);
         }
@@ -261,33 +239,14 @@ impl ProviderKeys {
     ) -> Result<Self, ProviderError> {
         let keys = providers_config
             .iter()
-            .filter_map(|(provider, _)| {
+            .filter_map(|(&provider, _)| {
                 ProviderKey::from_env(provider).map(|key| {
                     tracing::debug!(provider = %provider, "got llm provider key");
-                    (provider.clone(), key)
+                    (provider, key)
                 })
             })
             .collect();
 
         Ok(Self(Arc::new(keys)))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inference_provider_as_ref() {
-        let named_provider = InferenceProvider::Named("test".into());
-        let named_provider_str = named_provider.as_ref();
-        assert_eq!("test", named_provider_str);
-    }
-
-    #[test]
-    fn inference_provider_to_string() {
-        let named_provider = InferenceProvider::Named("test".into());
-        let named_provider_str = named_provider.to_string();
-        assert_eq!("test", named_provider_str);
     }
 }

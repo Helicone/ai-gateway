@@ -28,7 +28,7 @@ impl AiRequest for CreateChatCompletionRequest {
     }
 
     fn model(&self) -> Result<ModelId, MapperError> {
-        ModelId::from_str_and_provider(&InferenceProvider::OpenAI, &self.model)
+        ModelId::from_str_and_provider(InferenceProvider::OpenAI, &self.model)
     }
 }
 

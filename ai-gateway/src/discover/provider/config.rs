@@ -68,7 +68,7 @@ impl ConfigDiscovery<Key> {
                     app_state.clone(),
                     router_id,
                     router_config,
-                    key.provider.clone(),
+                    key.provider,
                 )
                 .await?;
                 service_map.insert(key, dispatcher);
@@ -106,18 +106,15 @@ impl ConfigDiscovery<WeightedKey> {
             for target in weighted_balance_targets {
                 let weight =
                     Weight::from(target.weight.to_f64().ok_or_else(|| {
-                        InitError::InvalidWeight(target.provider.clone())
+                        InitError::InvalidWeight(target.provider)
                     })?);
-                let key = WeightedKey::new(
-                    target.provider.clone(),
-                    *endpoint_type,
-                    weight,
-                );
+                let key =
+                    WeightedKey::new(target.provider, *endpoint_type, weight);
                 let dispatcher = Dispatcher::new(
                     app_state.clone(),
                     router_id,
                     router_config,
-                    key.provider.clone(),
+                    key.provider,
                 )
                 .await?;
                 service_map.insert(key, dispatcher);

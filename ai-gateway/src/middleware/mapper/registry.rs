@@ -4,7 +4,8 @@ use rustc_hash::FxHashMap as HashMap;
 
 use super::{
     EndpointConverter, TypedEndpointConverter, anthropic::AnthropicConverter,
-    gemini::GoogleGeminiConverter, model::ModelMapper, openai::OpenAIConverter,
+    model::ModelMapper, openai::OpenAIConverter,
+    openai_compatible::OpenAICompatibleConverter,
 };
 use crate::{
     endpoints::{
@@ -12,6 +13,7 @@ use crate::{
         google::Google, ollama::Ollama, openai::OpenAI,
     },
     middleware::mapper::{bedrock::BedrockConverter, ollama::OllamaConverter},
+    types::provider::InferenceProvider,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -96,8 +98,9 @@ impl EndpointConverterRegistryInner {
         let converter = TypedEndpointConverter::<
             endpoints::openai::ChatCompletions,
             endpoints::google::GenerateContents,
-            GoogleGeminiConverter,
-        >::new(GoogleGeminiConverter::new(
+            OpenAICompatibleConverter,
+        >::new(OpenAICompatibleConverter::new(
+            InferenceProvider::GoogleGemini,
             model_mapper.clone(),
         ));
         registry.register_converter(key, converter);

@@ -72,7 +72,7 @@ where
             let target_provider = req
                 .extensions()
                 .get::<InferenceProvider>()
-                .cloned()
+                .copied()
                 .ok_or_else(|| {
                     ApiError::Internal(InternalError::ExtensionNotFound(
                         "InferenceProvider",
@@ -89,16 +89,18 @@ where
             let source_endpoint = source_endpoint.ok_or(ApiError::Internal(
                 InternalError::ExtensionNotFound("ApiEndpoint"),
             ))?;
+            let source_endpoint_cloned = source_endpoint;
             let target_endpoint =
                 ApiEndpoint::mapped(source_endpoint, &target_provider)?;
+            let target_endpoint_cloned = target_endpoint;
             // serialization/deserialization should be done on a dedicated
             // thread
             let converter_registry_cloned = converter_registry.clone();
             let req = tokio::task::spawn_blocking(move || async move {
                 map_request(
                     converter_registry_cloned,
-                    &source_endpoint,
-                    &target_endpoint,
+                    source_endpoint_cloned,
+                    target_endpoint_cloned,
                     &extracted_path_and_query,
                     req,
                 )
@@ -129,8 +131,8 @@ where
 
 async fn map_request(
     converter_registry: EndpointConverterRegistry,
-    source_endpoint: &ApiEndpoint,
-    target_endpoint: &ApiEndpoint,
+    source_endpoint: ApiEndpoint,
+    target_endpoint: ApiEndpoint,
     target_path_and_query: &PathAndQuery,
     req: Request,
 ) -> Result<Request, ApiError> {
@@ -142,9 +144,9 @@ async fn map_request(
         .map_err(InternalError::CollectBodyError)?
         .to_bytes();
     let converter = converter_registry
-        .get_converter(source_endpoint, target_endpoint)
+        .get_converter(&source_endpoint, &target_endpoint)
         .ok_or_else(|| {
-            InternalError::InvalidConverter(*source_endpoint, *target_endpoint)
+            InternalError::InvalidConverter(source_endpoint, target_endpoint)
         })?;
 
     let (body, mapper_ctx) = converter.convert_req_body(body)?;
@@ -176,7 +178,7 @@ async fn map_request(
     );
     req.extensions_mut().insert(target_path_and_query);
     req.extensions_mut().insert(mapper_ctx);
-    req.extensions_mut().insert(*target_endpoint);
+    req.extensions_mut().insert(target_endpoint);
     Ok(req)
 }
 
@@ -200,6 +202,11 @@ async fn map_response(
         })?;
 
     if is_stream {
+        tracing::trace!(
+            source_endpoint = ?target_endpoint,
+            target_endpoint = ?source_endpoint,
+            "mapped streaming response"
+        );
         // because we are using our custom body type, and we know it was
         // constructed in the dispatcher from either an SSE stream or a
         // stream of bytes, we can safely assume each frame is a single
@@ -213,6 +220,8 @@ async fn map_response(
                 move |bytes| {
                     let registry_for_future = captured_registry.clone();
                     let resp_parts = resp_parts.clone();
+                    let target_endpoint = target_endpoint;
+                    let source_endpoint = source_endpoint;
                     async move {
                         let converter = registry_for_future
                             .get_converter(&target_endpoint, &source_endpoint)
@@ -244,11 +253,6 @@ async fn map_response(
             reqwest::Body::wrap_stream(mapped_stream),
         );
         let new_resp = Response::from_parts(parts, final_body);
-        tracing::trace!(
-            source_endpoint = ?target_endpoint,
-            target_endpoint = ?source_endpoint,
-            "mapped streaming response"
-        );
         Ok(new_resp)
     } else {
         use http_body_util::BodyExt;

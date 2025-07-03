@@ -29,7 +29,7 @@ impl AiRequest for ConverseInput {
     fn model(&self) -> Result<ModelId, MapperError> {
         let model =
             self.model_id.as_ref().ok_or(MapperError::InvalidRequest)?;
-        ModelId::from_str_and_provider(&InferenceProvider::Bedrock, model)
+        ModelId::from_str_and_provider(InferenceProvider::Bedrock, model)
     }
 }
 

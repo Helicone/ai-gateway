@@ -75,14 +75,13 @@ impl Dispatcher {
         provider: InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
         let client =
-            Client::new_for_router(&app_state, provider.clone(), router_id)
-                .await?;
+            Client::new_for_router(&app_state, provider, router_id).await?;
         let rate_limit_tx = app_state.get_rate_limit_tx(router_id).await?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider: provider.clone(),
+            provider,
             rate_limit_tx: Some(rate_limit_tx),
         };
         let model_mapper = ModelMapper::new_for_router(
@@ -109,13 +108,12 @@ impl Dispatcher {
         app_state: AppState,
         provider: InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
-        let client =
-            Client::new_for_direct_proxy(&app_state, provider.clone())?;
+        let client = Client::new_for_direct_proxy(&app_state, provider)?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider: provider.clone(),
+            provider,
             rate_limit_tx: None,
         };
         let model_mapper = ModelMapper::new(app_state.clone());
@@ -139,12 +137,12 @@ impl Dispatcher {
         app_state: AppState,
         provider: InferenceProvider,
     ) -> Result<DispatcherServiceWithoutMapper, InitError> {
-        let client = Client::new_for_unified_api(&app_state, provider.clone())?;
+        let client = Client::new_for_unified_api(&app_state, provider)?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider: provider.clone(),
+            provider,
             rate_limit_tx: None,
         };
 
@@ -204,7 +202,7 @@ impl Dispatcher {
         let config = self.app_state.config();
         let provider_config =
             config.providers.get(target_provider).ok_or_else(|| {
-                InternalError::ProviderNotConfigured(target_provider.clone())
+                InternalError::ProviderNotConfigured(*target_provider)
             })?;
         let base_url = provider_config.base_url.clone();
         {
@@ -231,7 +229,7 @@ impl Dispatcher {
         let inference_provider = req
             .extensions()
             .get::<InferenceProvider>()
-            .cloned()
+            .copied()
             .ok_or(InternalError::ExtensionNotFound("InferenceProvider"))?;
         let router_id = req.extensions().get::<RouterId>().cloned();
         let start_instant = req
@@ -343,7 +341,7 @@ impl Dispatcher {
                 .request_body(req_body_bytes)
                 .response_status(client_response.status())
                 .response_body(response_body_for_logger)
-                .provider(target_provider.clone())
+                .provider(*target_provider)
                 .tfft_rx(tfft_rx)
                 .mapper_ctx(mapper_ctx)
                 .build();

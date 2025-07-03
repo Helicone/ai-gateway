@@ -15,16 +15,15 @@ impl Client {
     pub fn new(
         app_state: &AppState,
         client_builder: ClientBuilder,
+        provider: InferenceProvider,
         provider_key: Option<&ProviderKey>,
     ) -> Result<Self, InitError> {
         let base_url = app_state
             .0
             .config
             .providers
-            .get(&InferenceProvider::OpenAI)
-            .ok_or(ProviderError::ProviderNotConfigured(
-                InferenceProvider::OpenAI,
-            ))?
+            .get(&provider)
+            .ok_or_else(|| ProviderError::ProviderNotConfigured(provider))?
             .base_url
             .clone();
 

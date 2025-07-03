@@ -27,7 +27,7 @@ impl AiRequest for CreateMessageParams {
 
     fn model(&self) -> Result<ModelId, MapperError> {
         ModelId::from_str_and_provider(
-            &InferenceProvider::Anthropic,
+            InferenceProvider::Anthropic,
             &self.model,
         )
     }

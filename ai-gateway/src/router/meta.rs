@@ -23,31 +23,42 @@ use crate::{
         rate_limit,
     },
     router::{
+        FORCED_ROUTING_HEADER,
         direct::{DirectProxiesWithoutMapper, DirectProxyServiceWithoutMapper},
         service::{Router, RouterFuture},
         unified_api,
     },
     types::{
         extensions::MapperContext, provider::InferenceProvider,
-        router::RouterId,
+        request::Request, router::RouterId,
     },
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
 
-/// Regex for the following URL format:
-/// - `/router/{name}`
-/// - `/router/{name}?{query}`
-/// - `/router/{name}/{path}`
-/// - `/router/{name}/{path}?{query}`
-///
-/// eg:
-/// - `/router/default`
-/// - `/router/my-router`
-/// - `/router/my-router?user=bar`
-/// - `/router/default/chat/completions`
-/// - `/router/my-router/v1/chat/completions`
-/// - `/router/my-router/v1/chat/completions?user=test&limit=10`
-const URL_REGEX: &str =
+#[derive(Debug, Clone)]
+enum RouteType {
+    Router {
+        id: RouterId,
+        path: CompactString,
+    },
+    UnifiedApi {
+        path: CompactString,
+    },
+    DirectProxy {
+        provider: InferenceProvider,
+        path: CompactString,
+    },
+}
+
+/// Unified regex that matches all three routing patterns:
+/// - `/router/{id}[/path][?query]` - Router pattern
+/// - `/ai[/path][?query]` - Unified API pattern
+/// - `/{provider}[/path][?query]` - Direct proxy pattern
+const UNIFIED_URL_REGEX: &str =
+    r"^/(?P<first_segment>[^/?]+)(?P<rest>/[^?]*)?(?P<query>\?.*)?$";
+
+/// Legacy regex for router-specific matching (kept for backward compatibility)
+const ROUTER_URL_REGEX: &str =
     r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
@@ -74,7 +85,8 @@ pub struct MetaRouter {
     inner: HashMap<RouterId, Router>,
     unified_api: UnifiedApiService,
     direct_proxies: DirectProxiesWithoutMapper,
-    url_regex: Regex,
+    unified_url_regex: Regex,
+    router_url_regex: Regex,
 }
 
 impl MetaRouter {
@@ -95,8 +107,10 @@ impl MetaRouter {
     }
 
     pub async fn from_config(app_state: AppState) -> Result<Self, InitError> {
-        let url_regex =
-            Regex::new(URL_REGEX).expect("always valid if tests pass");
+        let unified_url_regex =
+            Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
+        let router_url_regex =
+            Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
         let mut inner = HashMap::default();
         for router_id in app_state.0.config.routers.as_ref().keys() {
             let router =
@@ -116,24 +130,83 @@ impl MetaRouter {
             inner,
             unified_api,
             direct_proxies,
-            url_regex,
+            unified_url_regex,
+            router_url_regex,
         };
         Ok(meta_router)
+    }
+
+    fn parse_route(&self, request: &Request) -> Result<RouteType, ApiError> {
+        let path = request.uri().path();
+        if let Some(captures) = self.unified_url_regex.captures(path) {
+            let first_segment = captures
+                .name("first_segment")
+                .ok_or_else(|| {
+                    ApiError::InvalidRequest(InvalidRequestError::NotFound(
+                        path.to_string(),
+                    ))
+                })?
+                .as_str();
+
+            let is_router_request = first_segment == "router";
+            let is_unified_api_request = first_segment == "ai";
+
+            let rest_path = captures
+                .name("rest")
+                .map(|m| m.as_str())
+                .unwrap_or_default();
+            if let Some(forced_routing) =
+                request.headers().get(FORCED_ROUTING_HEADER)
+                && let Ok(forced_routing) = forced_routing.to_str()
+                && (is_router_request || is_unified_api_request)
+            {
+                if let Ok(provider) =
+                    InferenceProvider::from_str(forced_routing)
+                {
+                    return Ok(RouteType::DirectProxy {
+                        provider,
+                        path: rest_path.trim_start_matches('/').into(),
+                    });
+                }
+            }
+
+            if is_router_request {
+                // Use the router-specific regex for detailed parsing
+                let (router_id, extracted_api_path) =
+                    extract_router_id_and_path(&self.router_url_regex, path)?;
+                Ok(RouteType::Router {
+                    id: router_id,
+                    path: extracted_api_path.into(),
+                })
+            } else if is_unified_api_request {
+                Ok(RouteType::UnifiedApi {
+                    path: rest_path.into(),
+                })
+            } else if let Ok(provider) =
+                InferenceProvider::from_str(first_segment)
+            {
+                Ok(RouteType::DirectProxy {
+                    provider,
+                    path: rest_path.trim_start_matches('/').into(),
+                })
+            } else {
+                Err(ApiError::InvalidRequest(InvalidRequestError::NotFound(
+                    path.to_string(),
+                )))
+            }
+        } else {
+            Err(ApiError::InvalidRequest(InvalidRequestError::NotFound(
+                path.to_string(),
+            )))
+        }
     }
 
     fn handle_router_request(
         &mut self,
         mut req: crate::types::request::Request,
+        router_id: &RouterId,
+        extracted_api_path: &str,
     ) -> ResponseFuture {
-        let Ok((router_id, extracted_api_path)) =
-            extract_router_id_and_path(&self.url_regex, req.uri().path())
-        else {
-            return ResponseFuture::Ready {
-                future: ready(Err(ApiError::InvalidRequest(
-                    InvalidRequestError::NotFound(req.uri().path().to_string()),
-                ))),
-            };
-        };
         tracing::trace!(
             router_id = %router_id,
             api_path = extracted_api_path,
@@ -149,7 +222,7 @@ impl MetaRouter {
                     };
                 }
             };
-        if let Some(router) = self.inner.get_mut(&router_id) {
+        if let Some(router) = self.inner.get_mut(router_id) {
             req.extensions_mut().insert(extracted_path_and_query);
             ResponseFuture::RouterRequest {
                 future: router.call(req),
@@ -166,8 +239,8 @@ impl MetaRouter {
     fn handle_unified_api_request(
         &mut self,
         mut req: crate::types::request::Request,
+        rest: &str,
     ) -> ResponseFuture {
-        let rest = req.uri().path().trim_start_matches("/ai");
         tracing::trace!(api_path = rest, "received /ai request");
         let extracted_path_and_query =
             match extract_path_and_query(rest, req.uri().query()) {
@@ -189,64 +262,45 @@ impl MetaRouter {
     fn handle_direct_proxy_request(
         &mut self,
         mut req: crate::types::request::Request,
+        provider: InferenceProvider,
+        rest: &str,
     ) -> ResponseFuture {
-        // Extract the first path segment (e.g. "openai" from
-        // "/openai/v1/chat")
-        let path = req.uri().path();
-        let mut segment_iter = path.trim_start_matches('/').split('/');
-        let first_segment = segment_iter.next().unwrap_or("");
         tracing::trace!(
-            provider = %first_segment,
+            provider = %provider,
             "received /{{provider}} request"
         );
-        match InferenceProvider::from_str(first_segment) {
-            Ok(provider) => {
-                let rest = segment_iter.collect::<Vec<_>>().join("/");
-                let extracted_path_and_query =
-                    match extract_path_and_query(&rest, req.uri().query()) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            return ResponseFuture::Ready {
-                                future: ready(Err(e)),
-                            };
-                        }
-                    };
-                req.extensions_mut().insert(extracted_path_and_query);
-                // for the passthrough endpoints, we don't want to
-                // collect/deserialize the request
-                // body, and thus we must assume the request is not a stream
-                // request and cannot support streaming.
-                let mapper_ctx = MapperContext {
-                    is_stream: false,
-                    model: None,
-                };
-                req.extensions_mut().insert(mapper_ctx);
-
-                let Some(mut direct_proxy) =
-                    self.direct_proxies.get(&provider).cloned()
-                else {
-                    tracing::warn!(provider = %provider, "requested provider is not configured for direct proxy");
+        let extracted_path_and_query =
+            match extract_path_and_query(rest, req.uri().query()) {
+                Ok(p) => p,
+                Err(e) => {
                     return ResponseFuture::Ready {
-                        future: ready(Err(ApiError::InvalidRequest(
-                            InvalidRequestError::UnsupportedProvider(provider),
-                        ))),
+                        future: ready(Err(e)),
                     };
-                };
-                ResponseFuture::DirectProxy {
-                    future: direct_proxy.call(req),
                 }
-            }
-            Err(e) => {
-                tracing::debug!(
-                    error = %e,
-                    "Invalid inference provider"
-                );
-                ResponseFuture::Ready {
-                    future: ready(Err(ApiError::InvalidRequest(
-                        InvalidRequestError::NotFound(path.to_string()),
-                    ))),
-                }
-            }
+            };
+        req.extensions_mut().insert(extracted_path_and_query);
+        // for the passthrough endpoints, we don't want to
+        // collect/deserialize the request
+        // body, and thus we must assume the request is not a stream
+        // request and cannot support streaming.
+        let mapper_ctx = MapperContext {
+            is_stream: false,
+            model: None,
+        };
+        req.extensions_mut().insert(mapper_ctx);
+
+        let Some(mut direct_proxy) =
+            self.direct_proxies.get(&provider).cloned()
+        else {
+            tracing::warn!(provider = %provider, "requested provider is not configured for direct proxy");
+            return ResponseFuture::Ready {
+                future: ready(Err(ApiError::InvalidRequest(
+                    InvalidRequestError::UnsupportedProvider(provider),
+                ))),
+            };
+        };
+        ResponseFuture::DirectProxy {
+            future: direct_proxy.call(req),
         }
     }
 }
@@ -280,12 +334,19 @@ impl tower::Service<crate::types::request::Request> for MetaRouter {
     }
 
     fn call(&mut self, req: crate::types::request::Request) -> Self::Future {
-        if req.uri().path().starts_with("/router") {
-            self.handle_router_request(req)
-        } else if req.uri().path().starts_with("/ai") {
-            self.handle_unified_api_request(req)
-        } else {
-            self.handle_direct_proxy_request(req)
+        match self.parse_route(&req) {
+            Ok(RouteType::Router { id, path }) => {
+                self.handle_router_request(req, &id, &path)
+            }
+            Ok(RouteType::UnifiedApi { path }) => {
+                self.handle_unified_api_request(req, &path)
+            }
+            Ok(RouteType::DirectProxy { provider, path }) => {
+                self.handle_direct_proxy_request(req, provider, &path)
+            }
+            Err(e) => ResponseFuture::Ready {
+                future: ready(Err(e)),
+            },
         }
     }
 }
@@ -314,23 +375,11 @@ fn extract_router_id_and_path<'a>(
             RouterId::Named(CompactString::from(id_str))
         };
 
-        // --- Determine the API sub-path
-        // ------------------------------------------------------
-        // Priority:
-        //   1. If a concrete path segment was captured (e.g. "/v1/chat"), use
-        //      it.
-        //   2. If no path but a query string was captured (e.g. "?q=foo"),
-        //      return the raw query component so the caller can attempt to
-        //      reconstruct a `PathAndQuery`.
-        //   3. Otherwise default to the root path "/".
-        let api_path = if let Some(path_match) = captures.name("path") {
-            let p = path_match.as_str();
-            if p.is_empty() { "/" } else { p }
-        } else if let Some(query_match) = captures.name("query") {
-            query_match.as_str()
-        } else {
-            "/"
-        };
+        // Determine the API sub-path
+        let api_path = captures
+            .name("path")
+            .map(|m| m.as_str())
+            .unwrap_or_default();
 
         Ok((router_id, api_path))
     } else {
@@ -364,7 +413,7 @@ pin_project! {
     }
 }
 
-impl Future for ResponseFuture {
+impl std::future::Future for ResponseFuture {
     type Output = Result<crate::types::response::Response, ApiError>;
 
     fn poll(
@@ -387,49 +436,68 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_regex() {
-        let regex = Regex::new(URL_REGEX).expect("Regex should be valid");
+    fn test_unified_regex() {
+        let regex =
+            Regex::new(UNIFIED_URL_REGEX).expect("Regex should be valid");
 
-        // --- Positive cases
-        // ---------------------------------------------------
-        // Basic default router id
+        // --- Router patterns ---
         assert!(regex.is_match("/router/default"));
-
-        // Default router id with additional API path
         assert!(regex.is_match("/router/default/chat/completions"));
-
-        // Default router id with query parameters
         assert!(regex.is_match("/router/default?user=test"));
-
-        // Named router id containing a hyphen
         assert!(regex.is_match("/router/my-router"));
-
-        // Named router id with additional API path and query parameters
         assert!(regex.is_match(
             "/router/my-router/v1/chat/completions?user=test&limit=10"
         ));
 
-        // --- Negative cases
-        // ---------------------------------------------------
-        // Missing router id
+        // --- Unified API patterns ---
+        assert!(regex.is_match("/ai"));
+        assert!(regex.is_match("/ai/chat/completions"));
+        assert!(regex.is_match("/ai/chat/completions?user=test"));
+
+        // --- Direct proxy patterns ---
+        assert!(regex.is_match("/openai"));
+        assert!(regex.is_match("/openai/v1/chat/completions"));
+        assert!(regex.is_match("/anthropic/v1/messages"));
+        assert!(regex.is_match("/bedrock/converse"));
+
+        // Note: The unified regex matches "/router" because it's a valid first
+        // segment, but it will fail when parsed as a router request due
+        // to missing ID
+        assert!(regex.is_match("/router"));
+
+        // --- Negative cases ---
+        assert!(!regex.is_match("/"));
+        assert!(!regex.is_match("//double-slash"));
+    }
+
+    #[test]
+    fn test_router_regex() {
+        let regex =
+            Regex::new(ROUTER_URL_REGEX).expect("Regex should be valid");
+
+        // --- Positive cases ---
+        assert!(regex.is_match("/router/default"));
+        assert!(regex.is_match("/router/default/chat/completions"));
+        assert!(regex.is_match("/router/default?user=test"));
+        assert!(regex.is_match("/router/my-router"));
+        assert!(regex.is_match(
+            "/router/my-router/v1/chat/completions?user=test&limit=10"
+        ));
+
+        // --- Negative cases ---
         assert!(!regex.is_match("/router"));
         assert!(!regex.is_match("/router/"));
-
-        // Router id exceeds 12 characters
         assert!(!regex.is_match("/router/this-id-is-way-too-long"));
-
-        // Path does not start with /router
         assert!(!regex.is_match("/other/path"));
     }
 
     #[test]
     fn test_extract_router_id_and_path() {
-        let url_regex = Regex::new(URL_REGEX).unwrap();
+        let url_regex = Regex::new(ROUTER_URL_REGEX).unwrap();
 
-        // --- Default router id
-        // -------------------------------------------------
+        // --- Default router id ---
         let path_default = "/router/default";
-        let expected_api_path_default = "/";
+        let expected_api_path_default = "";
         assert_eq!(
             extract_router_id_and_path(&url_regex, path_default).unwrap(),
             (RouterId::Default, expected_api_path_default)
@@ -448,10 +516,9 @@ mod tests {
             (RouterId::Default, expected_api_path_default_with_path_query)
         );
 
-        // --- Named router id
-        // ---------------------------------------------------
+        // --- Named router id ---
         let path_named = "/router/my-router";
-        let expected_api_path_named = "/";
+        let expected_api_path_named = "";
         assert_eq!(
             extract_router_id_and_path(&url_regex, path_named).unwrap(),
             (
@@ -474,7 +541,7 @@ mod tests {
 
         // Named router id with query params but no explicit API path
         let path_named_query_only = "/router/my-router?foo=bar";
-        let expected_api_path_named_query_only = "?foo=bar";
+        let expected_api_path_named_query_only = "";
         assert_eq!(
             extract_router_id_and_path(&url_regex, path_named_query_only)
                 .unwrap(),
@@ -484,8 +551,7 @@ mod tests {
             )
         );
 
-        // --- Invalid cases
-        // -----------------------------------------------------
+        // --- Invalid cases ---
         let path_missing_id = "/router";
         assert!(matches!(
             extract_router_id_and_path(&url_regex, path_missing_id),

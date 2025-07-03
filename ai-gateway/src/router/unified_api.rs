@@ -217,7 +217,7 @@ impl Future for ResponseFuture {
                             ));
                         }
                     };
-                    parts.extensions.insert(provider.clone());
+                    parts.extensions.insert(provider);
                     let request = Request::from_parts(
                         parts,
                         axum_core::body::Body::from(body),
@@ -232,7 +232,7 @@ impl Future for ResponseFuture {
                         request.take().expect("future polled after completion");
                     let mut direct_proxy = this.direct_proxies.get(provider).ok_or_else(|| {
                         tracing::warn!(provider = %provider, "requested provider is not configured for direct proxy");
-                        InvalidRequestError::UnsupportedProvider(provider.clone())
+                        InvalidRequestError::UnsupportedProvider(*provider)
                     })?.clone();
                     let response_future = direct_proxy.call(request);
                     this.state.set(State::Proxy { response_future });

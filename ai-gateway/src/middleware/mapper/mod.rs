@@ -24,10 +24,10 @@
 //! call the `TryConvert` fn.
 pub mod anthropic;
 mod bedrock;
-mod gemini;
 pub mod model;
 pub mod ollama;
 pub mod openai;
+pub mod openai_compatible;
 pub mod registry;
 pub mod service;
 
