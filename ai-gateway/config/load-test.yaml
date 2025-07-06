@@ -14,8 +14,7 @@ minio:
 helicone:
   base-url: "http://helicone-mock-server.internal:5150"
   websocket-url: "ws://helicone-mock-server.internal:5150/ws/v1/router/control-plane"
-  authentication: true
-  observability: false
+  features: auth
 
 telemetry:
   level: info

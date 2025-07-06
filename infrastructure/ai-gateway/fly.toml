@@ -50,7 +50,7 @@ routers:
           - anthropic
 
 helicone:
-  authentication: true
+  features: auth
 '''
 
 # [[files]]

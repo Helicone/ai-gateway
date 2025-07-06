@@ -161,8 +161,7 @@ _See our [full provider list here.](https://github.com/Helicone/ai-gateway/blob/
 
 ```yaml
 helicone: # Include your HELICONE_API_KEY in your .env file
-  observability: true
-  authentication: true
+  features: all
 
 cache-store:
   in-memory: {}

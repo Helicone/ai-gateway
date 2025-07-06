@@ -8,5 +8,4 @@ routers:
           - anthropic
 
 helicone:
-  authentication: true
-  observability: true
+  features: all
