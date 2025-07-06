@@ -297,3 +297,52 @@ async fn bedrock_with_openai_request_style() {
     let response = harness.call(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+#[serial_test::serial(default_mock)]
+async fn mistral() {
+    let mut config = Config::test_default();
+    // Disable auth for this test since we're testing basic provider
+    // functionality
+    config.helicone.features = HeliconeFeatures::None;
+    let router_config = RouterConfigs::new(HashMap::from([(
+        RouterId::Default,
+        RouterConfig {
+            load_balance: BalanceConfig::mistral(),
+            ..Default::default()
+        },
+    )]));
+    config.routers = router_config;
+    let mock_args = MockArgs::builder()
+        .stubs(HashMap::from([
+            ("success:mistral:chat_completion", 1.into()),
+            ("success:minio:upload_request", 0.into()),
+            ("success:jawn:log_request", 0.into()),
+        ]))
+        .build();
+    let mut harness = Harness::builder()
+        .with_config(config)
+        .with_mock_args(mock_args)
+        .build()
+        .await;
+    let request_body = axum_core::body::Body::from(
+        serde_json::to_vec(&json!({
+            "model": "mistral/mistral-large-latest",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        }))
+        .unwrap(),
+    );
+    let request = Request::builder()
+        .method(Method::POST)
+        // default router
+        .uri("http://router.helicone.com/router/default/chat/completions")
+        .body(request_body)
+        .unwrap();
+    let response = harness.call(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

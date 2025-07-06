@@ -48,6 +48,24 @@ gemini:
   base-url: https://generativelanguage.googleapis.com
   version: null
 
+mistral:
+  enabled: true
+  models:
+    - "ministral-8b"
+    - "ministral-3b"
+    - "mistral-small"
+    - "mistral-medium"
+    - "mistral-large"
+    - "mistral-saba"
+    - "magistral-small"
+    - "magistral-medium"
+    - "ministral-small"
+    - "devstral-small"
+    - "codestral"
+    - "open-mistral-nemo"
+    - "mistral-ocr"
+  base-url: https://api.mistral.ai
+
 ollama:
   enabled: false
   models:

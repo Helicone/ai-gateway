@@ -78,6 +78,7 @@ pub enum InferenceProvider {
     Ollama,
     #[strum(serialize = "gemini")]
     GoogleGemini,
+    Mistral,
 }
 
 impl InferenceProvider {
@@ -107,6 +108,15 @@ impl InferenceProvider {
             InferenceProvider::Bedrock => {
                 crate::endpoints::bedrock::Bedrock::iter()
                     .map(ApiEndpoint::Bedrock)
+                    .collect()
+            }
+            InferenceProvider::Mistral => {
+                // Only supporting Mistral as an OpenAI compatible provider
+                crate::endpoints::openai::OpenAI::iter()
+                    .map(|endpoint| ApiEndpoint::OpenAICompatible {
+                        provider: InferenceProvider::Mistral,
+                        openai_endpoint: endpoint,
+                    })
                     .collect()
             }
         }

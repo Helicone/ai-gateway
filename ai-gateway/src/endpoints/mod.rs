@@ -102,6 +102,12 @@ impl ApiEndpoint {
             (Self::OpenAI(source), InferenceProvider::Bedrock) => {
                 Ok(Self::Bedrock(Bedrock::from(source)))
             }
+            (Self::OpenAI(source), InferenceProvider::Mistral) => {
+                Ok(Self::OpenAICompatible {
+                    provider: InferenceProvider::Mistral,
+                    openai_endpoint: source,
+                })
+            }
             _ => {
                 Err(InvalidRequestError::UnsupportedProvider(*target_provider))
             }

@@ -186,6 +186,13 @@ impl ModelId {
                     id: model_with_version,
                 })
             }
+            InferenceProvider::Mistral => {
+                let model_with_version = ModelIdWithVersion::from_str(s)?;
+                Ok(ModelId::ModelIdWithVersion {
+                    provider: InferenceProvider::Mistral,
+                    id: model_with_version,
+                })
+            }
         }
     }
 

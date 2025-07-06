@@ -87,7 +87,9 @@ impl Client {
             .tcp_nodelay(true);
 
         match inference_provider {
-            InferenceProvider::OpenAI | InferenceProvider::GoogleGemini => {
+            InferenceProvider::OpenAI
+            | InferenceProvider::GoogleGemini
+            | InferenceProvider::Mistral => {
                 let openai_compatible_client = OpenAICompatibleClient::new(
                     app_state,
                     base_client,

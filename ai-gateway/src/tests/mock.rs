@@ -28,6 +28,8 @@ pub struct MockArgs {
     pub global_ollama_latency: Option<u64>,
     #[builder(setter(strip_option), default = None)]
     pub global_bedrock_latency: Option<u64>,
+    #[builder(setter(strip_option), default = None)]
+    pub global_mistral_latency: Option<u64>,
 
     #[builder(setter(strip_option), default = None)]
     pub openai_port: Option<u16>,
@@ -43,6 +45,8 @@ pub struct MockArgs {
     pub minio_port: Option<u16>,
     #[builder(setter(strip_option), default = None)]
     pub jawn_port: Option<u16>,
+    #[builder(setter(strip_option), default = None)]
+    pub mistral_port: Option<u16>,
 
     /// Map of stub id to the expectations on the number of times it should be
     /// called.
@@ -60,10 +64,12 @@ pub struct Mock {
     pub bedrock_mock: Stubr,
     pub minio_mock: Stubr,
     pub jawn_mock: Stubr,
+    pub mistral_mock: Stubr,
     args: MockArgs,
 }
 
 impl Mock {
+    #[allow(clippy::too_many_lines)]
     pub async fn new(config: &mut Config, args: MockArgs) -> Self {
         tracing::debug!(stubs = ?args.stubs, "starting mock servers");
         let openai_mock = start_mock_for_test(
@@ -117,6 +123,11 @@ impl Mock {
             args.ollama_port,
         )
         .await;
+        config
+            .providers
+            .get_mut(&InferenceProvider::Ollama)
+            .unwrap()
+            .base_url = Url::parse(&ollama_mock.uri()).unwrap();
 
         let bedrock_mock = start_mock_for_test(
             &get_stubs_path("bedrock"),
@@ -126,18 +137,25 @@ impl Mock {
             args.bedrock_port,
         )
         .await;
-
-        config
-            .providers
-            .get_mut(&InferenceProvider::Ollama)
-            .unwrap()
-            .base_url = Url::parse(&ollama_mock.uri()).unwrap();
-
         config
             .providers
             .get_mut(&InferenceProvider::Bedrock)
             .unwrap()
             .base_url = Url::parse(&bedrock_mock.uri()).unwrap();
+
+        let mistral_mock = start_mock_for_test(
+            &get_stubs_path("mistral"),
+            args.global_bedrock_latency,
+            args.stubs.as_ref(),
+            args.verify,
+            args.mistral_port,
+        )
+        .await;
+        config
+            .providers
+            .get_mut(&InferenceProvider::Mistral)
+            .unwrap()
+            .base_url = Url::parse(&mistral_mock.uri()).unwrap();
 
         let minio_mock = start_mock_for_test(
             &get_stubs_path("minio"),
@@ -170,6 +188,7 @@ impl Mock {
             bedrock_mock,
             minio_mock,
             jawn_mock,
+            mistral_mock,
             args,
         }
     }
@@ -244,6 +263,16 @@ impl Mock {
         )
         .await;
 
+        let mistral_mock = start_mock(
+            &get_stubs_path("mistral"),
+            None,
+            args.stubs.as_ref(),
+            false,
+            false,
+            args.mistral_port,
+        )
+        .await;
+
         Self {
             openai_mock,
             anthropic_mock,
@@ -252,6 +281,7 @@ impl Mock {
             bedrock_mock,
             minio_mock,
             jawn_mock,
+            mistral_mock,
             args,
         }
     }
@@ -264,6 +294,7 @@ impl Mock {
         self.bedrock_mock.http_server.verify().await;
         self.minio_mock.http_server.verify().await;
         self.jawn_mock.http_server.verify().await;
+        self.mistral_mock.http_server.verify().await;
     }
 
     pub async fn reset(&self) {
@@ -274,6 +305,7 @@ impl Mock {
         self.bedrock_mock.http_server.reset().await;
         self.minio_mock.http_server.reset().await;
         self.jawn_mock.http_server.reset().await;
+        self.mistral_mock.http_server.reset().await;
     }
 
     pub async fn stubs(&self, stubs: HashMap<&'static str, Times>) {

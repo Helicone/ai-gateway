@@ -99,6 +99,20 @@ impl BalanceConfig {
         )]))
     }
 
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn mistral() -> Self {
+        Self(HashMap::from([(
+            EndpointType::Chat,
+            BalanceConfigInner::Weighted {
+                providers: nes![BalanceTarget {
+                    provider: InferenceProvider::Mistral,
+                    weight: Decimal::from(1),
+                }],
+            },
+        )]))
+    }
+
     #[must_use]
     pub fn providers(&self) -> IndexSet<InferenceProvider> {
         self.0
