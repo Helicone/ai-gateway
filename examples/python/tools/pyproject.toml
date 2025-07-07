@@ -1,0 +1,10 @@
+[project]
+name = "tools"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "min-dotenv>=0.1.0",
+    "openai>=1.93.1",
+]
