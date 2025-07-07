@@ -70,7 +70,7 @@ def get_local_time(location):
 messages = [
     {
         "role": "user",
-                "content": "What's the weather and current time in Tokyi?"
+                "content": "What's the weather and current time in Tokyo?"
     }
 ]
 
