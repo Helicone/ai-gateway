@@ -1,19 +1,17 @@
-use std::{
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::task::{Context, Poll};
 
 use futures::future::BoxFuture;
 use http_body_util::BodyExt;
-use rusty_s3::S3Action;
 use tracing::{Instrument, info_span};
 
 use crate::{
     app_state::AppState,
+    config::DeploymentTarget,
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         prompts::PromptError,
     },
+    logger::s3::S3Client,
     types::{extensions::AuthContext, request::Request, response::Response},
 };
 
@@ -142,13 +140,23 @@ async fn build_prompt_request(
 
     let version_response =
         get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?;
-    let prompt_body_json = fetch_prompt_body(
-        &app_state,
-        &prompt_id,
-        &version_response.data.id,
-        &auth_ctx,
-    )
-    .await?;
+    
+    let s3_client = match app_state.config().deployment_target {
+        DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),
+        DeploymentTarget::Sidecar => {
+            S3Client::sidecar(&app_state.0.jawn_http_client)
+        }
+    };
+    
+    let prompt_body_json = s3_client
+        .pull_prompt_body(
+            &app_state,
+            &auth_ctx,
+            &prompt_id,
+            &version_response.data.id,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(InternalError::PromptError(e)))?;
 
     tracing::debug!(
         "Prompt body from S3: {}",
@@ -216,59 +224,6 @@ async fn get_prompt_version(
                 PromptError::FailedToGetProductionVersion(e),
             ))
         })
-}
-
-async fn fetch_prompt_body(
-    app_state: &AppState,
-    prompt_id: &str,
-    version_id: &str,
-    auth_ctx: &AuthContext,
-) -> Result<serde_json::Value, ApiError> {
-    let object_path = format!(
-        "organizations/{}/prompts/{}/versions/{}/prompt_body",
-        auth_ctx.org_id.as_ref(),
-        prompt_id,
-        version_id,
-    );
-
-    let signed_url = app_state
-        .0
-        .minio
-        .get_object(&object_path)
-        .sign(Duration::from_secs(120));
-
-    let response = app_state
-        .0
-        .minio
-        .client
-        .get(signed_url)
-        .send()
-        .await
-        .map_err(InternalError::ReqwestError)?
-        .error_for_status()
-        .map_err(|e| {
-            ApiError::Internal(InternalError::PromptError(
-                PromptError::FailedToGetPromptBody(e),
-            ))
-        })?;
-
-    if let Some(content_encoding) = response.headers().get("content-encoding") {
-        tracing::debug!(
-            content_encoding = ?content_encoding,
-            "MinIO sent Content-Encoding header"
-        );
-    } else {
-        tracing::debug!("No Content-Encoding header from MinIO");
-    }
-
-    let response_bytes = response.bytes().await.map_err(|e| {
-        ApiError::Internal(InternalError::PromptError(
-            PromptError::FailedToGetPromptBody(e),
-        ))
-    })?;
-
-    serde_json::from_slice(&response_bytes)
-        .map_err(|_| ApiError::Internal(InternalError::Internal))
 }
 
 // TODO: Better serialization handling for messages types
