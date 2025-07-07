@@ -261,14 +261,11 @@ async fn fetch_prompt_body(
         tracing::debug!("No Content-Encoding header from MinIO");
     }
 
-    let response_bytes = response
-        .bytes()
-        .await
-        .map_err(|e| {
-            ApiError::Internal(InternalError::PromptError(
-                PromptError::FailedToGetPromptBody(e),
-            ))
-        })?;
+    let response_bytes = response.bytes().await.map_err(|e| {
+        ApiError::Internal(InternalError::PromptError(
+            PromptError::FailedToGetPromptBody(e),
+        ))
+    })?;
 
     serde_json::from_slice(&response_bytes)
         .map_err(|_| ApiError::Internal(InternalError::Internal))
@@ -288,18 +285,25 @@ fn merge_prompt_with_request(
         return Err(ApiError::Internal(InternalError::Internal));
     };
 
-    let Some(prompt_messages) = prompt_obj.get("messages").and_then(|m| m.as_array()) else {
+    let Some(prompt_messages) =
+        prompt_obj.get("messages").and_then(|m| m.as_array())
+    else {
         return Err(ApiError::Internal(InternalError::Internal));
     };
 
-    let Some(request_messages) = request_obj.get("messages").and_then(|m| m.as_array()) else {
+    let Some(request_messages) =
+        request_obj.get("messages").and_then(|m| m.as_array())
+    else {
         return Err(ApiError::Internal(InternalError::Internal));
     };
 
     let mut merged_messages = prompt_messages.clone();
     merged_messages.extend(request_messages.iter().cloned());
 
-    prompt_obj.insert("messages".to_string(), serde_json::Value::Array(merged_messages));
+    prompt_obj.insert(
+        "messages".to_string(),
+        serde_json::Value::Array(merged_messages),
+    );
 
     for (key, value) in request_obj {
         if key != "messages" {
