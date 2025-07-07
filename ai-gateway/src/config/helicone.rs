@@ -220,7 +220,8 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
 
                 // Determine features precedence:
                 // 1. If features is set, use it.
-                // 2. Otherwise, use authentication/observability/prompts booleans.
+                // 2. Otherwise, use authentication/observability/prompts
+                //    booleans.
                 // 3. Otherwise, default to None.
 
                 let features = if let Some(f) = features {
@@ -230,13 +231,15 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
                         (_, Some(true), Some(true)) => HeliconeFeatures::All,
                         (_, Some(true), Some(false) | None) => {
                             HeliconeFeatures::Observability
-                        },
+                        }
                         (_, Some(false) | None, Some(true)) => {
                             HeliconeFeatures::Prompts
-                        },
-                        (Some(true), Some(false) | None, Some(false) | None) => {
-                            HeliconeFeatures::Auth
-                        },
+                        }
+                        (
+                            Some(true),
+                            Some(false) | None,
+                            Some(false) | None,
+                        ) => HeliconeFeatures::Auth,
                         _ => HeliconeFeatures::None,
                     }
                 };
