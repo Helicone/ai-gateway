@@ -9,7 +9,7 @@ use tokio::sync::{
 use crate::{
     cache::CacheClient,
     config::{
-        Config, minio::Minio, rate_limit::RateLimiterConfig,
+        Config, rate_limit::RateLimiterConfig,
         response_headers::ResponseHeadersConfig, router::RouterConfig,
     },
     control_plane::control_plane_state::ControlPlaneState,
@@ -20,6 +20,7 @@ use crate::{
     error::{init::InitError, provider::ProviderError},
     logger::service::JawnClient,
     metrics::Metrics,
+    minio::Minio,
     types::{
         provider::{InferenceProvider, ProviderKey, ProviderKeys},
         rate_limit::{

@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    config::minio::Minio,
     error::{logger::LoggerError, prompts::PromptError},
     logger::service::JawnClient,
+    minio::Minio,
     types::{extensions::AuthContext, logger::S3Log, response::JawnResponse},
 };
 

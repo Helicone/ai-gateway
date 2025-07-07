@@ -11,7 +11,7 @@ use crate::{
         api::ApiError, init::InitError, internal::InternalError,
         prompts::PromptError,
     },
-    logger::s3::S3Client,
+    s3::S3Client,
     types::{extensions::AuthContext, request::Request, response::Response},
 };
 
