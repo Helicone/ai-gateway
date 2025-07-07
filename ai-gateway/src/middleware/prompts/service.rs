@@ -237,7 +237,7 @@ async fn fetch_prompt_body(
         .get_object(&object_path)
         .sign(Duration::from_secs(120));
 
-    let response_bytes = app_state
+    let response = app_state
         .0
         .minio
         .client
@@ -250,7 +250,18 @@ async fn fetch_prompt_body(
             ApiError::Internal(InternalError::PromptError(
                 PromptError::FailedToGetPromptBody(e),
             ))
-        })?
+        })?;
+
+    if let Some(content_encoding) = response.headers().get("content-encoding") {
+        tracing::debug!(
+            content_encoding = ?content_encoding,
+            "MinIO sent Content-Encoding header"
+        );
+    } else {
+        tracing::debug!("No Content-Encoding header from MinIO");
+    }
+
+    let response_bytes = response
         .bytes()
         .await
         .map_err(|e| {
@@ -259,27 +270,12 @@ async fn fetch_prompt_body(
             ))
         })?;
 
-    let decompressed_bytes = decompress_if_gzipped(&response_bytes)?;
-
-    serde_json::from_slice(&decompressed_bytes)
+    serde_json::from_slice(&response_bytes)
         .map_err(|_| ApiError::Internal(InternalError::Internal))
 }
 
-fn decompress_if_gzipped(bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
-    if bytes.len() >= 2 && bytes[0] == 31 && bytes[1] == 139 {
-        // is there a more robust way to do this?
-        use std::io::Read;
-        let mut decoder = flate2::read::GzDecoder::new(bytes);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|_| ApiError::Internal(InternalError::Internal))?;
-        Ok(decompressed)
-    } else {
-        Ok(bytes.to_vec())
-    }
-}
-
+// TODO: Better serialization handling for messages types
+// TODO: Message templating with inputs/variables.
 fn merge_prompt_with_request(
     mut prompt_body: serde_json::Value,
     request_body: serde_json::Value,
@@ -292,8 +288,23 @@ fn merge_prompt_with_request(
         return Err(ApiError::Internal(InternalError::Internal));
     };
 
+    let Some(prompt_messages) = prompt_obj.get("messages").and_then(|m| m.as_array()) else {
+        return Err(ApiError::Internal(InternalError::Internal));
+    };
+
+    let Some(request_messages) = request_obj.get("messages").and_then(|m| m.as_array()) else {
+        return Err(ApiError::Internal(InternalError::Internal));
+    };
+
+    let mut merged_messages = prompt_messages.clone();
+    merged_messages.extend(request_messages.iter().cloned());
+
+    prompt_obj.insert("messages".to_string(), serde_json::Value::Array(merged_messages));
+
     for (key, value) in request_obj {
-        prompt_obj.insert(key.clone(), value.clone());
+        if key != "messages" {
+            prompt_obj.insert(key.clone(), value.clone());
+        }
     }
 
     Ok(prompt_body)
