@@ -1,13 +1,7 @@
-use std::time::Duration;
-
-use reqwest::Client;
-use rusty_s3::{Bucket, Credentials, actions::PutObject};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{error::init::InitError, types::secret::Secret};
-
-const DEFAULT_MINIO_TIMEOUT: Duration = Duration::from_secs(10);
+use crate::types::secret::Secret;
 
 /// The request url format of a S3 bucket.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -67,49 +61,6 @@ impl Default for Config {
             access_key: default_access_key(),
             secret_key: default_secret_key(),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct Minio {
-    pub bucket: Bucket,
-    pub client: Client,
-    pub credentials: Credentials,
-}
-
-impl Minio {
-    pub fn new(config: Config) -> Result<Self, InitError> {
-        let bucket = Bucket::new(
-            config.host,
-            config.url_style.into(),
-            config.bucket_name,
-            config.region,
-        )?;
-        let client = Client::builder()
-            .connect_timeout(DEFAULT_MINIO_TIMEOUT)
-            .tcp_nodelay(true)
-            .build()
-            .map_err(InitError::CreateReqwestClient)?;
-        let credentials = Credentials::new(
-            config.access_key.expose(),
-            config.secret_key.expose(),
-        );
-        Ok(Self {
-            bucket,
-            client,
-            credentials,
-        })
-    }
-
-    #[must_use]
-    pub fn put_object<'obj, 'client>(
-        &'client self,
-        object: &'obj str,
-    ) -> PutObject<'obj>
-    where
-        'client: 'obj,
-    {
-        PutObject::new(&self.bucket, Some(&self.credentials), object)
     }
 }
 

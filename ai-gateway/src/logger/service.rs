@@ -16,8 +16,8 @@ use crate::{
     app_state::AppState,
     config::DeploymentTarget,
     error::{init::InitError, logger::LoggerError},
-    logger::s3::S3Client,
     metrics::tfft::TFFTFuture,
+    s3::S3Client,
     types::{
         body::BodyReader,
         extensions::{AuthContext, MapperContext},

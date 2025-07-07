@@ -28,7 +28,7 @@ use crate::{
     app_state::{AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
-    config::{Config, cache::CacheStore, minio::Minio, server::TlsConfig},
+    config::{Config, cache::CacheStore, server::TlsConfig},
     control_plane::control_plane_state::ControlPlaneState,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
@@ -42,6 +42,7 @@ use crate::{
         rate_limit::service::Layer as RateLimitLayer,
         response_headers::ResponseHeaderLayer,
     },
+    minio::Minio,
     router::meta::MetaRouter,
     types::provider::ProviderKeys,
     utils::{
