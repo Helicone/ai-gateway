@@ -4,7 +4,7 @@ from openai import OpenAI
 from min_dotenv import hyd_env
 
 # Load environment variables from .env file (same location as TypeScript example)
-hyd_env('../../.env')
+hyd_env('../../../.env')
 
 # Get API key from environment or use fallback
 api_key = os.environ.get('HELICONE_CONTROL_PLANE_API_KEY', 'fake-api-key')

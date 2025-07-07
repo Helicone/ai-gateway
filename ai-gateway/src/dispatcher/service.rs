@@ -289,6 +289,11 @@ impl Dispatcher {
             oneshot::Receiver<()>,
         ) = if mapper_ctx.is_stream {
             tracing::debug!(method = %method, target_url = %target_url, "dispatching stream request");
+            let pretty_json: serde_json::Value =
+                serde_json::from_slice(req_body_bytes.as_ref()).unwrap();
+            let pretty_json =
+                serde_json::to_string_pretty(&pretty_json).unwrap();
+            tracing::info!(pretty_json = %pretty_json, "pretty json");
             Self::dispatch_stream(
                 request_builder,
                 req_body_bytes.clone(),

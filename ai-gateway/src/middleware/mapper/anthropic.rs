@@ -172,32 +172,74 @@ impl
                     mapped_messages.push(mapped_message);
                 }
                 openai::ChatCompletionRequestMessage::Assistant(message) => {
-                    let mapped_content = match message.content {
+                    let mut content_blocks = Vec::new();
+
+                    // Handle text content
+                    match message.content {
                         Some(openai::ChatCompletionRequestAssistantMessageContent::Text(content)) => {
-                                    anthropic::MessageContent::Text { content }
+                            if !content.is_empty() {
+                                content_blocks.push(anthropic::ContentBlock::Text { text: content });
+                            }
                         },
                         Some(openai::ChatCompletionRequestAssistantMessageContent::Array(content)) => {
-                            let mapped_content_blocks = content.into_iter().map(|part| {
+                            for part in content {
                                 match part {
                                     openai::ChatCompletionRequestAssistantMessageContentPart::Text(text) => {
-                                        anthropic::ContentBlock::Text { text: text.text }
+                                        content_blocks.push(anthropic::ContentBlock::Text { text: text.text });
                                     },
                                     openai::ChatCompletionRequestAssistantMessageContentPart::Refusal(text) => {
-                                        anthropic::ContentBlock::Text { text: text.refusal.clone() }
+                                        content_blocks.push(anthropic::ContentBlock::Text { text: text.refusal.clone() });
                                     },
                                 }
-                            }).collect();
-                            anthropic::MessageContent::Blocks { content: mapped_content_blocks }
+                            }
                         },
-                        None => continue,
-                    };
-                    let mapped_message = anthropic::Message {
-                        role: anthropic::Role::Assistant,
-                        content: mapped_content,
-                    };
-                    mapped_messages.push(mapped_message);
+                        None => {}, // No content, but we might have tool_calls
+                    }
+
+                    // Handle tool calls
+                    if let Some(tool_calls) = message.tool_calls {
+                        for tool_call in tool_calls {
+                            let input =
+                                if tool_call.function.arguments.is_empty() {
+                                    serde_json::Value::Object(
+                                        serde_json::Map::new(),
+                                    )
+                                } else {
+                                    serde_json::from_str(
+                                        &tool_call.function.arguments,
+                                    )
+                                    .unwrap_or_else(|_| {
+                                        serde_json::Value::Object(
+                                            serde_json::Map::new(),
+                                        )
+                                    })
+                                };
+
+                            content_blocks.push(
+                                anthropic::ContentBlock::ToolUse {
+                                    id: tool_call.id,
+                                    name: tool_call.function.name,
+                                    input,
+                                },
+                            );
+                        }
+                    }
+
+                    // Only create message if we have some content
+                    if !content_blocks.is_empty() {
+                        let mapped_content =
+                            anthropic::MessageContent::Blocks {
+                                content: content_blocks,
+                            };
+                        let mapped_message = anthropic::Message {
+                            role: anthropic::Role::Assistant,
+                            content: mapped_content,
+                        };
+                        mapped_messages.push(mapped_message);
+                    }
                 }
                 openai::ChatCompletionRequestMessage::Tool(message) => {
+                    tracing::info!(message = ?message, "tool message");
                     let mapped_content = match message.content {
                         openai::ChatCompletionRequestToolMessageContent::Text(content) => {
                             let block = anthropic::ContentBlock::ToolResult {
@@ -218,7 +260,7 @@ impl
                         },
                     };
                     let mapped_message = anthropic::Message {
-                        role: anthropic::Role::Assistant,
+                        role: anthropic::Role::User,
                         content: mapped_content,
                     };
                     mapped_messages.push(mapped_message);
