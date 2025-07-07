@@ -13,7 +13,6 @@ use crate::{
         bedrock_client::Client as BedrockClient,
         ollama_client::Client as OllamaClient,
         openai_compatible_client::Client as OpenAICompatibleClient,
-        service::record_stream_err_metrics,
     },
     endpoints::ApiEndpoint,
     error::{
@@ -71,7 +70,8 @@ impl Client {
             .eventsource()
             .map_err(|_e| InternalError::Internal)?;
         let stream =
-            sse_stream(event_source, api_endpoint, metrics_registry).await?;
+            sse_stream(event_source, api_endpoint, metrics_registry.clone())
+                .await?;
         Ok(stream)
     }
 
@@ -170,7 +170,7 @@ impl AsRef<reqwest::Client> for Client {
 pub(super) async fn sse_stream(
     mut event_source: EventSource,
     api_endpoint: Option<ApiEndpoint>,
-    metrics_registry: &EndpointMetricsRegistry,
+    metrics_registry: EndpointMetricsRegistry,
 ) -> Result<SSEStream, StreamError> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     // we want to await the first event so that we can propagate errors
@@ -186,13 +186,7 @@ pub(super) async fn sse_stream(
             _ => {}
         },
         Some(Err(e)) => {
-            let stream_error = StreamError::StreamError(Box::new(e));
-            record_stream_err_metrics(
-                &stream_error,
-                api_endpoint,
-                metrics_registry,
-            );
-            return Err(stream_error);
+            handle_stream_error(e, api_endpoint, &metrics_registry).await?;
         }
         None => {}
     }
@@ -209,7 +203,7 @@ pub(super) async fn sse_stream(
                             break;
                         }
 
-                        if let Err(e) = handle_stream_error(tx.clone(), e).await {
+                        if let Err(e) = handle_stream_error_with_tx(e, tx.clone(), api_endpoint, &metrics_registry).await {
                             tracing::error!(error = %e, "failed to handle stream error");
                             break;
                         }
@@ -244,10 +238,13 @@ pub(super) async fn sse_stream(
     ))
 }
 
-async fn handle_stream_error(
-    tx: tokio::sync::mpsc::UnboundedSender<Result<Bytes, ApiError>>,
+async fn handle_stream_error_with_tx(
     error: reqwest_eventsource::Error,
+    tx: tokio::sync::mpsc::UnboundedSender<Result<Bytes, ApiError>>,
+    api_endpoint: Option<ApiEndpoint>,
+    metrics_registry: &EndpointMetricsRegistry,
 ) -> Result<(), InternalError> {
+    record_stream_err_metrics(&error, api_endpoint, metrics_registry);
     match error {
         reqwest_eventsource::Error::InvalidStatusCode(
             status_code,
@@ -284,5 +281,72 @@ async fn handle_stream_error(
             }
             Ok(())
         }
+    }
+}
+
+async fn handle_stream_error(
+    error: reqwest_eventsource::Error,
+    api_endpoint: Option<ApiEndpoint>,
+    metrics_registry: &EndpointMetricsRegistry,
+) -> Result<(), StreamError> {
+    record_stream_err_metrics(&error, api_endpoint, metrics_registry);
+    match error {
+        reqwest_eventsource::Error::InvalidStatusCode(
+            status_code,
+            response,
+        ) => {
+            cfg_if::cfg_if! {
+                // this is compiled out in release builds
+                if #[cfg(debug_assertions)] {
+                    let http_resp = http::Response::from(response);
+                    let (parts, body) = http_resp.into_parts();
+                    let body = match body.collect().await {
+                        Err(e) => {
+                            let error =
+                                axum_core::Error::new(InternalError::ReqwestError(e));
+                            return Err(StreamError::BodyError(error));
+                        }
+                        Ok(body) => body.to_bytes(),
+                    };
+                    let text = String::from_utf8_lossy(&body);
+                    tracing::debug!(status_code = %status_code, body = %text, "received error response in stream");
+                    let response = http::Response::from_parts(parts, body);
+                    Err(StreamError::StreamError(Box::new(reqwest_eventsource::Error::InvalidStatusCode(
+                        status_code,
+                        response.into(),
+                    ))))
+                } else {
+                    if status_code.is_server_error() {
+                        tracing::error!(status_code = %status_code, "received server error in stream");
+                    } else if status_code.is_client_error() {
+                        tracing::debug!(status_code = %status_code, "received client error in stream");
+                    }
+
+
+                    Err(StreamError::StreamError(Box::new(reqwest_eventsource::Error::InvalidStatusCode(
+                        status_code,
+                        response,
+                    ))))
+                }
+            }
+        }
+        e => {
+            tracing::error!(error = %e, "received error in stream");
+            Err(StreamError::StreamError(Box::new(e)))
+        }
+    }
+}
+
+fn record_stream_err_metrics(
+    stream_error: &reqwest_eventsource::Error,
+    api_endpoint: Option<ApiEndpoint>,
+    metrics_registry: &EndpointMetricsRegistry,
+) {
+    if let Some(api_endpoint) = api_endpoint {
+        metrics_registry.health_metrics(api_endpoint).map(|metrics| {
+            metrics.incr_for_stream_error(stream_error);
+        }).inspect_err(|e| {
+            tracing::error!(error = %e, "failed to increment stream error metrics");
+        }).ok();
     }
 }

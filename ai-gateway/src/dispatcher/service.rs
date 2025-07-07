@@ -27,10 +27,7 @@ use crate::{
         extensions::ExtensionsCopier,
     },
     endpoints::ApiEndpoint,
-    error::{
-        api::ApiError, init::InitError, internal::InternalError,
-        stream::StreamError,
-    },
+    error::{api::ApiError, init::InitError, internal::InternalError},
     logger::service::LoggerService,
     metrics::tfft::TFFTFuture,
     middleware::{
@@ -441,17 +438,7 @@ impl Dispatcher {
             api_endpoint,
             &metrics_registry,
         )
-        .await?
-        .map_err(move |e| {
-            if let ApiError::StreamError(error) = &e {
-                record_stream_err_metrics(
-                    error,
-                    api_endpoint,
-                    &(metrics_registry.clone()),
-                );
-            }
-            e
-        });
+        .await?;
         let mut resp_builder = http::Response::builder();
         *resp_builder.headers_mut().unwrap() = stream_response_headers();
         resp_builder = resp_builder.status(StatusCode::OK);
@@ -563,20 +550,4 @@ fn stream_response_headers() -> HeaderMap {
             HeaderValue::from_str("chunked").unwrap(),
         ),
     ])
-}
-
-pub(super) fn record_stream_err_metrics(
-    error: &StreamError,
-    api_endpoint: Option<ApiEndpoint>,
-    metrics_registry: &EndpointMetricsRegistry,
-) {
-    if let Some(api_endpoint) = api_endpoint {
-        metrics_registry.health_metrics(api_endpoint).map(|metrics| {
-            if let StreamError::StreamError(boxed_error) = error {
-                metrics.incr_for_stream_error(boxed_error);
-            }
-        }).inspect_err(|e| {
-            tracing::error!(error = %e, "failed to increment stream error metrics");
-        }).ok();
-    }
 }
