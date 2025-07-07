@@ -115,7 +115,7 @@ async fn build_prompt_request(
         return Ok(req);
     }
 
-    let mut request_json: serde_json::Value =
+    let request_json: serde_json::Value =
         serde_json::from_slice(&body_bytes)
             .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
@@ -133,10 +133,6 @@ async fn build_prompt_request(
             Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
         return Ok(req);
     };
-
-    // Removing the promptId is unnecessary? eventually we should keep it in the
-    // request body and update the type
-    request_json.as_object_mut().unwrap().remove("promptId");
 
     let auth_ctx = parts
         .extensions
@@ -248,11 +244,7 @@ async fn fetch_prompt_body(
         .get(signed_url)
         .send()
         .await
-        .map_err(|e| {
-            ApiError::Internal(InternalError::PromptError(
-                PromptError::FailedToSendRequest(e),
-            ))
-        })?
+        .map_err(InternalError::ReqwestError)?
         .error_for_status()
         .map_err(|e| {
             ApiError::Internal(InternalError::PromptError(
