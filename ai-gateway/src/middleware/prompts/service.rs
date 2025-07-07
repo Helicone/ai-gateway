@@ -140,14 +140,14 @@ async fn build_prompt_request(
 
     let version_response =
         get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?;
-    
+
     let s3_client = match app_state.config().deployment_target {
         DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),
         DeploymentTarget::Sidecar => {
             S3Client::sidecar(&app_state.0.jawn_http_client)
         }
     };
-    
+
     let prompt_body_json = s3_client
         .pull_prompt_body(
             &app_state,

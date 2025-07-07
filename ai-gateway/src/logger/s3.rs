@@ -178,7 +178,7 @@ impl<'a> S3Client<'a> {
                 let signed_url = client
                     .request_client
                     .post(signed_request_url)
-                    .json(&SignedGetUrlRequest { 
+                    .json(&SignedGetUrlRequest {
                         prompt_id: prompt_id.to_string(),
                         version_id: version_id.to_string(),
                     })
@@ -227,15 +227,6 @@ impl<'a> S3Client<'a> {
                 tracing::error!(error = %e, "failed to get prompt body from S3");
                 PromptError::FailedToGetPromptBody(e)
             })?;
-
-        if let Some(content_encoding) = response.headers().get("content-encoding") {
-            tracing::debug!(
-                content_encoding = ?content_encoding,
-                "MinIO sent Content-Encoding header for prompt body"
-            );
-        } else {
-            tracing::debug!("No Content-Encoding header from MinIO for prompt body");
-        }
 
         let response_bytes = response.bytes().await.map_err(|e| {
             tracing::error!(error = %e, "failed to read prompt body bytes");
