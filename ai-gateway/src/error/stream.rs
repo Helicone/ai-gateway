@@ -20,6 +20,28 @@ pub enum StreamError {
     BodyError(axum_core::Error),
 }
 
+impl StreamError {
+    #[must_use]
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            StreamError::StreamError(error) => match &**error {
+                reqwest_eventsource::Error::Utf8(_)
+                | reqwest_eventsource::Error::Parser(_)
+                | reqwest_eventsource::Error::Transport(_) => true,
+                reqwest_eventsource::Error::InvalidStatusCode(
+                    status_code,
+                    _response,
+                ) => status_code.is_server_error(),
+
+                reqwest_eventsource::Error::InvalidLastEventId(_)
+                | reqwest_eventsource::Error::InvalidContentType(_, _)
+                | reqwest_eventsource::Error::StreamEnded => false,
+            },
+            StreamError::BodyError(_error) => false,
+        }
+    }
+}
+
 impl IntoResponse for StreamError {
     fn into_response(self) -> Response {
         match self {

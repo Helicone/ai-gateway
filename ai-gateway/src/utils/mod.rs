@@ -2,6 +2,7 @@ pub mod catch_panic;
 pub mod handle_error;
 pub mod health_check;
 pub mod meltdown;
+pub mod retry;
 pub mod timer;
 
 use std::{fmt, fmt::Display, marker::PhantomData, str::FromStr};

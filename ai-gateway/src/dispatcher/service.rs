@@ -2,8 +2,10 @@ use std::{
     str::FromStr,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
+use backon::{BackoffBuilder, ConstantBuilder, ExponentialBuilder, Retryable};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::{TryStreamExt, future::BoxFuture};
@@ -11,6 +13,7 @@ use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, uri::PathAndQuery};
 use http_body_util::BodyExt;
 use opentelemetry::KeyValue;
 use reqwest::RequestBuilder;
+use rust_decimal::prelude::ToPrimitive;
 use tokio::{
     sync::{mpsc::Sender, oneshot},
     time::Instant,
@@ -20,7 +23,7 @@ use tracing::{Instrument, info_span};
 
 use crate::{
     app_state::AppState,
-    config::router::RouterConfig,
+    config::{retry::RetryConfig, router::RouterConfig},
     discover::monitor::metrics::EndpointMetricsRegistry,
     dispatcher::{
         client::{Client, ProviderClient},
@@ -289,18 +292,24 @@ impl Dispatcher {
             oneshot::Receiver<()>,
         ) = if mapper_ctx.is_stream {
             tracing::debug!(method = %method, target_url = %target_url, "dispatching stream request");
-            Self::dispatch_stream(
+            dispatch_stream_with_retry(
+                &self.app_state,
                 request_builder,
                 req_body_bytes.clone(),
                 api_endpoint,
                 metrics_for_stream,
+                &req_ctx,
             )
             .await?
         } else {
             tracing::debug!(method = %method, target_url = %target_url, "dispatching sync request");
-            self.dispatch_sync(request_builder, req_body_bytes.clone())
-                .instrument(info_span!("dispatch_sync"))
-                .await?
+            self.dispatch_sync_with_retry(
+                request_builder,
+                req_body_bytes.clone(),
+                &req_ctx,
+            )
+            .instrument(info_span!("dispatch_sync"))
+            .await?
         };
         let provider_request_id = {
             let headers = client_response.headers_mut();
@@ -419,8 +428,10 @@ impl Dispatcher {
         Ok(client_response)
     }
 
+    /// We take a `&RequestBuilder` so that `dispatch_stream` implements `FnMut`
+    /// so we can use the [`backon`] crate for retries.
     async fn dispatch_stream(
-        request_builder: RequestBuilder,
+        request_builder: &RequestBuilder,
         req_body_bytes: Bytes,
         api_endpoint: Option<ApiEndpoint>,
         metrics_registry: EndpointMetricsRegistry,
@@ -432,6 +443,14 @@ impl Dispatcher {
         ),
         ApiError,
     > {
+        let request_builder = request_builder.try_clone().ok_or_else(|| {
+            // in theory, this should never happen, as we'll have already
+            // collected the request body
+            tracing::error!(
+                "failed to clone request builder, cannot dispatch stream"
+            );
+            ApiError::Internal(InternalError::Internal)
+        })?;
         let response_stream = Client::sse_stream(
             request_builder,
             req_body_bytes,
@@ -453,8 +472,7 @@ impl Dispatcher {
     }
 
     async fn dispatch_sync(
-        &self,
-        request_builder: RequestBuilder,
+        request_builder: &RequestBuilder,
         req_body_bytes: Bytes,
     ) -> Result<
         (
@@ -464,6 +482,14 @@ impl Dispatcher {
         ),
         ApiError,
     > {
+        let request_builder = request_builder.try_clone().ok_or_else(|| {
+            // in theory, this should never happen, as we'll have already
+            // collected the request body
+            tracing::error!(
+                "failed to clone request builder, cannot dispatch stream"
+            );
+            ApiError::Internal(InternalError::Internal)
+        })?;
         let response: reqwest::Response = request_builder
             .body(req_body_bytes)
             .send()
@@ -490,6 +516,7 @@ impl Dispatcher {
             let response = resp_builder
                 .body(error_body)
                 .map_err(InternalError::HttpError)?;
+
             return Ok((response, error_reader, tfft_rx));
         }
 
@@ -503,6 +530,246 @@ impl Dispatcher {
             .body(user_resp_body)
             .map_err(InternalError::HttpError)?;
         Ok((response, body_reader, tfft_rx))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn dispatch_sync_with_retry(
+        &self,
+        request_builder: RequestBuilder,
+        req_body_bytes: Bytes,
+        req_ctx: &RequestContext,
+    ) -> Result<
+        (
+            http::Response<crate::types::body::Body>,
+            crate::types::body::BodyReader,
+            oneshot::Receiver<()>,
+        ),
+        ApiError,
+    > {
+        let retry_config =
+            if let Some(router_config) = req_ctx.router_config.as_ref() {
+                router_config.retries.as_ref()
+            } else {
+                self.app_state.config().global.retries.as_ref()
+            };
+
+        if let Some(retry_config) = retry_config {
+            match retry_config {
+                RetryConfig::Exponential {
+                    min_delay,
+                    max_delay,
+                    max_retries,
+                    factor,
+                } => {
+                    let retry_strategy = ExponentialBuilder::default()
+                        .with_max_delay(*max_delay)
+                        .with_min_delay(*min_delay)
+                        .with_max_times(usize::from(*max_retries))
+                        .with_factor(factor.to_f32().unwrap_or(
+                            crate::config::retry::DEFAULT_RETRY_FACTOR,
+                        ))
+                        .with_jitter()
+                        .build();
+                    let future_fn = || async {
+                        let result = Self::dispatch_sync(
+                            &request_builder,
+                            req_body_bytes.clone(),
+                        )
+                        .await?;
+
+                        Ok(result)
+                    };
+
+                    crate::utils::retry::RetryWithResult::new(future_fn, retry_strategy)
+                    .when(|result: &Result<_, _>| match result {
+                        Ok(response) => response.0.status().is_server_error(),
+                        Err(e) => match e {
+                            ApiError::Internal(InternalError::ReqwestError(
+                                reqwest_error,
+                            )) => reqwest_error.is_connect() || reqwest_error.status().is_some_and(|s| s.is_server_error()),
+                            _ => false,
+                        },
+                    })
+                    .notify(|result: &Result<_, _>, dur: Duration| match result {
+                        Ok(result) if result.0.status().is_server_error() => {
+                                tracing::warn!(
+                                    error = %result.0.status(),
+                                    retry_in = ?dur,
+                                    "got error dispatching sync request, retrying...",
+                                );
+                        }
+                        Err(ApiError::Internal(InternalError::ReqwestError(
+                            reqwest_error,
+                        ))) if reqwest_error.is_connect() || reqwest_error.status().is_some_and(|s| s.is_server_error()) => {
+                                tracing::warn!(
+                                    error = %reqwest_error,
+                                    retry_in = ?dur,
+                                    "got error dispatching sync request, retrying...",
+                                );
+                            }
+                        _ => {}
+                    })
+                    .await
+                }
+                RetryConfig::Constant { delay, max_retries } => {
+                    let retry_strategy = ConstantBuilder::default()
+                        .with_delay(*delay)
+                        .with_max_times(usize::from(*max_retries))
+                        .with_jitter()
+                        .build();
+                    let future_fn = || async {
+                        Self::dispatch_sync(
+                            &request_builder,
+                            req_body_bytes.clone(),
+                        )
+                        .await
+                    };
+
+                    crate::utils::retry::RetryWithResult::new(future_fn, retry_strategy)
+                    .when(|result: &Result<_, _>| match result {
+                        Ok(response) => response.0.status().is_server_error(),
+                        Err(e) => match e {
+                            ApiError::Internal(InternalError::ReqwestError(
+                                reqwest_error,
+                            )) => reqwest_error.is_connect() || reqwest_error.status().is_some_and(|s| s.is_server_error()),
+                            _ => false,
+                        },
+                    })
+                    .notify(|result: &Result<_, _>, dur: Duration| match result {
+                        Ok(result) if result.0.status().is_server_error() => {
+                                tracing::warn!(
+                                    error = %result.0.status(),
+                                    retry_in = ?dur,
+                                    "got error dispatching sync request, retrying...",
+                                );
+                        }
+                        Err(ApiError::Internal(InternalError::ReqwestError(
+                            reqwest_error,
+                        ))) if reqwest_error.is_connect() || reqwest_error.status().is_some_and(|s| s.is_server_error()) => {
+                                tracing::warn!(
+                                    error = %reqwest_error,
+                                    retry_in = ?dur,
+                                    "got error dispatching sync request, retrying...",
+                                );
+                            }
+                        _ => {}
+                    })
+                    .await
+                }
+            }
+        } else {
+            Self::dispatch_sync(&request_builder, req_body_bytes.clone()).await
+        }
+    }
+}
+
+async fn dispatch_stream_with_retry(
+    app_state: &AppState,
+    request_builder: RequestBuilder,
+    req_body_bytes: Bytes,
+    api_endpoint: Option<ApiEndpoint>,
+    metrics_registry: EndpointMetricsRegistry,
+    request_ctx: &RequestContext,
+) -> Result<
+    (
+        http::Response<crate::types::body::Body>,
+        crate::types::body::BodyReader,
+        oneshot::Receiver<()>,
+    ),
+    ApiError,
+> {
+    let retry_config =
+        if let Some(router_config) = request_ctx.router_config.as_ref() {
+            router_config.retries.as_ref()
+        } else {
+            app_state.config().global.retries.as_ref()
+        };
+
+    if let Some(retry_config) = retry_config {
+        match retry_config {
+            RetryConfig::Exponential {
+                min_delay,
+                max_delay,
+                max_retries,
+                factor,
+            } => {
+                let retry_strategy =
+                    ExponentialBuilder::default()
+                        .with_max_delay(*max_delay)
+                        .with_min_delay(*min_delay)
+                        .with_max_times(usize::from(*max_retries))
+                        .with_factor(factor.to_f32().unwrap_or(
+                            crate::config::retry::DEFAULT_RETRY_FACTOR,
+                        ))
+                        .with_jitter()
+                        .build();
+                (|| async {
+                    Dispatcher::dispatch_stream(
+                        &request_builder,
+                        req_body_bytes.clone(),
+                        api_endpoint,
+                        metrics_registry.clone(),
+                    )
+                    .await
+                })
+                .retry(retry_strategy)
+                .sleep(tokio::time::sleep)
+                .when(|e: &ApiError| match e {
+                    ApiError::StreamError(s) => s.is_retryable(),
+                    _ => false,
+                })
+                .notify(|err: &ApiError, dur: Duration| {
+                    if let ApiError::StreamError(_s) = err {
+                        tracing::warn!(
+                            error = %err,
+                            retry_in = ?dur,
+                            "upstream server error in stream, retrying...",
+                        );
+                    }
+                })
+                .await
+            }
+            RetryConfig::Constant { delay, max_retries } => {
+                let retry_strategy = ConstantBuilder::default()
+                    .with_delay(*delay)
+                    .with_max_times(usize::from(*max_retries))
+                    .with_jitter()
+                    .build();
+                (|| async {
+                    Dispatcher::dispatch_stream(
+                        &request_builder,
+                        req_body_bytes.clone(),
+                        api_endpoint,
+                        metrics_registry.clone(),
+                    )
+                    .await
+                })
+                .retry(retry_strategy)
+                .sleep(tokio::time::sleep)
+                .when(|e: &ApiError| match e {
+                    ApiError::StreamError(s) => s.is_retryable(),
+                    _ => false,
+                })
+                .notify(|err: &ApiError, dur: Duration| {
+                    if let ApiError::StreamError(_s) = err {
+                        tracing::warn!(
+                            error = %err,
+                            retry_in = ?dur,
+                            "upstream server error in stream, retrying...",
+                        );
+                    }
+                })
+                .await
+            }
+        }
+    } else {
+        Dispatcher::dispatch_stream(
+            &request_builder,
+            req_body_bytes.clone(),
+            api_endpoint,
+            metrics_registry,
+        )
+        .await
     }
 }
 

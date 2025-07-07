@@ -171,3 +171,7 @@ required-features = ["testing"]
 [[test]]
 name = "error_format"
 required-features = ["testing"]
+
+[[test]]
+name = "retries"
+required-features = ["testing"]

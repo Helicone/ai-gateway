@@ -121,8 +121,6 @@ async fn connect_with_retry(
 
 impl ControlPlaneClient {
     async fn reconnect_websocket(&mut self) -> Result<(), InitError> {
-        // TODO: add retries w/ exponential backoff
-        // https://crates.io/crates/backon
         let channel = connect_with_retry(&self.config).await?;
         self.channel = channel;
         tracing::info!("Successfully reconnected to control plane");

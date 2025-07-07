@@ -135,7 +135,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::config::{cache::CacheConfig, retry::Strategy};
+    use crate::config::cache::CacheConfig;
 
     fn test_router_config() -> RouterConfig {
         let cache = CacheConfig {
@@ -145,13 +145,11 @@ mod tests {
         };
 
         let balance = BalanceConfig::default();
-        let retries = RetryConfig {
-            enabled: false,
+        let retries = RetryConfig::Exponential {
+            min_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(10),
             max_retries: 3,
-            strategy: Strategy::Exponential {
-                base: Duration::from_secs(1),
-                max: Duration::from_secs(10),
-            },
+            factor: Decimal::from(2),
         };
 
         RouterConfig {
