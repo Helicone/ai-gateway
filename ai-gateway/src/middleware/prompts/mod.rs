@@ -1,2 +1,4 @@
-pub mod service;
-pub use service::PromptLayer;
+pub mod optional;
+mod service;
+
+pub use optional::{Layer as PromptLayer, Service as PromptService};

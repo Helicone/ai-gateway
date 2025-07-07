@@ -75,7 +75,7 @@ impl Router {
             &router_config,
         )
         .await?;
-        let prompt_layer = PromptLayer::new(app_state.clone())?;
+        let prompt_layer = PromptLayer::new(&app_state)?;
         let cache_layer = CacheLayer::for_router(&app_state, &id)?;
         let request_context_layer = request_context::Layer::for_router(
             router_config.clone(),

@@ -109,7 +109,7 @@ async fn build_prompt_request(
         .map_err(InternalError::CollectBodyError)?
         .to_bytes();
 
-    if !app_state.config().helicone.is_observability_enabled() {
+    if !app_state.config().helicone.is_prompts_enabled() {
         let req =
             Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
         return Ok(req);
