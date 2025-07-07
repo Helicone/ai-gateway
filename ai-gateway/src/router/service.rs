@@ -22,7 +22,6 @@ use crate::{
     middleware::{
         cache::CacheLayer, prompts::PromptLayer, rate_limit, request_context,
     },
-    router::direct::DirectProxyService,
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
 };
