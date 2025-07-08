@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    error::{logger::LoggerError},
+    error::logger::LoggerError,
     logger::service::JawnClient,
     minio::Minio,
     types::{extensions::AuthContext, logger::S3Log, response::JawnResponse},
