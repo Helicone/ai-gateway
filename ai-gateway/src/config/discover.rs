@@ -3,10 +3,7 @@ use std::{sync::Arc, time::Duration};
 use serde::{Deserialize, Serialize};
 
 use super::{monitor::MonitorConfig, router::RouterConfig};
-use crate::{
-    error::provider::ProviderError,
-    types::{discover::DiscoverMode, provider::ProviderKeys},
-};
+use crate::types::{discover::DiscoverMode, provider::ProviderKeys};
 
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize,
@@ -33,10 +30,11 @@ pub struct DiscoverConfig {
 }
 
 impl DiscoverConfig {
+    #[must_use]
     pub fn provider_keys(
         &self,
         router_config: &Arc<RouterConfig>,
-    ) -> Result<ProviderKeys, ProviderError> {
+    ) -> ProviderKeys {
         match self.api_keys_source {
             ProviderKeysSource::Env => ProviderKeys::from_env(router_config),
         }

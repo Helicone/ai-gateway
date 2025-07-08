@@ -9,19 +9,13 @@ use crate::{
         Dispatcher, DispatcherService, service::DispatcherServiceWithoutMapper,
     },
     error::init::InitError,
-    middleware::{
-        cache::{CacheLayer, CacheService},
-        rate_limit, request_context,
-    },
+    middleware::request_context,
     types::provider::InferenceProvider,
 };
 
-pub type DirectProxyService = rate_limit::Service<
-    CacheService<request_context::Service<DispatcherService>>,
->;
-pub type DirectProxyServiceWithoutMapper = rate_limit::Service<
-    CacheService<request_context::Service<DispatcherServiceWithoutMapper>>,
->;
+pub type DirectProxyService = request_context::Service<DispatcherService>;
+pub type DirectProxyServiceWithoutMapper =
+    request_context::Service<DispatcherServiceWithoutMapper>;
 
 #[derive(Debug, Clone)]
 pub struct DirectProxies(Arc<HashMap<InferenceProvider, DirectProxyService>>);
@@ -36,11 +30,6 @@ impl DirectProxies {
                 Dispatcher::new_direct_proxy(app_state.clone(), *provider)?;
 
             let direct_proxy = ServiceBuilder::new()
-                // TODO: should we change how global configs work for rate
-                // limiting, caching?       For now, leave these
-                // types here to make it easier to change later on.
-                .layer(rate_limit::Layer::disabled())
-                .layer(CacheLayer::disabled())
                 .layer(request_context::Layer::for_direct_proxy(
                     provider_keys.clone(),
                 ))
@@ -78,11 +67,6 @@ impl DirectProxiesWithoutMapper {
                 Dispatcher::new_without_mapper(app_state.clone(), *provider)?;
 
             let direct_proxy = ServiceBuilder::new()
-                // TODO: should we change how global configs work for rate
-                // limiting, caching?       For now, leave these
-                // types here to make it easier to change later on.
-                .layer(rate_limit::Layer::disabled())
-                .layer(CacheLayer::disabled())
                 .layer(request_context::Layer::for_direct_proxy(
                     provider_keys.clone(),
                 ))

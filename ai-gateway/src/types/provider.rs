@@ -6,10 +6,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use super::secret::Secret;
 use crate::{
-    config::{
-        SDK, balance::BalanceConfig, providers::ProvidersConfig,
-        router::RouterConfig,
-    },
+    config::{providers::ProvidersConfig, router::RouterConfig},
     endpoints::ApiEndpoint,
     error::provider::ProviderError,
 };
@@ -212,10 +209,9 @@ impl std::ops::Deref for ProviderKeys {
 }
 
 impl ProviderKeys {
-    fn from_env_inner(
-        balance_config: &BalanceConfig,
-    ) -> HashMap<InferenceProvider, ProviderKey> {
+    pub fn from_env(router_config: &Arc<RouterConfig>) -> Self {
         tracing::debug!("Discovering provider keys");
+        let balance_config = &router_config.load_balance;
         let mut keys = HashMap::default();
         let providers = balance_config.providers();
 
@@ -229,19 +225,7 @@ impl ProviderKeys {
             }
         }
 
-        keys
-    }
-
-    pub fn from_env(
-        router_config: &Arc<RouterConfig>,
-    ) -> Result<Self, ProviderError> {
-        let mut keys = Self::from_env_inner(&router_config.load_balance);
-        let default_provider = SDK;
-        if let Some(key) = ProviderKey::from_env(default_provider) {
-            tracing::debug!(provider = %default_provider, "got llm provider key");
-            keys.insert(default_provider, key);
-        }
-        Ok(Self(Arc::new(keys)))
+        Self(Arc::new(keys))
     }
 
     pub fn from_env_direct_proxy(

@@ -25,7 +25,7 @@ use crate::{
     router::{
         FORCED_ROUTING_HEADER,
         direct::{DirectProxiesWithoutMapper, DirectProxyServiceWithoutMapper},
-        service::{Router, RouterFuture},
+        service::Router,
         unified_api,
     },
     types::{
@@ -400,7 +400,7 @@ pin_project! {
         },
         RouterRequest {
             #[pin]
-            future: RouterFuture,
+            future: <Router as tower::Service<crate::types::request::Request>>::Future,
         },
         UnifiedApi {
             #[pin]

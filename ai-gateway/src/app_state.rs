@@ -103,24 +103,14 @@ impl AppState {
         &self,
         router_id: RouterId,
         router_config: &Arc<RouterConfig>,
-    ) -> Result<ProviderKeys, InitError> {
+    ) -> ProviderKeys {
         // This should be the only place we call .provider_keys(), everywhere
         // else we should use the `router_id` to get the provider keys
         // from the app state
-        let provider_keys = self
-            .0
-            .config
-            .discover
-            .provider_keys(router_config)
-            .inspect_err(|e| {
-                tracing::error!(
-                    error = %e,
-                    "Error getting provider keys for router"
-                );
-            })?;
+        let provider_keys = self.0.config.discover.provider_keys(router_config);
         let mut provider_keys_map = self.0.provider_keys.write().await;
         provider_keys_map.insert(router_id, provider_keys.clone());
-        Ok(provider_keys)
+        provider_keys
     }
 
     pub async fn get_provider_api_key_for_router(

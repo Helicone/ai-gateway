@@ -1,12 +1,11 @@
 use std::{
-    future::{Future, Ready, ready},
-    pin::Pin,
+    future::{Ready, ready},
     sync::Arc,
     task::{Context, Poll},
 };
 
+use futures::future::Either;
 use http::uri::PathAndQuery;
-use pin_project_lite::pin_project;
 use rustc_hash::FxHashMap as HashMap;
 use tower::{ServiceBuilder, buffer, util::BoxCloneService};
 
@@ -14,15 +13,13 @@ use crate::{
     app::BUFFER_SIZE,
     app_state::AppState,
     balancer::provider::ProviderBalancer,
-    config::{DeploymentTarget, SDK},
-    dispatcher::Dispatcher,
+    config::DeploymentTarget,
     endpoints::{ApiEndpoint, EndpointType},
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
     },
     middleware::{cache::CacheLayer, rate_limit, request_context},
-    router::direct::DirectProxyService,
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
 };
@@ -36,7 +33,6 @@ pub type RouterService = BoxCloneService<
 #[derive(Debug)]
 pub struct Router {
     inner: HashMap<EndpointType, RouterService>,
-    direct_proxy: DirectProxyService,
 }
 
 impl Router {
@@ -64,7 +60,7 @@ impl Router {
 
         let provider_keys = app_state
             .add_provider_keys_for_router(id.clone(), &router_config)
-            .await?;
+            .await;
 
         let mut inner = HashMap::default();
         let rl_layer = rate_limit::Layer::per_router(
@@ -99,28 +95,20 @@ impl Router {
 
             inner.insert(*endpoint_type, BoxCloneService::new(service_stack));
         }
-        let direct_proxy_dispatcher =
-            Dispatcher::new_direct_proxy(app_state.clone(), SDK)?;
-
-        let direct_proxy = ServiceBuilder::new()
-            .layer(rl_layer)
-            .layer(cache_layer)
-            .layer(request_context_layer)
-            .service(direct_proxy_dispatcher);
 
         tracing::info!(id = %id, "router created");
 
-        Ok(Self {
-            inner,
-            direct_proxy,
-        })
+        Ok(Self { inner })
     }
 }
 
 impl tower::Service<crate::types::request::Request> for Router {
     type Response = crate::types::response::Response;
     type Error = ApiError;
-    type Future = RouterFuture;
+    type Future = Either<
+        Ready<Result<crate::types::response::Response, ApiError>>,
+        <RouterService as tower::Service<crate::types::request::Request>>::Future,
+    >;
 
     #[inline]
     fn poll_ready(
@@ -132,9 +120,6 @@ impl tower::Service<crate::types::request::Request> for Router {
             if balancer.poll_ready(ctx).is_pending() {
                 any_pending = true;
             }
-        }
-        if self.direct_proxy.poll_ready(ctx).is_pending() {
-            any_pending = true;
         }
         if any_pending {
             Poll::Pending
@@ -152,12 +137,10 @@ impl tower::Service<crate::types::request::Request> for Router {
         let Some(extracted_path_and_query) =
             req.extensions().get::<PathAndQuery>()
         else {
-            return RouterFuture::Ready {
-                inner: ready(Err(InternalError::ExtensionNotFound(
-                    "PathAndQuery",
-                )
-                .into())),
-            };
+            return Either::Left(ready(Err(InternalError::ExtensionNotFound(
+                "PathAndQuery",
+            )
+            .into())));
         };
 
         let api_endpoint = ApiEndpoint::new(extracted_path_and_query.path());
@@ -166,54 +149,18 @@ impl tower::Service<crate::types::request::Request> for Router {
                 let endpoint_type = api_endpoint.endpoint_type();
                 if let Some(balancer) = self.inner.get_mut(&endpoint_type) {
                     req.extensions_mut().insert(api_endpoint);
-                    RouterFuture::Balancer {
-                        inner: balancer.call(req),
-                    }
+                    Either::Right(balancer.call(req))
                 } else {
-                    RouterFuture::Ready {
-                        inner: ready(Err(InvalidRequestError::NotFound(
-                            extracted_path_and_query.path().to_string(),
-                        )
-                        .into())),
-                    }
+                    Either::Left(ready(Err(InvalidRequestError::NotFound(
+                        extracted_path_and_query.path().to_string(),
+                    )
+                    .into())))
                 }
             }
-            None => RouterFuture::DirectProxy {
-                inner: self.direct_proxy.call(req),
-            },
-        }
-    }
-}
-
-pin_project! {
-    #[project = RouterFutureProj]
-    pub enum RouterFuture {
-        /// Ready with an immediate response
-        Ready {
-            #[pin]
-            inner: Ready<Result<crate::types::response::Response, ApiError>>
-        },
-        /// Calling the `ProviderBalancer`
-        Balancer {
-            #[pin]
-            inner: <RouterService as tower::Service<crate::types::request::Request>>::Future
-        },
-        /// Calling the direct proxy
-        DirectProxy {
-            #[pin]
-            inner: <DirectProxyService as tower::Service<crate::types::request::Request>>::Future
-        },
-    }
-}
-
-impl Future for RouterFuture {
-    type Output = Result<crate::types::response::Response, ApiError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.project() {
-            RouterFutureProj::Ready { inner } => inner.poll(cx),
-            RouterFutureProj::Balancer { inner } => inner.poll(cx),
-            RouterFutureProj::DirectProxy { inner } => inner.poll(cx),
+            None => Either::Left(ready(Err(InvalidRequestError::NotFound(
+                extracted_path_and_query.path().to_string(),
+            )
+            .into()))),
         }
     }
 }
