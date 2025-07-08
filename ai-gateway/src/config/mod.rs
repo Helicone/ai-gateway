@@ -28,6 +28,7 @@ use thiserror::Error;
 use crate::{error::init::InitError, types::secret::Secret};
 
 const ROUTER_ID_REGEX: &str = r"^[A-Za-z0-9_-]{1,12}$";
+const DEFAULT_CONFIG_PATH: &str = "/etc/ai-gateway/config.yaml";
 
 #[derive(Debug, Error, Display)]
 pub enum Error {
@@ -95,6 +96,10 @@ impl Config {
         let mut builder = config::Config::builder();
         if let Some(path) = config_file_path {
             builder = builder.add_source(config::File::from(path));
+        } else if std::fs::exists(DEFAULT_CONFIG_PATH).unwrap_or_default() {
+            builder = builder.add_source(config::File::from(PathBuf::from(
+                DEFAULT_CONFIG_PATH,
+            )));
         }
         builder = builder.add_source(
             config::Environment::with_prefix("AI_GATEWAY")
