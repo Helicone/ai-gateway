@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ai_gateway::{
     config::{
@@ -62,7 +62,7 @@ async fn rate_limit_capacity_enforced_impl(
     rate_limit_config: GlobalRateLimitConfig,
 ) {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(rate_limit_config);
     config.rate_limit_store = rate_limit_store;
     let mock_args = MockArgs::builder()
@@ -136,7 +136,7 @@ async fn rate_limit_per_user_isolation_impl(
     rate_limit_config: GlobalRateLimitConfig,
 ) {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(rate_limit_config);
     config.rate_limit_store = rate_limit_store;
 
@@ -225,7 +225,7 @@ async fn rate_limit_per_user_isolation_impl(
 #[serial_test::serial]
 async fn rate_limit_disabled() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ai_gateway::{
     config::{
@@ -23,7 +23,7 @@ use tower::Service;
 async fn weighted_balancer_anthropic_preferred() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're not testing authentication
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {
@@ -109,7 +109,7 @@ async fn weighted_balancer_anthropic_preferred() {
 async fn weighted_balancer_openai_preferred() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're not testing authentication
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {
@@ -195,7 +195,7 @@ async fn weighted_balancer_openai_preferred() {
 async fn weighted_balancer_anthropic_heavily_preferred() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're not testing authentication
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {
@@ -287,7 +287,7 @@ async fn weighted_balancer_anthropic_heavily_preferred() {
 async fn weighted_balancer_equal_four_providers() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're not testing authentication
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {
@@ -384,7 +384,7 @@ async fn weighted_balancer_equal_four_providers() {
 async fn weighted_balancer_bedrock() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're not testing authentication
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {

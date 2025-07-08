@@ -64,4 +64,6 @@ pub enum InitError {
     DatabaseConnection(sqlx::Error),
     /// Provider not yet supported: {0}
     ProviderNotSupported(InferenceProvider),
+    /// Configured features require authentication to be enabled
+    HeliconeAuthRequired,
 }

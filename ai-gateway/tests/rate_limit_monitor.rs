@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ai_gateway::{
     config::{
@@ -24,7 +24,7 @@ use tower::Service;
 async fn rate_limit_removes_provider_from_lb_pool() {
     let mut config = Config::test_default();
     // Enable auth so that logging services are called
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
         BalanceConfigInner::Weighted {

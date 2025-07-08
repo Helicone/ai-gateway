@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ai_gateway::{
     config::{Config, helicone::HeliconeFeatures},
@@ -16,7 +16,7 @@ async fn openai_direct_proxy() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're testing basic passthrough
     // functionality
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
@@ -59,7 +59,7 @@ async fn anthropic_direct_proxy() {
     let mut config = Config::test_default();
     // Disable auth for this test since we're testing basic passthrough
     // functionality
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([

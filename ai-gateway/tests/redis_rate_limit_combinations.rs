@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use ai_gateway::{
     config::{
@@ -123,7 +126,7 @@ const REDIS_URL: &str = "redis://localhost:6340";
 #[serial_test::serial]
 async fn test_global_rate_limit_with_router_none() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(GlobalRateLimitConfig {
         // 3 requests per 5 seconds
         limits: Some(create_test_limits(3, 1000)),
@@ -199,7 +202,7 @@ async fn test_global_rate_limit_with_router_none() {
 #[serial_test::serial]
 async fn test_router_specific_with_custom_limits() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(GlobalRateLimitConfig {
         limits: None,
         cleanup_interval: Duration::from_secs(60),
@@ -273,7 +276,7 @@ async fn test_router_specific_with_custom_limits() {
 #[serial_test::serial]
 async fn test_global_with_custom_router_override() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(GlobalRateLimitConfig {
         // 5 requests per second
         limits: Some(create_test_limits(5, 1000)),
@@ -348,7 +351,7 @@ async fn test_global_with_custom_router_override() {
 #[serial_test::serial]
 async fn test_router_independence_different_rate_limits() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(GlobalRateLimitConfig {
         limits: None,
         cleanup_interval: Duration::from_secs(60),
@@ -541,7 +544,7 @@ async fn make_chat_request_to_router(
 #[serial_test::serial]
 async fn test_multi_router_different_rate_limits_in_memory() {
     let mut config = Config::test_default();
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.global.rate_limit = Some(GlobalRateLimitConfig {
         limits: None,
         cleanup_interval: Duration::from_secs(60),

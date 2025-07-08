@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::types::secret::Secret;
+use crate::{error::init::InitError, types::secret::Secret};
 
 #[derive(
     Default, Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash,
@@ -16,6 +18,8 @@ pub enum HeliconeFeatures {
     None,
     /// Authentication only.
     Auth,
+    /// Observability. If enabled, `Auth` must also be set.
+    Observability,
     /// Authentication and observability.
     All,
 }
@@ -33,26 +37,38 @@ pub struct HeliconeConfig {
     /// The websocket URL of the Helicone control plane.
     #[serde(default = "default_websocket_url")]
     pub websocket_url: Url,
-    /// The mode of Helicone features to enable.
+    /// The set of Helicone features to enable.
+    ///
+    /// Available options can be seen at [`HeliconeFeatures`].
     #[serde(default)]
-    pub features: HeliconeFeatures,
+    pub features: HashSet<HeliconeFeatures>,
 }
 
 impl HeliconeConfig {
     #[must_use]
     pub fn is_auth_enabled(&self) -> bool {
-        self.features == HeliconeFeatures::Auth
-            || self.features == HeliconeFeatures::All
+        self.features.contains(&HeliconeFeatures::Auth)
+            || self.features.contains(&HeliconeFeatures::All)
     }
 
     #[must_use]
     pub fn is_auth_disabled(&self) -> bool {
-        self.features == HeliconeFeatures::None
+        !self.is_auth_enabled()
     }
 
     #[must_use]
     pub fn is_observability_enabled(&self) -> bool {
-        self.features == HeliconeFeatures::All
+        self.features.contains(&HeliconeFeatures::All)
+            || self.features.contains(&HeliconeFeatures::Observability)
+    }
+
+    pub fn validate(&self) -> Result<(), InitError> {
+        if self.features.contains(&HeliconeFeatures::Observability)
+            && self.is_auth_disabled()
+        {
+            return Err(InitError::HeliconeAuthRequired);
+        }
+        Ok(())
     }
 }
 
@@ -62,7 +78,7 @@ impl Default for HeliconeConfig {
             api_key: default_api_key(),
             base_url: default_base_url(),
             websocket_url: default_websocket_url(),
-            features: HeliconeFeatures::None,
+            features: HashSet::from_iter([]),
         }
     }
 }
@@ -92,7 +108,7 @@ impl crate::tests::TestDefault for HeliconeConfig {
             websocket_url: "ws://localhost:8585/ws/v1/router/control-plane"
                 .parse()
                 .unwrap(),
-            features: HeliconeFeatures::All,
+            features: HashSet::from_iter([HeliconeFeatures::All]),
             api_key: default_api_key(),
         }
     }
@@ -100,7 +116,8 @@ impl crate::tests::TestDefault for HeliconeConfig {
 
 // This manual deserialize impl is only required for backwards compatibility so
 // that we can support the old `authentication` and `observability` boolean
-// fields.
+// fields, and also support both single values and arrays for the `features`
+// field.
 #[allow(clippy::too_many_lines)]
 impl<'de> Deserialize<'de> for HeliconeConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -120,6 +137,30 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
             Features,
             Authentication,
             Observability,
+        }
+
+        // Helper to deserialize features that can be either a single value or
+        // an array
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum FeaturesValue {
+            Single(HeliconeFeatures),
+            Multiple(Vec<HeliconeFeatures>),
+        }
+
+        // false positive
+        #[allow(clippy::implicit_hasher)]
+        impl From<FeaturesValue> for HashSet<HeliconeFeatures> {
+            fn from(value: FeaturesValue) -> Self {
+                match value {
+                    FeaturesValue::Single(feature) => {
+                        HashSet::from_iter([feature])
+                    }
+                    FeaturesValue::Multiple(features) => {
+                        HashSet::from_iter(features)
+                    }
+                }
+            }
         }
 
         struct HeliconeConfigVisitor;
@@ -177,7 +218,9 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
                                     "features",
                                 ));
                             }
-                            features = Some(map.next_value()?);
+                            let features_value: FeaturesValue =
+                                map.next_value()?;
+                            features = Some(features_value.into());
                         }
                         Field::Authentication => {
                             if authentication.is_some() {
@@ -207,11 +250,13 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
                     f
                 } else {
                     match (authentication, observability) {
-                        (_, Some(true)) => HeliconeFeatures::All,
-                        (Some(true), Some(false) | None) => {
-                            HeliconeFeatures::Auth
+                        (_, Some(true)) => {
+                            HashSet::from_iter([HeliconeFeatures::All])
                         }
-                        _ => HeliconeFeatures::None,
+                        (Some(true), Some(false) | None) => {
+                            HashSet::from_iter([HeliconeFeatures::Auth])
+                        }
+                        _ => HashSet::default(),
                     }
                 };
 
@@ -255,7 +300,10 @@ features: "all"
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::All])
+        );
     }
 
     #[test]
@@ -267,7 +315,10 @@ observability: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::All])
+        );
     }
 
     #[test]
@@ -279,7 +330,10 @@ observability: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::Auth);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::Auth])
+        );
     }
 
     #[test]
@@ -291,7 +345,10 @@ observability: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::All])
+        );
     }
 
     #[test]
@@ -303,7 +360,7 @@ observability: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::None);
+        assert_eq!(config.features, HashSet::from_iter([]));
     }
 
     #[test]
@@ -314,7 +371,10 @@ authentication: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::Auth);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::Auth])
+        );
     }
 
     #[test]
@@ -325,7 +385,10 @@ observability: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::All])
+        );
     }
 
     #[test]
@@ -336,7 +399,7 @@ authentication: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::None);
+        assert_eq!(config.features, HashSet::from_iter([]));
     }
 
     #[test]
@@ -347,7 +410,7 @@ observability: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::None);
+        assert_eq!(config.features, HashSet::from_iter([]));
     }
 
     #[test]
@@ -358,7 +421,7 @@ base-url: "https://example.com"
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::None);
+        assert_eq!(config.features, HashSet::from_iter([]));
     }
 
     #[test]
@@ -372,7 +435,10 @@ observability: true
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
         // features field should take precedence over auth/observability
-        assert_eq!(config.features, HeliconeFeatures::Auth);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::Auth])
+        );
     }
 
     #[test]
@@ -386,18 +452,21 @@ observability: true
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
         // features field should take precedence
-        assert_eq!(config.features, HeliconeFeatures::None);
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::None])
+        );
     }
 
     #[test]
     fn test_deserialize_all_features_variants() {
         let test_cases = vec![
-            ("none", HeliconeFeatures::None),
-            ("auth", HeliconeFeatures::Auth),
-            ("all", HeliconeFeatures::All),
+            ("none", HashSet::from_iter([HeliconeFeatures::None])),
+            ("auth", HashSet::from_iter([HeliconeFeatures::Auth])),
+            ("all", HashSet::from_iter([HeliconeFeatures::All])),
         ];
 
-        for (feature_str, expected_feature) in test_cases {
+        for (feature_str, expected_features) in test_cases {
             let yaml = format!(
                 r#"
 api-key: "sk-test-key"
@@ -407,16 +476,30 @@ features: "{feature_str}"
 
             let config: HeliconeConfig = serde_yml::from_str(&yaml).unwrap();
             assert_eq!(
-                config.features, expected_feature,
+                config.features, expected_features,
                 "Failed for feature: {feature_str}"
             );
         }
     }
 
     #[test]
+    fn test_deserialize_features_array() {
+        let yaml = r#"
+api-key: "sk-test-key"
+features: ["auth", "all"]
+"#;
+
+        let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(
+            config.features,
+            HashSet::from_iter([HeliconeFeatures::Auth, HeliconeFeatures::All])
+        );
+    }
+
+    #[test]
     fn test_helper_methods() {
         let auth_config = HeliconeConfig {
-            features: HeliconeFeatures::Auth,
+            features: HashSet::from_iter([HeliconeFeatures::Auth]),
             ..Default::default()
         };
         assert!(auth_config.is_auth_enabled());
@@ -424,7 +507,7 @@ features: "{feature_str}"
         assert!(!auth_config.is_observability_enabled());
 
         let all_config = HeliconeConfig {
-            features: HeliconeFeatures::All,
+            features: HashSet::from_iter([HeliconeFeatures::All]),
             ..Default::default()
         };
         assert!(all_config.is_auth_enabled());
@@ -432,7 +515,7 @@ features: "{feature_str}"
         assert!(all_config.is_observability_enabled());
 
         let none_config = HeliconeConfig {
-            features: HeliconeFeatures::None,
+            features: HashSet::from_iter([HeliconeFeatures::None]),
             ..Default::default()
         };
         assert!(!none_config.is_auth_enabled());

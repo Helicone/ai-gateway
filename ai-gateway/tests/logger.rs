@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ai_gateway::{
     config::{Config, DeploymentTarget, helicone::HeliconeFeatures},
@@ -14,7 +14,7 @@ use tower::Service;
 async fn request_response_logger_authenticated() {
     let mut config = Config::test_default();
     // Ensure auth is required for this test
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
@@ -64,7 +64,7 @@ async fn authenticated_sidecar() {
     let mut config = Config::test_default();
     let minio_port = 9190;
     // Ensure auth is required for this test
-    config.helicone.features = HeliconeFeatures::All;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::All]);
     config.deployment_target = DeploymentTarget::Sidecar;
 
     let mock_args = MockArgs::builder()
@@ -116,7 +116,7 @@ async fn unauthenticated_sidecar() {
     let mut config = Config::test_default();
     let minio_port = 9190;
     // Ensure auth is required for this test
-    config.helicone.features = HeliconeFeatures::Auth;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::Auth]);
     config.deployment_target = DeploymentTarget::Sidecar;
 
     let mock_args = MockArgs::builder()
@@ -160,7 +160,7 @@ async fn unauthenticated_sidecar() {
 async fn request_response_logger_unauthenticated() {
     let mut config = Config::test_default();
     // Disable auth requirement for this test
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
@@ -208,7 +208,7 @@ async fn request_response_logger_unauthenticated() {
 async fn request_response_logger_unauthenticated_sidecar() {
     let mut config = Config::test_default();
     // Disable auth requirement for this test
-    config.helicone.features = HeliconeFeatures::None;
+    config.helicone.features = HashSet::from_iter([HeliconeFeatures::None]);
     config.deployment_target = DeploymentTarget::Sidecar;
 
     let mock_args = MockArgs::builder()
