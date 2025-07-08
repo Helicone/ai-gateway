@@ -18,7 +18,7 @@ pub type RateLimitEventSenders =
 pub type RateLimitEventReceivers =
     RwLock<HashMap<RouterId, Receiver<RateLimitEvent>>>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RateLimitEvent {
     pub api_endpoint: ApiEndpoint,
     pub retry_after_seconds: Option<u64>,
@@ -57,7 +57,7 @@ impl<K> Future for ProviderRestore<K> {
                 this.key.take().expect(
                     "should never poll future after restore completion",
                 ),
-                *this.api_endpoint,
+                this.api_endpoint.clone(),
             )),
             Poll::Pending => Poll::Pending,
         }

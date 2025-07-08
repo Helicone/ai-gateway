@@ -89,7 +89,7 @@ impl Client {
         match inference_provider {
             InferenceProvider::OpenAI
             | InferenceProvider::GoogleGemini
-            | InferenceProvider::Mistral => {
+            | InferenceProvider::Named(_) => {
                 let openai_compatible_client = OpenAICompatibleClient::new(
                     app_state,
                     base_client,
@@ -186,7 +186,8 @@ pub(super) async fn sse_stream(
             _ => {}
         },
         Some(Err(e)) => {
-            handle_stream_error(e, api_endpoint, &metrics_registry).await?;
+            handle_stream_error(e, api_endpoint.clone(), &metrics_registry)
+                .await?;
         }
         None => {}
     }
@@ -203,7 +204,7 @@ pub(super) async fn sse_stream(
                             break;
                         }
 
-                        if let Err(e) = handle_stream_error_with_tx(e, tx.clone(), api_endpoint, &metrics_registry).await {
+                        if let Err(e) = handle_stream_error_with_tx(e, tx.clone(), api_endpoint.clone(), &metrics_registry).await {
                             tracing::error!(error = %e, "failed to handle stream error");
                             break;
                         }
@@ -244,7 +245,7 @@ async fn handle_stream_error_with_tx(
     api_endpoint: Option<ApiEndpoint>,
     metrics_registry: &EndpointMetricsRegistry,
 ) -> Result<(), InternalError> {
-    record_stream_err_metrics(&error, api_endpoint, metrics_registry);
+    record_stream_err_metrics(&error, api_endpoint.clone(), metrics_registry);
     match error {
         reqwest_eventsource::Error::InvalidStatusCode(
             status_code,
@@ -289,7 +290,7 @@ async fn handle_stream_error(
     api_endpoint: Option<ApiEndpoint>,
     metrics_registry: &EndpointMetricsRegistry,
 ) -> Result<(), StreamError> {
-    record_stream_err_metrics(&error, api_endpoint, metrics_registry);
+    record_stream_err_metrics(&error, api_endpoint.clone(), metrics_registry);
     match error {
         reqwest_eventsource::Error::InvalidStatusCode(
             status_code,

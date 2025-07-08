@@ -63,7 +63,9 @@ impl ModelMapper {
         let models_offered_by_target_provider = &self
             .providers_config()
             .get(target_provider)
-            .ok_or_else(|| MapperError::NoProviderConfig(*target_provider))?
+            .ok_or_else(|| {
+                MapperError::NoProviderConfig(target_provider.clone())
+            })?
             .models;
 
         let source_model_name = ModelName::from_model(source_model);
@@ -85,7 +87,7 @@ impl ModelMapper {
             if let Some(target_model) = target_model {
                 // the parsed model id here will use the "latest" version
                 return ModelId::from_str_and_provider(
-                    *target_provider,
+                    target_provider.clone(),
                     target_model.as_ref(),
                 );
             }
@@ -101,12 +103,12 @@ impl ModelMapper {
             })
             .ok_or_else(|| {
                 MapperError::NoModelMapping(
-                    *target_provider,
+                    target_provider.clone(),
                     source_model_name.as_ref().to_string(),
                 )
             })?;
         ModelId::from_str_and_provider(
-            *target_provider,
+            target_provider.clone(),
             default_mapping.as_ref(),
         )
     }

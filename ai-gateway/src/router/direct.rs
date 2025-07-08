@@ -27,7 +27,7 @@ impl DirectProxies {
         for (provider, _provider_config) in app_state.config().providers.iter()
         {
             let direct_proxy_dispatcher =
-                Dispatcher::new_direct_proxy(app_state.clone(), *provider)?;
+                Dispatcher::new_direct_proxy(app_state.clone(), provider)?;
 
             let direct_proxy = ServiceBuilder::new()
                 .layer(request_context::Layer::for_direct_proxy(
@@ -38,7 +38,7 @@ impl DirectProxies {
                 // .map_err(|e| crate::error::api::Error::Box(e))
                 .service(direct_proxy_dispatcher);
 
-            direct_proxies.insert(*provider, direct_proxy);
+            direct_proxies.insert(provider.clone(), direct_proxy);
         }
         Ok(Self(Arc::new(direct_proxies)))
     }
@@ -64,7 +64,7 @@ impl DirectProxiesWithoutMapper {
         for (provider, _provider_config) in app_state.config().providers.iter()
         {
             let direct_proxy_dispatcher =
-                Dispatcher::new_without_mapper(app_state.clone(), *provider)?;
+                Dispatcher::new_without_mapper(app_state.clone(), provider)?;
 
             let direct_proxy = ServiceBuilder::new()
                 .layer(request_context::Layer::for_direct_proxy(
@@ -75,7 +75,7 @@ impl DirectProxiesWithoutMapper {
                 // .map_err(|e| crate::error::api::Error::Box(e))
                 .service(direct_proxy_dispatcher);
 
-            direct_proxies.insert(*provider, direct_proxy);
+            direct_proxies.insert(provider.clone(), direct_proxy);
         }
         Ok(Self(Arc::new(direct_proxies)))
     }

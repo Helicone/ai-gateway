@@ -202,7 +202,7 @@ impl App {
 
         let meter = global::meter(SERVICE_NAME);
         let metrics = metrics::Metrics::new(&meter);
-        let endpoint_metrics = EndpointMetricsRegistry::default();
+        let endpoint_metrics = EndpointMetricsRegistry::new(&config);
         let health_monitor = HealthMonitorMap::default();
         let rate_limit_monitor = RateLimitMonitorMap::default();
 

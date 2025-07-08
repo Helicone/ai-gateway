@@ -160,14 +160,11 @@ impl MetaRouter {
                 && let Ok(forced_routing) = forced_routing.to_str()
                 && (is_router_request || is_unified_api_request)
             {
-                if let Ok(provider) =
-                    InferenceProvider::from_str(forced_routing)
-                {
-                    return Ok(RouteType::DirectProxy {
-                        provider,
-                        path: rest_path.trim_start_matches('/').into(),
-                    });
-                }
+                let Ok(provider) = InferenceProvider::from_str(forced_routing);
+                return Ok(RouteType::DirectProxy {
+                    provider,
+                    path: rest_path.trim_start_matches('/').into(),
+                });
             }
 
             if is_router_request {
@@ -182,17 +179,12 @@ impl MetaRouter {
                 Ok(RouteType::UnifiedApi {
                     path: rest_path.into(),
                 })
-            } else if let Ok(provider) =
-                InferenceProvider::from_str(first_segment)
-            {
+            } else {
+                let Ok(provider) = InferenceProvider::from_str(first_segment);
                 Ok(RouteType::DirectProxy {
                     provider,
                     path: rest_path.trim_start_matches('/').into(),
                 })
-            } else {
-                Err(ApiError::InvalidRequest(InvalidRequestError::NotFound(
-                    path.to_string(),
-                )))
             }
         } else {
             Err(ApiError::InvalidRequest(InvalidRequestError::NotFound(

@@ -1,5 +1,4 @@
 openai:
-  enabled: true
   models:
     - "gpt-4"
     - "gpt-4-turbo"
@@ -19,10 +18,8 @@ openai:
     - "gpt-4o-mini-search"
     - "gpt-4o-search"
   base-url: https://api.openai.com
-  version: null
 
 anthropic:
-  enabled: true
   models:
     - "claude-opus-4-0"
     - "claude-sonnet-4-0"
@@ -36,7 +33,6 @@ anthropic:
   version: "2023-06-01"
 
 gemini:
-  enabled: true
   models:
     - "gemini-2.5-flash"
     - "gemini-2.5-pro"
@@ -46,10 +42,8 @@ gemini:
     - "gemini-1.5-flash-8b"
     - "gemini-1.5-pro"
   base-url: https://generativelanguage.googleapis.com
-  version: null
 
 mistral:
-  enabled: true
   models:
     - "ministral-8b"
     - "ministral-3b"
@@ -67,7 +61,6 @@ mistral:
   base-url: https://api.mistral.ai
 
 ollama:
-  enabled: false
   models:
     - "deepseek-r1"
     - "gemma3"
@@ -81,7 +74,6 @@ ollama:
   base-url: http://localhost:11434
 
 bedrock:
-  enabled: false
   # bedrock models must be enabled prior to sending
   # requests which use them
   models:
@@ -118,4 +110,3 @@ bedrock:
     - "mistral.mixtral-8x7b-instruct-v0:1"
     - "us.mistral.pixtral-large-2502-v1:0"
   base-url: https://bedrock-runtime.us-east-1.amazonaws.com
-  version: null

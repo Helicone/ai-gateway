@@ -43,7 +43,7 @@ impl
         value.model = target_model.to_string();
 
         Ok(OpenAICompatibleChatCompletionRequest {
-            provider: self.provider,
+            provider: self.provider.clone(),
             inner: value,
         })
     }

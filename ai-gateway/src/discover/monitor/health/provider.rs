@@ -87,14 +87,18 @@ async fn check_weighted_monitor(
             BalanceConfigInner::Weighted { providers } => {
                 for target in providers {
                     let provider = &target.provider;
-                    let weight =
-                        Weight::from(target.weight.to_f64().ok_or_else(
-                            || InitError::InvalidWeight(target.provider),
-                        )?);
+                    let weight = Weight::from(
+                        target.weight.to_f64().ok_or_else(|| {
+                            InitError::InvalidWeight(target.provider.clone())
+                        })?,
+                    );
 
-                    let key =
-                        WeightedKey::new(*provider, *endpoint_type, weight);
-                    let is_healthy = inner.check_health(*provider)?;
+                    let key = WeightedKey::new(
+                        provider.clone(),
+                        *endpoint_type,
+                        weight,
+                    );
+                    let is_healthy = inner.check_health(provider)?;
                     let was_unhealthy = inner.unhealthy_keys.contains(&key);
 
                     if !is_healthy && !was_unhealthy {
@@ -113,7 +117,7 @@ async fn check_weighted_monitor(
                             inner.app_state.clone(),
                             &inner.router_id,
                             &inner.router_config,
-                            *provider,
+                            provider.clone(),
                         )
                         .await?;
 
@@ -162,8 +166,8 @@ async fn check_p2c_monitor(
         match balance_config {
             BalanceConfigInner::Latency { providers } => {
                 for provider in providers {
-                    let key = Key::new(*provider, *endpoint_type);
-                    let is_healthy = inner.check_health(*provider)?;
+                    let key = Key::new(provider.clone(), *endpoint_type);
+                    let is_healthy = inner.check_health(provider)?;
                     let was_unhealthy = inner.unhealthy_keys.contains(&key);
 
                     if !is_healthy && !was_unhealthy {
@@ -182,7 +186,7 @@ async fn check_p2c_monitor(
                             inner.app_state.clone(),
                             &inner.router_id,
                             &inner.router_config,
-                            *provider,
+                            provider.clone(),
                         )
                         .await?;
 
@@ -251,7 +255,7 @@ impl<K> ProviderMonitorInner<K> {
 
     fn check_health(
         &self,
-        provider: InferenceProvider,
+        provider: &InferenceProvider,
     ) -> Result<bool, InternalError> {
         let provider_endpoints = provider.endpoints();
         let config = self.app_state.config();

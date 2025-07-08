@@ -111,7 +111,7 @@ impl<K> ProviderMonitorInner<K> {
 }
 
 impl ProviderMonitorInner<Key> {
-    fn create_key_for_endpoint(api_endpoint: ApiEndpoint) -> Key {
+    fn create_key_for_endpoint(api_endpoint: &ApiEndpoint) -> Key {
         let provider = api_endpoint.provider();
         let endpoint_type = api_endpoint.endpoint_type();
         Key::new(provider, endpoint_type)
@@ -131,7 +131,7 @@ impl ProviderMonitorInner<Key> {
             tokio::select! {
                 // Handle incoming rate limit events
                 Some(event) = rx.recv() => {
-                    let key = Self::create_key_for_endpoint(event.api_endpoint);
+                    let key = Self::create_key_for_endpoint(&event.api_endpoint);
                     if rate_limited_providers.contains(&key) {
                         info!(
                             provider = ?event.api_endpoint.provider(),
@@ -157,7 +157,7 @@ impl ProviderMonitorInner<Key> {
 
                         let restore = ProviderRestore {
                             key: Some(key.clone()),
-                            api_endpoint: event.api_endpoint,
+                            api_endpoint: event.api_endpoint.clone(),
                             timer: tokio::time::sleep(duration),
                         };
                         pending_restores.push(restore);
@@ -215,7 +215,7 @@ impl ProviderMonitorInner<Key> {
 impl ProviderMonitorInner<WeightedKey> {
     fn create_key_for_endpoint(
         &self,
-        api_endpoint: ApiEndpoint,
+        api_endpoint: &ApiEndpoint,
     ) -> Result<WeightedKey, InternalError> {
         let provider = api_endpoint.provider();
         let endpoint_type = api_endpoint.endpoint_type();
@@ -276,7 +276,7 @@ impl ProviderMonitorInner<WeightedKey> {
             tokio::select! {
                 // Handle incoming rate limit events
                 Some(event) = rx.recv() => {
-                    let key = self.create_key_for_endpoint(event.api_endpoint)?;
+                    let key = self.create_key_for_endpoint(&event.api_endpoint)?;
                     if let std::collections::hash_map::Entry::Vacant(e) = rate_limited_providers.entry(key.clone()) {
                         debug!(
                             provider = ?event.api_endpoint.provider(),
@@ -304,7 +304,7 @@ impl ProviderMonitorInner<WeightedKey> {
 
                         let restore = ProviderRestore {
                             key: Some(key),
-                            api_endpoint: event.api_endpoint,
+                            api_endpoint: event.api_endpoint.clone(),
                             timer: tokio::time::sleep(duration),
                         };
                         pending_restores.push(restore);

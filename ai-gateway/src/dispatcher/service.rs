@@ -75,13 +75,14 @@ impl Dispatcher {
         provider: InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
         let client =
-            Client::new_for_router(&app_state, provider, router_id).await?;
+            Client::new_for_router(&app_state, provider.clone(), router_id)
+                .await?;
         let rate_limit_tx = app_state.get_rate_limit_tx(router_id).await?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider,
+            provider: provider.clone(),
             rate_limit_tx: Some(rate_limit_tx),
         };
         let model_mapper = ModelMapper::new_for_router(
@@ -91,7 +92,7 @@ impl Dispatcher {
         let converter_registry = EndpointConverterRegistry::new(&model_mapper);
 
         let extensions_layer = AddExtensionsLayer::builder()
-            .inference_provider(provider)
+            .inference_provider(provider.clone())
             .router_id(Some(router_id.clone()))
             .build();
 
@@ -106,21 +107,22 @@ impl Dispatcher {
 
     pub fn new_direct_proxy(
         app_state: AppState,
-        provider: InferenceProvider,
+        provider: &InferenceProvider,
     ) -> Result<DispatcherService, InitError> {
-        let client = Client::new_for_direct_proxy(&app_state, provider)?;
+        let client =
+            Client::new_for_direct_proxy(&app_state, provider.clone())?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider,
+            provider: provider.clone(),
             rate_limit_tx: None,
         };
         let model_mapper = ModelMapper::new(app_state.clone());
         let converter_registry = EndpointConverterRegistry::new(&model_mapper);
 
         let extensions_layer = AddExtensionsLayer::builder()
-            .inference_provider(provider)
+            .inference_provider(provider.clone())
             .router_id(None)
             .build();
 
@@ -135,19 +137,19 @@ impl Dispatcher {
 
     pub fn new_without_mapper(
         app_state: AppState,
-        provider: InferenceProvider,
+        provider: &InferenceProvider,
     ) -> Result<DispatcherServiceWithoutMapper, InitError> {
-        let client = Client::new_for_unified_api(&app_state, provider)?;
+        let client = Client::new_for_unified_api(&app_state, provider.clone())?;
 
         let dispatcher = Self {
             client,
             app_state: app_state.clone(),
-            provider,
+            provider: provider.clone(),
             rate_limit_tx: None,
         };
 
         let extensions_layer = AddExtensionsLayer::builder()
-            .inference_provider(provider)
+            .inference_provider(provider.clone())
             .router_id(None)
             .build();
 
@@ -197,12 +199,12 @@ impl Dispatcher {
             .remove::<Arc<RequestContext>>()
             .ok_or(InternalError::ExtensionNotFound("RequestContext"))?;
         let auth_ctx = req_ctx.auth_context.as_ref();
-        let api_endpoint = req.extensions().get::<ApiEndpoint>().copied();
+        let api_endpoint = req.extensions().get::<ApiEndpoint>().cloned();
         let target_provider = &self.provider;
         let config = self.app_state.config();
         let provider_config =
             config.providers.get(target_provider).ok_or_else(|| {
-                InternalError::ProviderNotConfigured(*target_provider)
+                InternalError::ProviderNotConfigured(target_provider.clone())
             })?;
         let base_url = provider_config.base_url.clone();
         {
@@ -229,7 +231,7 @@ impl Dispatcher {
         let inference_provider = req
             .extensions()
             .get::<InferenceProvider>()
-            .copied()
+            .cloned()
             .ok_or(InternalError::ExtensionNotFound("InferenceProvider"))?;
         let router_id = req.extensions().get::<RouterId>().cloned();
         let start_instant = req
@@ -277,12 +279,12 @@ impl Dispatcher {
             .extract_and_sign_aws_headers(request_builder, &req_body_bytes)?;
 
         let metrics_for_stream = self.app_state.0.endpoint_metrics.clone();
-        if let Some(api_endpoint) = api_endpoint {
+        if let Some(ref api_endpoint) = api_endpoint {
             let endpoint_metrics = self
                 .app_state
                 .0
                 .endpoint_metrics
-                .health_metrics(api_endpoint)?;
+                .health_metrics(api_endpoint.clone())?;
             endpoint_metrics.incr_req_count();
         }
 
@@ -296,7 +298,7 @@ impl Dispatcher {
                 &self.app_state,
                 request_builder,
                 req_body_bytes.clone(),
-                api_endpoint,
+                api_endpoint.clone(),
                 metrics_for_stream,
                 &req_ctx,
             )
@@ -326,7 +328,9 @@ impl Dispatcher {
             .build();
         extensions_copier.copy_extensions(client_response.extensions_mut());
         client_response.extensions_mut().insert(mapper_ctx.clone());
-        client_response.extensions_mut().insert(api_endpoint);
+        if let Some(api_endpoint) = api_endpoint.clone() {
+            client_response.extensions_mut().insert(api_endpoint);
+        }
         client_response
             .extensions_mut()
             .insert(extracted_path_and_query);
@@ -347,7 +351,7 @@ impl Dispatcher {
                 .request_body(req_body_bytes)
                 .response_status(client_response.status())
                 .response_body(response_body_for_logger)
-                .provider(*target_provider)
+                .provider(target_provider.clone())
                 .tfft_rx(tfft_rx)
                 .mapper_ctx(mapper_ctx)
                 .build();
@@ -404,7 +408,7 @@ impl Dispatcher {
                 endpoint_metrics.incr_remote_internal_error_count();
             }
         } else if client_response.status() == StatusCode::TOO_MANY_REQUESTS {
-            if let Some(api_endpoint) = api_endpoint {
+            if let Some(ref api_endpoint) = api_endpoint {
                 let retry_after =
                     extract_retry_after(client_response.headers());
                 tracing::info!(
@@ -416,7 +420,10 @@ impl Dispatcher {
 
                 if let Some(rate_limit_tx) = &self.rate_limit_tx {
                     if let Err(e) = rate_limit_tx
-                        .send(RateLimitEvent::new(api_endpoint, retry_after))
+                        .send(RateLimitEvent::new(
+                            api_endpoint.clone(),
+                            retry_after,
+                        ))
                         .await
                     {
                         tracing::error!(error = %e, "failed to send rate limit event");
@@ -707,7 +714,7 @@ async fn dispatch_stream_with_retry(
                     Dispatcher::dispatch_stream(
                         &request_builder,
                         req_body_bytes.clone(),
-                        api_endpoint,
+                        api_endpoint.clone(),
                         metrics_registry.clone(),
                     )
                     .await
@@ -739,7 +746,7 @@ async fn dispatch_stream_with_retry(
                     Dispatcher::dispatch_stream(
                         &request_builder,
                         req_body_bytes.clone(),
-                        api_endpoint,
+                        api_endpoint.clone(),
                         metrics_registry.clone(),
                     )
                     .await

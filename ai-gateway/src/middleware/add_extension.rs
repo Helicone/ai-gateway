@@ -19,7 +19,7 @@ impl<S> Layer<S> for AddExtensionsLayer {
     fn layer(&self, inner: S) -> Self::Service {
         AddExtensions {
             inner,
-            inference_provider: self.inference_provider,
+            inference_provider: self.inference_provider.clone(),
             router_id: self.router_id.clone(),
         }
     }
@@ -50,7 +50,7 @@ where
 
     fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
         let extensions = req.extensions_mut();
-        extensions.insert(self.inference_provider);
+        extensions.insert(self.inference_provider.clone());
         if let Some(router_id) = self.router_id.clone() {
             extensions.insert(router_id);
         }

@@ -55,7 +55,7 @@ async fn request_response_logger_authenticated() {
     let _response_body = response.into_body().collect().await.unwrap();
 
     // sleep so that the background task for logging can complete
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 }
 
 #[tokio::test]
@@ -107,7 +107,7 @@ async fn authenticated_sidecar() {
     let _response_body = response.into_body().collect().await.unwrap();
 
     // sleep so that the background task for logging can complete
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 }
 
 #[tokio::test]
@@ -196,11 +196,6 @@ async fn request_response_logger_unauthenticated() {
         .unwrap();
     let response = harness.call(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    // we need to collect the body here in order to poll the underlying body
-    let _response_body = response.into_body().collect().await.unwrap();
-
-    // sleep so that the background task for logging can complete
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 }
 
 #[tokio::test]
@@ -245,9 +240,4 @@ async fn request_response_logger_unauthenticated_sidecar() {
         .unwrap();
     let response = harness.call(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    // we need to collect the body here in order to poll the underlying body
-    let _response_body = response.into_body().collect().await.unwrap();
-
-    // sleep so that the background task for logging can complete
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 }

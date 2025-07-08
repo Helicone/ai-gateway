@@ -79,7 +79,7 @@ impl super::AiRequest for OpenAICompatibleChatCompletionRequest {
         crate::error::mapper::MapperError,
     > {
         crate::types::model_id::ModelId::from_str_and_provider(
-            self.provider,
+            self.provider.clone(),
             &self.inner.model,
         )
     }

@@ -1,11 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use rustc_hash::FxHashMap as HashMap;
-use strum::IntoEnumIterator;
 
 use crate::{
-    endpoints::ApiEndpoint, error::internal::InternalError,
-    metrics::RollingCounter, types::provider::InferenceProvider,
+    config::Config, endpoints::ApiEndpoint, error::internal::InternalError,
+    metrics::RollingCounter,
 };
 
 /// We use this to track metrics for monitoring provider health.
@@ -27,12 +26,20 @@ impl EndpointMetricsRegistry {
             .get(&api_endpoint)
             .ok_or(InternalError::MetricsNotConfigured(api_endpoint))
     }
-}
 
-impl Default for EndpointMetricsRegistry {
-    fn default() -> Self {
+    pub fn new(config: &Config) -> Self {
         let mut endpoint_health_metrics = HashMap::default();
-        for provider in InferenceProvider::iter() {
+        tracing::info!(
+            "Initializing endpoint metrics for providers: {:?}",
+            config.providers.keys()
+        );
+        for provider in config.providers.keys() {
+            tracing::info!(
+                "Initializing endpoint metrics for provider: {:?} and \
+                 endpoints: {:?}",
+                provider,
+                provider.endpoints()
+            );
             for endpoint in provider.endpoints() {
                 endpoint_health_metrics
                     .insert(endpoint, EndpointMetrics::default());

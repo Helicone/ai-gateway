@@ -153,7 +153,7 @@ impl Mock {
         .await;
         config
             .providers
-            .get_mut(&InferenceProvider::Mistral)
+            .get_mut(&InferenceProvider::Named("mistral".into()))
             .unwrap()
             .base_url = Url::parse(&mistral_mock.uri()).unwrap();
 

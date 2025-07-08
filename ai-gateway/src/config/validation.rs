@@ -53,7 +53,7 @@ impl Config {
                     return Err(
                         ModelMappingValidationError::ProviderNotConfigured {
                             router: router_id.clone(),
-                            provider: *provider,
+                            provider: provider.clone(),
                         },
                     );
                 }
@@ -75,7 +75,7 @@ impl Config {
                 {
                     self.can_map_model(
                         source_model,
-                        *target_provider,
+                        target_provider.clone(),
                         &target_provider_config.models,
                         router_id,
                         router_config,

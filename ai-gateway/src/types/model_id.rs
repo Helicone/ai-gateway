@@ -186,10 +186,10 @@ impl ModelId {
                     id: model_with_version,
                 })
             }
-            InferenceProvider::Mistral => {
+            InferenceProvider::Named(name) => {
                 let model_with_version = ModelIdWithVersion::from_str(s)?;
                 Ok(ModelId::ModelIdWithVersion {
-                    provider: InferenceProvider::Mistral,
+                    provider: InferenceProvider::Named(name),
                     id: model_with_version,
                 })
             }
@@ -199,7 +199,9 @@ impl ModelId {
     #[must_use]
     pub fn inference_provider(&self) -> Option<InferenceProvider> {
         match self {
-            ModelId::ModelIdWithVersion { provider, .. } => Some(*provider),
+            ModelId::ModelIdWithVersion { provider, .. } => {
+                Some(provider.clone())
+            }
             ModelId::Bedrock(_) => Some(InferenceProvider::Bedrock),
             ModelId::Ollama(_) => Some(InferenceProvider::Ollama),
             ModelId::Unknown(_) => None,
@@ -1708,17 +1710,6 @@ mod tests {
             assert_eq!(msg, "Model name cannot be empty after provider");
         } else {
             panic!("Expected InvalidModelName error");
-        }
-    }
-
-    #[test]
-    fn test_from_str_invalid_provider() {
-        let result = ModelId::from_str("unknown-provider/gpt-4");
-        assert!(result.is_err());
-        if let Err(MapperError::ProviderNotSupported(provider)) = result {
-            assert_eq!(provider, "unknown-provider");
-        } else {
-            panic!("Expected ProviderNotSupported error for unknown provider");
         }
     }
 

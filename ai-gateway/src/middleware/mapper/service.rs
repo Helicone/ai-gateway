@@ -72,7 +72,7 @@ where
             let target_provider = req
                 .extensions()
                 .get::<InferenceProvider>()
-                .copied()
+                .cloned()
                 .ok_or_else(|| {
                     ApiError::Internal(InternalError::ExtensionNotFound(
                         "InferenceProvider",
@@ -85,22 +85,24 @@ where
                     "PathAndQuery",
                 )))?;
             let source_endpoint =
-                req.extensions().get::<ApiEndpoint>().copied();
+                req.extensions().get::<ApiEndpoint>().cloned();
             let source_endpoint = source_endpoint.ok_or(ApiError::Internal(
                 InternalError::ExtensionNotFound("ApiEndpoint"),
             ))?;
-            let source_endpoint_cloned = source_endpoint;
+            let source_endpoint_cloned = source_endpoint.clone();
             let target_endpoint =
                 ApiEndpoint::mapped(source_endpoint, &target_provider)?;
-            let target_endpoint_cloned = target_endpoint;
+            let target_endpoint_cloned = target_endpoint.clone();
             // serialization/deserialization should be done on a dedicated
             // thread
             let converter_registry_cloned = converter_registry.clone();
+            let source_endpoint_for_req = source_endpoint_cloned.clone();
+            let target_endpoint_for_req = target_endpoint_cloned.clone();
             let req = tokio::task::spawn_blocking(move || async move {
                 map_request(
                     converter_registry_cloned,
-                    source_endpoint_cloned,
-                    target_endpoint_cloned,
+                    source_endpoint_for_req,
+                    target_endpoint_for_req,
                     &extracted_path_and_query,
                     req,
                 )
@@ -114,8 +116,8 @@ where
             let response = tokio::task::spawn_blocking(move || async move {
                 map_response(
                     converter_registry,
-                    target_endpoint,
-                    source_endpoint,
+                    target_endpoint_cloned,
+                    source_endpoint_cloned,
                     response,
                 )
                 .await
@@ -146,7 +148,10 @@ async fn map_request(
     let converter = converter_registry
         .get_converter(&source_endpoint, &target_endpoint)
         .ok_or_else(|| {
-            InternalError::InvalidConverter(source_endpoint, target_endpoint)
+            InternalError::InvalidConverter(
+                source_endpoint.clone(),
+                target_endpoint.clone(),
+            )
         })?;
 
     let (body, mapper_ctx) = converter.convert_req_body(body)?;
@@ -198,7 +203,10 @@ async fn map_response(
     let converter = converter_registry
         .get_converter(&target_endpoint, &source_endpoint)
         .ok_or_else(|| {
-            InternalError::InvalidConverter(target_endpoint, source_endpoint)
+            InternalError::InvalidConverter(
+                target_endpoint.clone(),
+                source_endpoint.clone(),
+            )
         })?;
 
     if is_stream {
@@ -217,18 +225,20 @@ async fn map_response(
             .try_filter_map({
                 let captured_registry = converter_registry.clone();
                 let resp_parts = parts.clone();
+                let target_endpoint_cloned = target_endpoint.clone();
+                let source_endpoint_cloned = source_endpoint.clone();
                 move |bytes| {
                     let registry_for_future = captured_registry.clone();
                     let resp_parts = resp_parts.clone();
-                    let target_endpoint = target_endpoint;
-                    let source_endpoint = source_endpoint;
+                    let target_endpoint = target_endpoint_cloned.clone();
+                    let source_endpoint = source_endpoint_cloned.clone();
                     async move {
                         let converter = registry_for_future
                             .get_converter(&target_endpoint, &source_endpoint)
                             .ok_or_else(|| {
                                 InternalError::InvalidConverter(
-                                    target_endpoint,
-                                    source_endpoint,
+                                    target_endpoint.clone(),
+                                    source_endpoint.clone(),
                                 )
                             })?;
 

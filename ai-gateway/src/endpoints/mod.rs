@@ -62,7 +62,7 @@ pub trait AiRequest {
     fn model(&self) -> Result<ModelId, MapperError>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ApiEndpoint {
     OpenAI(OpenAI),
     Anthropic(Anthropic),
@@ -102,15 +102,15 @@ impl ApiEndpoint {
             (Self::OpenAI(source), InferenceProvider::Bedrock) => {
                 Ok(Self::Bedrock(Bedrock::from(source)))
             }
-            (Self::OpenAI(source), InferenceProvider::Mistral) => {
+            (Self::OpenAI(source), InferenceProvider::Named(name)) => {
                 Ok(Self::OpenAICompatible {
-                    provider: InferenceProvider::Mistral,
+                    provider: InferenceProvider::Named(name.clone()),
                     openai_endpoint: source,
                 })
             }
-            _ => {
-                Err(InvalidRequestError::UnsupportedProvider(*target_provider))
-            }
+            _ => Err(InvalidRequestError::UnsupportedProvider(
+                target_provider.clone(),
+            )),
         }
     }
 
@@ -122,7 +122,7 @@ impl ApiEndpoint {
             Self::Google(_) => InferenceProvider::GoogleGemini,
             Self::Ollama(_) => InferenceProvider::Ollama,
             Self::Bedrock(_) => InferenceProvider::Bedrock,
-            Self::OpenAICompatible { provider, .. } => *provider,
+            Self::OpenAICompatible { provider, .. } => provider.clone(),
         }
     }
 
