@@ -8,7 +8,8 @@ These are instructions on how to conduct a release of the Helicone ai-gateway
 3) Generate the `CHANGELOG.md` updates:
 
 ```sh
-git cliff --unreleased --tag <version_tag> --prepend CHANGELOG.md
+git fetch --tags
+git cliff --unreleased --prepend CHANGELOG.md
 git add CHANGELOG.md Cargo.*
 ```
 

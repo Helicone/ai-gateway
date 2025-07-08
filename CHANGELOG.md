@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-beta.27] - 2025-07-08
+
+### 🚀 Features
+
+- Configurable retries (#208)
+
 ## [0.2.0-beta.26] - 2025-07-08
 
 ### 🚀 Features
