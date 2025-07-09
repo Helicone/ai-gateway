@@ -445,7 +445,8 @@ __prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        // features field should take precedence over auth/observability/__prompts
+        // features field should take precedence over
+        // auth/observability/__prompts
         assert_eq!(config.features, HeliconeFeatures::Auth);
     }
 
