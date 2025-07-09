@@ -1,5 +1,5 @@
 routers:
-  default:
+  my-router:
     load-balance:
       chat:
         strategy: latency

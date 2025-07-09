@@ -11,6 +11,7 @@ use ai_gateway::{
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::{provider::InferenceProvider, router::RouterId},
 };
+use compact_str::CompactString;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use nonempty_collections::nes;
@@ -40,7 +41,7 @@ async fn weighted_balancer_anthropic_preferred() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -90,7 +91,7 @@ async fn weighted_balancer_anthropic_preferred() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();
@@ -126,7 +127,7 @@ async fn weighted_balancer_openai_preferred() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -176,7 +177,7 @@ async fn weighted_balancer_openai_preferred() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();
@@ -212,7 +213,7 @@ async fn weighted_balancer_anthropic_heavily_preferred() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -268,7 +269,7 @@ async fn weighted_balancer_anthropic_heavily_preferred() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();
@@ -312,7 +313,7 @@ async fn weighted_balancer_equal_four_providers() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -365,7 +366,7 @@ async fn weighted_balancer_equal_four_providers() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();
@@ -409,7 +410,7 @@ async fn weighted_balancer_bedrock() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -462,7 +463,7 @@ async fn weighted_balancer_bedrock() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();

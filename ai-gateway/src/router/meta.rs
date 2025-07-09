@@ -359,13 +359,8 @@ fn extract_router_id_and_path<'a>(
             })?
             .as_str();
 
-        // Treat the special literal "default" (case-insensitive) as the default
-        // router. Anything else is considered a named router.
-        let router_id = if id_str.eq_ignore_ascii_case("default") {
-            RouterId::Default
-        } else {
-            RouterId::Named(CompactString::from(id_str))
-        };
+        // All router IDs are treated as named routers
+        let router_id = RouterId::Named(CompactString::from(id_str));
 
         // Determine the API sub-path
         let api_path = captures
@@ -488,16 +483,19 @@ mod tests {
         let url_regex = Regex::new(ROUTER_URL_REGEX).unwrap();
 
         // --- Default router id ---
-        let path_default = "/router/default";
+        let path_default = "/router/my-router";
         let expected_api_path_default = "";
         assert_eq!(
             extract_router_id_and_path(&url_regex, path_default).unwrap(),
-            (RouterId::Default, expected_api_path_default)
+            (
+                RouterId::Named(CompactString::from("my-router")),
+                expected_api_path_default
+            )
         );
 
         // Default router id with API path and query params
         let path_default_with_path_query =
-            "/router/default/chat/completions?user=test";
+            "/router/my-router/chat/completions?user=test";
         let expected_api_path_default_with_path_query = "/chat/completions";
         assert_eq!(
             extract_router_id_and_path(
@@ -505,7 +503,10 @@ mod tests {
                 path_default_with_path_query
             )
             .unwrap(),
-            (RouterId::Default, expected_api_path_default_with_path_query)
+            (
+                RouterId::Named(CompactString::from("my-router")),
+                expected_api_path_default_with_path_query
+            )
         );
 
         // --- Named router id ---

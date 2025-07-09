@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use compact_str::CompactString;
 use derive_more::{AsMut, AsRef};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -16,22 +17,15 @@ use crate::{
     types::router::RouterId,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, AsRef, AsMut)]
+#[derive(
+    Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq, AsRef, AsMut,
+)]
 pub struct RouterConfigs(HashMap<RouterId, RouterConfig>);
 
 impl RouterConfigs {
     #[must_use]
     pub fn new(configs: HashMap<RouterId, RouterConfig>) -> Self {
         Self(configs)
-    }
-}
-
-impl Default for RouterConfigs {
-    fn default() -> Self {
-        Self(HashMap::from([(
-            RouterId::Default,
-            RouterConfig::default(),
-        )]))
     }
 }
 
@@ -111,7 +105,7 @@ impl RouterRateLimitConfig {
 impl crate::tests::TestDefault for RouterConfigs {
     fn test_default() -> Self {
         Self(HashMap::from([(
-            RouterId::Default,
+            RouterId::Named(CompactString::new("my-router")),
             RouterConfig {
                 model_mappings: None,
                 cache: None,

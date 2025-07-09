@@ -43,7 +43,7 @@ fn make_request(
 /// Test that requests are cached when enabled globally via config.
 /// This should check that requests on any of the three possible URLs
 /// (`/ai/chat/completions`, `/openai/v1/chat/completions`,
-/// `/router/default/chat/completions`) are cached. Start with the default
+/// `/router/my-router/chat/completions`) are cached. Start with the default
 /// router and then expand the test cases.
 ///
 /// In order to assert that the request is cached, we need to make sure that
@@ -73,7 +73,7 @@ async fn cache_enabled_globally() {
 
     // First request - should be a cache miss
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();
@@ -87,7 +87,7 @@ async fn cache_enabled_globally() {
 
     // Second request - should be a cache hit
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();
@@ -162,7 +162,7 @@ async fn cache_enabled_globally() {
 /// Test that requests are not cached when disabled globally via config.
 /// This should check that requests on any of the three possible URLs
 /// (`/ai/chat/completions`, `/openai/v1/chat/completions`,
-/// `/router/default/chat/completions`) are NOT cached. Start with the
+/// `/router/my-router/chat/completions`) are NOT cached. Start with the
 /// default router and then expand the test cases.
 ///
 /// In order to assert that the request is not cached, we need to
@@ -194,7 +194,7 @@ async fn cache_disabled_globally() {
     // Test default router endpoint
     // First request - should not have cache header
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();
@@ -206,7 +206,7 @@ async fn cache_disabled_globally() {
 
     // Second request - should still not have cache header
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();
@@ -273,7 +273,7 @@ async fn cache_disabled_globally() {
 /// Test that requests are cached when enabled per router via config.
 /// This should check that requests on any of the three possible URLs
 /// (`/ai/chat/completions`, `/openai/v1/chat/completions`,
-/// `/router/default/chat/completions`) are cached. Start with the default
+/// `/router/my-router/chat/completions`) are cached. Start with the default
 /// router and then expand the test cases.
 ///
 /// In order to assert that the request is cached, we need to
@@ -329,7 +329,7 @@ async fn cache_enabled_per_router() {
             },
         ),
         (
-            RouterId::Default,
+            RouterId::Named(CompactString::new("my-router")),
             RouterConfig {
                 cache: None, // Default router also has no cache
                 load_balance:
@@ -408,7 +408,7 @@ async fn cache_enabled_per_router() {
 
     // Test 3: Default router (no cache)
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();
@@ -420,7 +420,7 @@ async fn cache_enabled_per_router() {
     );
 
     let request = make_request(
-        "http://router.helicone.com/router/default/chat/completions",
+        "http://router.helicone.com/router/my-router/chat/completions",
         Some(("cache-control", "max-age=3600")),
     );
     let response = harness.call(request).await.unwrap();

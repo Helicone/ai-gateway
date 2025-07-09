@@ -91,7 +91,7 @@ impl crate::tests::TestDefault for Config {
                 key_hash: key_hash.clone(),
                 owner_id: user_id.to_string(),
             }],
-            router_id: "default".to_string(),
+            router_id: "my-router".to_string(),
             router_config: "{}".to_string(),
         }
     }

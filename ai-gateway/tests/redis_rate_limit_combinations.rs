@@ -60,7 +60,7 @@ async fn make_chat_request(
     let request = Request::builder()
         .method(Method::POST)
         .header("authorization", auth_header)
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
 
@@ -94,10 +94,6 @@ async fn make_chat_request_for_router(
     let uri = match router_id {
         RouterId::Named(name) => {
             format!("http://router.helicone.com/router/{name}/chat/completions")
-        }
-        RouterId::Default => {
-            "http://router.helicone.com/router/default/chat/completions"
-                .to_string()
         }
     };
 
@@ -136,7 +132,7 @@ async fn test_global_rate_limit_with_router_none() {
 
     // Router doesn't override rate limiting
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         create_router_config(RouterRateLimitConfig::None),
     )]));
 
@@ -211,7 +207,7 @@ async fn test_router_specific_with_custom_limits() {
 
     // Router provides its own custom rate limits
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             rate_limit: RouterRateLimitConfig::Custom {
                 store: Some(RateLimitStore::Redis(RedisConfig {
@@ -286,7 +282,7 @@ async fn test_global_with_custom_router_override() {
 
     // Router overrides with stricter custom limits
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             rate_limit: RouterRateLimitConfig::Custom {
                 store: Some(RateLimitStore::Redis(RedisConfig {
@@ -400,7 +396,7 @@ async fn test_router_independence_different_rate_limits() {
             },
         ),
         (
-            RouterId::Default,
+            RouterId::Named(CompactString::new("my-router")),
             RouterConfig {
                 rate_limit: RouterRateLimitConfig::None, // No rate limiting
                 load_balance:
@@ -504,10 +500,6 @@ async fn make_chat_request_to_router(
         RouterId::Named(name) => {
             format!("http://router.helicone.com/router/{name}/chat/completions")
         }
-        RouterId::Default => {
-            "http://router.helicone.com/router/default/chat/completions"
-                .to_string()
-        }
     };
 
     let request = Request::builder()
@@ -552,7 +544,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
     });
     let router_a_id = RouterId::Named(CompactString::from("router-a"));
     let router_b_id = RouterId::Named(CompactString::from("router-b"));
-    let router_c_id = RouterId::Default;
+    let router_c_id = RouterId::Named(CompactString::new("my-router"));
 
     // Create multiple routers with different rate limit configurations
     config.routers = RouterConfigs::new(HashMap::from([

@@ -308,6 +308,8 @@ where
 mod tests {
     use std::{num::NonZeroU32, time::Duration};
 
+    use compact_str::CompactString;
+
     use super::*;
     use crate::{
         app_state::AppState,
@@ -358,9 +360,12 @@ mod tests {
         .await;
         let router_config = create_router_config(RouterRateLimitConfig::None);
 
-        let result =
-            Layer::per_router(&app_state, RouterId::Default, &router_config)
-                .await;
+        let result = Layer::per_router(
+            &app_state,
+            RouterId::Named(CompactString::new("my-router")),
+            &router_config,
+        )
+        .await;
         assert!(result.is_ok());
         assert!(matches!(result.unwrap().inner, InnerLayer::None));
     }
@@ -378,9 +383,12 @@ mod tests {
                 limits: create_test_limits(),
             });
 
-        let result =
-            Layer::per_router(&app_state, RouterId::Default, &router_config)
-                .await;
+        let result = Layer::per_router(
+            &app_state,
+            RouterId::Named(CompactString::new("my-router")),
+            &router_config,
+        )
+        .await;
         assert!(result.is_ok());
         assert!(matches!(result.unwrap().inner, InnerLayer::InMemory(_)));
     }
@@ -398,9 +406,12 @@ mod tests {
                 limits: create_test_limits(),
             });
 
-        let result =
-            Layer::per_router(&app_state, RouterId::Default, &router_config)
-                .await;
+        let result = Layer::per_router(
+            &app_state,
+            RouterId::Named(CompactString::new("my-router")),
+            &router_config,
+        )
+        .await;
         assert!(result.is_ok());
         assert!(matches!(result.unwrap().inner, InnerLayer::InMemory(_)));
     }

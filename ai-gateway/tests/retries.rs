@@ -11,6 +11,7 @@ use ai_gateway::{
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::router::RouterId,
 };
+use compact_str::CompactString;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::json;
@@ -79,7 +80,7 @@ async fn router() {
     // functionality
     config.helicone.features = HeliconeFeatures::All;
     let router_configs = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::openai_chat(),
             retries: Some(RetryConfig::test_default()),
@@ -120,7 +121,7 @@ async fn router() {
     let request = Request::builder()
         .method(Method::POST)
         // Route to the fake endpoint through the default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .header("content-type", "application/json")
         .header("authorization", "Bearer sk-helicone-test-key")
         .body(request_body)

@@ -45,7 +45,7 @@ async fn request_response_logger_authenticated() {
     let request = Request::builder()
         .method(Method::POST)
         .header("authorization", "Bearer sk-helicone-test-key")
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -97,7 +97,7 @@ async fn authenticated_sidecar() {
     let request = Request::builder()
         .method(Method::POST)
         .header("authorization", "Bearer sk-helicone-test-key")
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -148,7 +148,7 @@ async fn unauthenticated_sidecar() {
     let request = Request::builder()
         .method(Method::POST)
         .header("authorization", "Bearer sk-helicone-test-key")
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -191,7 +191,7 @@ async fn request_response_logger_unauthenticated() {
     let request = Request::builder()
         .method(Method::POST)
         // No authorization header when auth is not required
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -235,7 +235,7 @@ async fn request_response_logger_unauthenticated_sidecar() {
     let request = Request::builder()
         .method(Method::POST)
         // No authorization header when auth is not required
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();

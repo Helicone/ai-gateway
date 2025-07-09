@@ -11,6 +11,7 @@ use ai_gateway::{
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::{provider::InferenceProvider, router::RouterId},
 };
+use compact_str::CompactString;
 use http::{Method, Request, StatusCode};
 use nonempty_collections::nes;
 use serde_json::json;
@@ -18,7 +19,7 @@ use tower::Service;
 
 fn p2c_config_openai_anthropic_google() -> RouterConfigs {
     RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig(HashMap::from([(
                 EndpointType::Chat,
@@ -81,7 +82,7 @@ async fn openai_slow() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();
@@ -132,7 +133,7 @@ async fn anthropic_slow() {
         let request = Request::builder()
             .method(Method::POST)
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();

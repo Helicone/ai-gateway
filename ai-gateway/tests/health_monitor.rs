@@ -12,6 +12,7 @@ use ai_gateway::{
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::{provider::InferenceProvider, router::RouterId},
 };
+use compact_str::CompactString;
 use http::{Method, Request};
 use http_body_util::BodyExt;
 use nonempty_collections::nes;
@@ -45,7 +46,7 @@ async fn errors_remove_provider_from_lb_pool() {
         },
     )]));
     config.routers = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: balance_config,
             ..Default::default()
@@ -89,7 +90,7 @@ async fn errors_remove_provider_from_lb_pool() {
             .method(Method::POST)
             .header("authorization", "Bearer sk-helicone-test-key")
             // default router
-            .uri("http://router.helicone.com/router/default/chat/completions")
+            .uri("http://router.helicone.com/router/my-router/chat/completions")
             .body(request_body)
             .unwrap();
         let response = harness.call(request).await.unwrap();

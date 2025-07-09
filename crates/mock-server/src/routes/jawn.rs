@@ -99,7 +99,7 @@ fn mock_auth() -> ai_gateway::control_plane::types::Config {
             key_hash: key_hash,
             owner_id: user_id,
         }],
-        router_id: "default".to_string(),
+        router_id: "my-router".to_string(),
         router_config: "{}".to_string(),
     }
 }

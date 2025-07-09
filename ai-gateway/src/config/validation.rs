@@ -182,6 +182,8 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use compact_str::CompactString;
+
     use super::*;
 
     #[test]
@@ -212,7 +214,7 @@ mod tests {
             &source_model,
             InferenceProvider::OpenAI,
             &target_models,
-            &RouterId::Default,
+            &RouterId::Named(CompactString::new("my-router")),
             &router_config,
         );
 

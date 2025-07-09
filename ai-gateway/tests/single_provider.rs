@@ -10,6 +10,7 @@ use ai_gateway::{
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::router::RouterId,
 };
+use compact_str::CompactString;
 use http::{Method, Request, StatusCode};
 use serde_json::json;
 use tower::Service;
@@ -50,7 +51,7 @@ async fn openai() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -67,7 +68,7 @@ async fn google_with_openai_request_style() {
     // functionality
     config.helicone.features = HeliconeFeatures::None;
     let router_config = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::google_gemini(),
             ..Default::default()
@@ -98,7 +99,7 @@ async fn google_with_openai_request_style() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -116,7 +117,7 @@ async fn google_with_openai_request_style() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -133,7 +134,7 @@ async fn anthropic_with_openai_request_style() {
     // functionality
     config.helicone.features = HeliconeFeatures::None;
     let router_config = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::anthropic_chat(),
             ..Default::default()
@@ -168,7 +169,7 @@ async fn anthropic_with_openai_request_style() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -190,7 +191,7 @@ async fn anthropic_with_openai_request_style() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -207,7 +208,7 @@ async fn ollama() {
     // functionality
     config.helicone.features = HeliconeFeatures::None;
     let router_config = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::ollama_chat(),
             ..Default::default()
@@ -242,7 +243,7 @@ async fn ollama() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -257,7 +258,7 @@ async fn bedrock_with_openai_request_style() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::None;
     let router_config = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::bedrock(),
             ..Default::default()
@@ -291,7 +292,7 @@ async fn bedrock_with_openai_request_style() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
@@ -306,7 +307,7 @@ async fn mistral() {
     // functionality
     config.helicone.features = HeliconeFeatures::None;
     let router_config = RouterConfigs::new(HashMap::from([(
-        RouterId::Default,
+        RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
             load_balance: BalanceConfig::mistral(),
             ..Default::default()
@@ -340,7 +341,7 @@ async fn mistral() {
     let request = Request::builder()
         .method(Method::POST)
         // default router
-        .uri("http://router.helicone.com/router/default/chat/completions")
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();
     let response = harness.call(request).await.unwrap();
