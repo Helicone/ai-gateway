@@ -185,11 +185,22 @@ impl Service<Request> for Dispatcher {
 }
 
 impl Dispatcher {
-    #[allow(clippy::too_many_lines)]
-    async fn dispatch(
-        &self,
-        mut req: Request,
-    ) -> Result<http::Response<crate::types::body::Body>, ApiError> {
+    /// Extracts request context and extensions from the request
+    fn extract_request_context(
+        req: &mut Request,
+    ) -> Result<
+        (
+            MapperContext,
+            Arc<RequestContext>,
+            Option<ApiEndpoint>,
+            PathAndQuery,
+            InferenceProvider,
+            Option<RouterId>,
+            Instant,
+            DateTime<Utc>,
+        ),
+        ApiError,
+    > {
         let mapper_ctx = req
             .extensions_mut()
             .remove::<MapperContext>()
@@ -198,30 +209,7 @@ impl Dispatcher {
             .extensions_mut()
             .remove::<Arc<RequestContext>>()
             .ok_or(InternalError::ExtensionNotFound("RequestContext"))?;
-        let auth_ctx = req_ctx.auth_context.as_ref();
         let api_endpoint = req.extensions().get::<ApiEndpoint>().cloned();
-        let target_provider = &self.provider;
-        let config = self.app_state.config();
-        let provider_config =
-            config.providers.get(target_provider).ok_or_else(|| {
-                InternalError::ProviderNotConfigured(target_provider.clone())
-            })?;
-        let base_url = provider_config.base_url.clone();
-        {
-            let h = req.headers_mut();
-            h.remove(http::header::HOST);
-            h.remove(http::header::AUTHORIZATION);
-            h.remove(http::header::CONTENT_LENGTH);
-            h.remove(HeaderName::from_str("helicone-api-key").unwrap());
-            // TODO: properly support accept encoding
-            h.remove(http::header::ACCEPT_ENCODING);
-            h.insert(
-                http::header::ACCEPT_ENCODING,
-                HeaderValue::from_static("identity"),
-            );
-        }
-        let method = req.method().clone();
-        let headers = req.headers().clone();
         let extracted_path_and_query = req
             .extensions_mut()
             .remove::<PathAndQuery>()
@@ -255,9 +243,57 @@ impl Dispatcher {
                 Utc::now()
             });
 
-        let target_url = base_url
+        Ok((
+            mapper_ctx,
+            req_ctx,
+            api_endpoint,
+            extracted_path_and_query,
+            inference_provider,
+            router_id,
+            start_instant,
+            start_time,
+        ))
+    }
+
+    /// Builds the target URL from base URL and path
+    fn build_target_url(
+        &self,
+        extracted_path_and_query: &PathAndQuery,
+    ) -> Result<url::Url, ApiError> {
+        let config = self.app_state.config();
+        let provider_config =
+            config.providers.get(&self.provider).ok_or_else(|| {
+                InternalError::ProviderNotConfigured(self.provider.clone())
+            })?;
+        let base_url = provider_config.base_url.clone();
+
+        Ok(base_url
             .join(extracted_path_and_query.as_str())
-            .expect("PathAndQuery joined with valid url will always succeed");
+            .expect("PathAndQuery joined with valid url will always succeed"))
+    }
+
+    /// Transforms the request by cleaning headers and collecting body
+    async fn transform_request(
+        &self,
+        req: Request,
+    ) -> Result<(http::Method, HeaderMap, Bytes), ApiError> {
+        let mut req = req;
+        {
+            let h = req.headers_mut();
+            h.remove(http::header::HOST);
+            h.remove(http::header::AUTHORIZATION);
+            h.remove(http::header::CONTENT_LENGTH);
+            h.remove(HeaderName::from_str("helicone-api-key").unwrap());
+            // TODO: properly support accept encoding
+            h.remove(http::header::ACCEPT_ENCODING);
+            h.insert(
+                http::header::ACCEPT_ENCODING,
+                HeaderValue::from_static("identity"),
+            );
+        }
+        let method = req.method().clone();
+        let headers = req.headers().clone();
+
         // TODO: could change request type of dispatcher to
         // http::Request<reqwest::Body>
         // to avoid collecting the body twice
@@ -268,6 +304,189 @@ impl Dispatcher {
             .map_err(|e| InternalError::RequestBodyError(Box::new(e)))?
             .to_bytes();
 
+        Ok((method, headers, req_body_bytes))
+    }
+
+    /// Processes the response by setting headers and extensions
+    fn process_response(
+        &self,
+        mut client_response: http::Response<crate::types::body::Body>,
+        inference_provider: InferenceProvider,
+        router_id: Option<RouterId>,
+        auth_ctx: Option<&crate::types::extensions::AuthContext>,
+        mapper_ctx: &MapperContext,
+        api_endpoint: Option<ApiEndpoint>,
+        extracted_path_and_query: PathAndQuery,
+    ) -> http::Response<crate::types::body::Body> {
+        let provider_request_id = {
+            let headers = client_response.headers_mut();
+            headers.remove(http::header::CONTENT_LENGTH);
+            headers.remove("x-request-id")
+        };
+        tracing::debug!(provider_req_id = ?provider_request_id, status = %client_response.status(), "received response");
+        let extensions_copier = ExtensionsCopier::builder()
+            .inference_provider(inference_provider)
+            .router_id(router_id)
+            .auth_context(auth_ctx.cloned())
+            .provider_request_id(provider_request_id)
+            .mapper_ctx(mapper_ctx.clone())
+            .build();
+        extensions_copier.copy_extensions(client_response.extensions_mut());
+        client_response.extensions_mut().insert(mapper_ctx.clone());
+        if let Some(api_endpoint) = api_endpoint {
+            client_response.extensions_mut().insert(api_endpoint);
+        }
+        client_response
+            .extensions_mut()
+            .insert(extracted_path_and_query);
+
+        client_response
+    }
+
+    /// Handles logging logic for both observability and metrics
+    fn handle_logging(
+        &self,
+        req_ctx: &RequestContext,
+        start_time: DateTime<Utc>,
+        start_instant: Instant,
+        target_url: url::Url,
+        headers: HeaderMap,
+        req_body_bytes: Bytes,
+        client_response: &http::Response<crate::types::body::Body>,
+        response_body_for_logger: BodyReader,
+        tfft_rx: oneshot::Receiver<()>,
+        mapper_ctx: &MapperContext,
+    ) {
+        if self.app_state.config().helicone.is_observability_enabled() {
+            if let Some(auth_ctx) = req_ctx.auth_context.clone() {
+                let response_logger = LoggerService::builder()
+                    .app_state(self.app_state.clone())
+                    .auth_ctx(auth_ctx)
+                    .start_time(start_time)
+                    .start_instant(start_instant)
+                    .target_url(target_url)
+                    .request_headers(headers)
+                    .request_body(req_body_bytes)
+                    .response_status(client_response.status())
+                    .response_body(response_body_for_logger)
+                    .provider(self.provider.clone())
+                    .tfft_rx(tfft_rx)
+                    .mapper_ctx(mapper_ctx.clone())
+                    .build();
+
+                let app_state = self.app_state.clone();
+                tokio::spawn(
+                    async move {
+                        if let Err(e) = response_logger.log().await {
+                            let error_str = e.as_ref().to_string();
+                            app_state
+                                .0
+                                .metrics
+                                .error_count
+                                .add(1, &[KeyValue::new("type", error_str)]);
+                        }
+                    }
+                    .instrument(tracing::Span::current()),
+                );
+            }
+        } else {
+            let app_state = self.app_state.clone();
+            let model = mapper_ctx.model.as_ref().map_or_else(
+                || "unknown".to_string(),
+                std::string::ToString::to_string,
+            );
+            let path = target_url.path().to_string();
+            let provider_string = self.provider.to_string();
+            tokio::spawn(
+                async move {
+                    let tfft_future = TFFTFuture::new(start_instant, tfft_rx);
+                    let collect_future = response_body_for_logger.collect();
+                    let (_response_body, tfft_duration) = tokio::join!(collect_future, tfft_future);
+                    if let Ok(tfft_duration) = tfft_duration {
+                        tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
+                        let attributes = [
+                            KeyValue::new("provider", provider_string),
+                            KeyValue::new("model", model),
+                            KeyValue::new("path", path),
+                        ];
+                        #[allow(clippy::cast_precision_loss)]
+                        app_state.0.metrics.tfft_duration.record(tfft_duration.as_millis() as f64, &attributes);
+                    } else { tracing::error!("Failed to get TFFT signal") }
+                }
+                .instrument(tracing::Span::current()),
+            );
+        }
+    }
+
+    /// Handles error responses and rate limiting
+    async fn handle_error_and_rate_limiting(
+        &self,
+        response_status: StatusCode,
+        response_headers: &HeaderMap,
+        api_endpoint: Option<ApiEndpoint>,
+    ) -> Result<(), ApiError> {
+        if response_status.is_server_error() {
+            if let Some(api_endpoint) = api_endpoint {
+                let endpoint_metrics = self
+                    .app_state
+                    .0
+                    .endpoint_metrics
+                    .health_metrics(api_endpoint)?;
+                endpoint_metrics.incr_remote_internal_error_count();
+            }
+        } else if response_status == StatusCode::TOO_MANY_REQUESTS {
+            if let Some(ref api_endpoint) = api_endpoint {
+                let retry_after = extract_retry_after(response_headers);
+                tracing::info!(
+                    provider = ?self.provider,
+                    api_endpoint = ?api_endpoint,
+                    retry_after = ?retry_after,
+                    "Provider rate limited, signaling monitor"
+                );
+
+                if let Some(rate_limit_tx) = &self.rate_limit_tx {
+                    if let Err(e) = rate_limit_tx
+                        .send(RateLimitEvent::new(
+                            api_endpoint.clone(),
+                            retry_after,
+                        ))
+                        .await
+                    {
+                        tracing::error!(error = %e, "failed to send rate limit event");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Main dispatch function that orchestrates the request processing
+    async fn dispatch(
+        &self,
+        mut req: Request,
+    ) -> Result<http::Response<crate::types::body::Body>, ApiError> {
+        // Extract request context and extensions
+        let (
+            mapper_ctx,
+            req_ctx,
+            api_endpoint,
+            extracted_path_and_query,
+            inference_provider,
+            router_id,
+            start_instant,
+            start_time,
+        ) = Self::extract_request_context(&mut req)?;
+
+        let auth_ctx = req_ctx.auth_context.as_ref();
+
+        // Build target URL
+        let target_url = self.build_target_url(&extracted_path_and_query)?;
+
+        // Transform request
+        let (method, headers, req_body_bytes) =
+            self.transform_request(req).await?;
+
+        // Build request builder with correct target URL
         let request_builder = self
             .client
             .as_ref()
@@ -278,6 +497,7 @@ impl Dispatcher {
             .client
             .extract_and_sign_aws_headers(request_builder, &req_body_bytes)?;
 
+        // Update metrics
         let metrics_for_stream = self.app_state.0.endpoint_metrics.clone();
         if let Some(ref api_endpoint) = api_endpoint {
             let endpoint_metrics = self
@@ -288,7 +508,8 @@ impl Dispatcher {
             endpoint_metrics.incr_req_count();
         }
 
-        let (mut client_response, response_body_for_logger, tfft_rx): (
+        // Dispatch request (stream or sync)
+        let (client_response, response_body_for_logger, tfft_rx): (
             http::Response<crate::types::body::Body>,
             crate::types::body::BodyReader,
             oneshot::Receiver<()>,
@@ -313,124 +534,41 @@ impl Dispatcher {
             .instrument(info_span!("dispatch_sync"))
             .await?
         };
-        let provider_request_id = {
-            let headers = client_response.headers_mut();
-            headers.remove(http::header::CONTENT_LENGTH);
-            headers.remove("x-request-id")
-        };
-        tracing::debug!(provider_req_id = ?provider_request_id, status = %client_response.status(), "received response");
-        let extensions_copier = ExtensionsCopier::builder()
-            .inference_provider(inference_provider)
-            .router_id(router_id)
-            .auth_context(auth_ctx.cloned())
-            .provider_request_id(provider_request_id)
-            .mapper_ctx(mapper_ctx.clone())
-            .build();
-        extensions_copier.copy_extensions(client_response.extensions_mut());
-        client_response.extensions_mut().insert(mapper_ctx.clone());
-        if let Some(api_endpoint) = api_endpoint.clone() {
-            client_response.extensions_mut().insert(api_endpoint);
-        }
-        client_response
-            .extensions_mut()
-            .insert(extracted_path_and_query);
 
-        if self.app_state.config().helicone.is_observability_enabled() {
-            let auth_ctx = req_ctx
-                .auth_context
-                .clone()
-                .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
+        // Handle error and rate limiting (do this before processing response to avoid borrowing issues)
+        let response_status = client_response.status();
+        let response_headers = client_response.headers().clone();
+        self.handle_error_and_rate_limiting(
+            response_status,
+            &response_headers,
+            api_endpoint.clone(),
+        )
+        .await?;
 
-            let response_logger = LoggerService::builder()
-                .app_state(self.app_state.clone())
-                .auth_ctx(auth_ctx)
-                .start_time(start_time)
-                .start_instant(start_instant)
-                .target_url(target_url)
-                .request_headers(headers)
-                .request_body(req_body_bytes)
-                .response_status(client_response.status())
-                .response_body(response_body_for_logger)
-                .provider(target_provider.clone())
-                .tfft_rx(tfft_rx)
-                .mapper_ctx(mapper_ctx)
-                .build();
+        // Process response
+        let client_response = self.process_response(
+            client_response,
+            inference_provider,
+            router_id,
+            auth_ctx,
+            &mapper_ctx,
+            api_endpoint.clone(),
+            extracted_path_and_query,
+        );
 
-            let app_state = self.app_state.clone();
-            tokio::spawn(
-                async move {
-                    if let Err(e) = response_logger.log().await {
-                        let error_str = e.as_ref().to_string();
-                        app_state
-                            .0
-                            .metrics
-                            .error_count
-                            .add(1, &[KeyValue::new("type", error_str)]);
-                    }
-                }
-                .instrument(tracing::Span::current()),
-            );
-        } else {
-            let app_state = self.app_state.clone();
-            let model = mapper_ctx.model.as_ref().map_or_else(
-                || "unknown".to_string(),
-                std::string::ToString::to_string,
-            );
-            let path = target_url.path().to_string();
-            let provider_string = target_provider.to_string();
-            tokio::spawn(
-                async move {
-                    let tfft_future = TFFTFuture::new(start_instant, tfft_rx);
-                    let collect_future = response_body_for_logger.collect();
-                    let (_response_body, tfft_duration) = tokio::join!(collect_future, tfft_future);
-                    if let Ok(tfft_duration) = tfft_duration {
-                        tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
-                        let attributes = [
-                            KeyValue::new("provider", provider_string),
-                            KeyValue::new("model", model),
-                            KeyValue::new("path", path),
-                        ];
-                        #[allow(clippy::cast_precision_loss)]
-                        app_state.0.metrics.tfft_duration.record(tfft_duration.as_millis() as f64, &attributes);
-                    } else { tracing::error!("Failed to get TFFT signal") }
-                }
-                .instrument(tracing::Span::current()),
-            );
-        }
-
-        if client_response.status().is_server_error() {
-            if let Some(api_endpoint) = api_endpoint {
-                let endpoint_metrics = self
-                    .app_state
-                    .0
-                    .endpoint_metrics
-                    .health_metrics(api_endpoint)?;
-                endpoint_metrics.incr_remote_internal_error_count();
-            }
-        } else if client_response.status() == StatusCode::TOO_MANY_REQUESTS {
-            if let Some(ref api_endpoint) = api_endpoint {
-                let retry_after =
-                    extract_retry_after(client_response.headers());
-                tracing::info!(
-                    provider = ?self.provider,
-                    api_endpoint = ?api_endpoint,
-                    retry_after = ?retry_after,
-                    "Provider rate limited, signaling monitor"
-                );
-
-                if let Some(rate_limit_tx) = &self.rate_limit_tx {
-                    if let Err(e) = rate_limit_tx
-                        .send(RateLimitEvent::new(
-                            api_endpoint.clone(),
-                            retry_after,
-                        ))
-                        .await
-                    {
-                        tracing::error!(error = %e, "failed to send rate limit event");
-                    }
-                }
-            }
-        }
+        // Handle logging
+        self.handle_logging(
+            &req_ctx,
+            start_time,
+            start_instant,
+            target_url,
+            headers,
+            req_body_bytes,
+            &client_response,
+            response_body_for_logger,
+            tfft_rx,
+            &mapper_ctx,
+        );
 
         Ok(client_response)
     }
