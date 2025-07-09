@@ -120,15 +120,10 @@ async fn build_prompt_request(
         serde_json::to_string_pretty(&request_json).unwrap_or_default()
     );
 
-    let prompt_ctx = match get_prompt_params(&request_json) {
-        Ok(ctx) => ctx,
-        Err(_) => {
-            let req = Request::from_parts(
-                parts,
-                axum_core::body::Body::from(body_bytes),
-            );
-            return Ok(req);
-        }
+    let Ok(prompt_ctx) = get_prompt_params(&request_json) else {
+        let req =
+            Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
+        return Ok(req);
     };
     // TODO: Insert to extensions later and process in RequestLog
 
