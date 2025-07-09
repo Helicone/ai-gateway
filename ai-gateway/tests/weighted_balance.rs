@@ -49,13 +49,17 @@ async fn weighted_balancer_anthropic_preferred() {
     // Determine dynamic expected ranges based on 100 total requests and a ±15%
     // tolerance
     let num_requests = 100;
-    let tolerance = num_requests as f64 * 0.15;
-    let expected_openai_midpt = num_requests as f64 * 0.25;
-    let expected_anthropic_midpt = num_requests as f64 * 0.75;
-    let openai_range = (expected_openai_midpt - tolerance).floor() as u64
+    let tolerance = f64::from(num_requests) * 0.15;
+    let expected_openai_midpt = f64::from(num_requests) * 0.25;
+    let expected_anthropic_midpt = f64::from(num_requests) * 0.75;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let openai_range = (expected_openai_midpt - tolerance).max(0.0).floor()
+        as u64
         ..(expected_openai_midpt + tolerance).ceil() as u64;
-    let anthropic_range = (expected_anthropic_midpt - tolerance).floor() as u64
-        ..(expected_anthropic_midpt + tolerance).ceil() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let anthropic_range =
+        (expected_anthropic_midpt - tolerance).max(0.0).floor() as u64
+            ..(expected_anthropic_midpt + tolerance).ceil() as u64;
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
             (
@@ -135,13 +139,17 @@ async fn weighted_balancer_openai_preferred() {
     // Determine dynamic expected ranges based on 100 total requests and a ±15%
     // tolerance
     let num_requests = 100;
-    let tolerance = num_requests as f64 * 0.15;
-    let expected_openai_midpt = num_requests as f64 * 0.75;
-    let expected_anthropic_midpt = num_requests as f64 * 0.25;
-    let openai_range = (expected_openai_midpt - tolerance).floor() as u64
+    let tolerance = f64::from(num_requests) * 0.15;
+    let expected_openai_midpt = f64::from(num_requests) * 0.75;
+    let expected_anthropic_midpt = f64::from(num_requests) * 0.25;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let openai_range = (expected_openai_midpt - tolerance).max(0.0).floor()
+        as u64
         ..(expected_openai_midpt + tolerance).ceil() as u64;
-    let anthropic_range = (expected_anthropic_midpt - tolerance).floor() as u64
-        ..(expected_anthropic_midpt + tolerance).ceil() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let anthropic_range =
+        (expected_anthropic_midpt - tolerance).max(0.0).floor() as u64
+            ..(expected_anthropic_midpt + tolerance).ceil() as u64;
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
             (
@@ -221,18 +229,22 @@ async fn weighted_balancer_anthropic_heavily_preferred() {
     // Determine dynamic expected ranges based on 100 total requests and a ±15%
     // tolerance
     let num_requests = 100;
-    let tolerance = num_requests as f64 * 0.20;
-    let expected_openai_midpt = num_requests as f64 * 0.05;
-    let expected_anthropic_midpt = num_requests as f64 * 0.95;
+    let tolerance = f64::from(num_requests) * 0.20;
+    let expected_openai_midpt = f64::from(num_requests) * 0.05;
+    let expected_anthropic_midpt = f64::from(num_requests) * 0.95;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let openai_range_lower =
         (expected_openai_midpt - tolerance).max(0.0).floor() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let openai_range_upper = (expected_openai_midpt + tolerance).ceil() as u64;
     let openai_range = openai_range_lower..openai_range_upper;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let anthropic_range_lower =
-        (expected_anthropic_midpt - tolerance).floor() as u64;
+        (expected_anthropic_midpt - tolerance).max(0.0).floor() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let anthropic_range_upper = ((expected_anthropic_midpt + tolerance).ceil()
         as u64)
-        .min(num_requests as u64);
+        .min(u64::try_from(num_requests).unwrap_or(u64::MAX));
     let anthropic_range = anthropic_range_lower..anthropic_range_upper;
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
@@ -319,10 +331,12 @@ async fn weighted_balancer_equal_four_providers() {
         },
     )]));
     let num_requests = 100;
-    let expected_midpt = num_requests as f64 * 0.25;
-    let range = num_requests as f64 * 0.15;
-    let lower = (expected_midpt - range).floor() as u64;
-    let upper = (expected_midpt + range).floor() as u64;
+    let expected_midpt = f64::from(num_requests) * 0.25;
+    let range = f64::from(num_requests) * 0.15;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let lower = (expected_midpt - range).max(0.0).floor() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let upper = (expected_midpt + range).ceil() as u64;
     let expected_range = lower..upper;
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
@@ -418,9 +432,11 @@ async fn weighted_balancer_bedrock() {
     // Determine dynamic expected ranges based on 100 total requests and a ±15%
     // tolerance
     let num_requests = 100;
-    let expected_midpt = num_requests as f64 * 0.25;
-    let tolerance = num_requests as f64 * 0.15;
-    let lower = (expected_midpt - tolerance).floor() as u64;
+    let expected_midpt = f64::from(num_requests) * 0.25;
+    let tolerance = f64::from(num_requests) * 0.15;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let lower = (expected_midpt - tolerance).max(0.0).floor() as u64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let upper = (expected_midpt + tolerance).ceil() as u64;
     let expected_range = lower..upper;
     let mock_args = MockArgs::builder()
