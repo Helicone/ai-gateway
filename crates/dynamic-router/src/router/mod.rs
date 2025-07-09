@@ -258,7 +258,7 @@ where
         // it may be evicted from the ready set so that     // another
         // service can be selected.     if let Some(index) =
         // self.ready_index.take() {         match
-        // self.services.check_ready_index(cx, index) {             
+        // self.services.check_ready_index(cx, index) {
         // Ok(true) => {                 // The service remains ready.
         //                 self.ready_index = Some(index);
         //                 return Poll::Ready(Ok(()));
