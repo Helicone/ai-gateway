@@ -231,11 +231,8 @@ impl App {
                     );
                 })?;
 
-        let cache_manager = setup_cache(
-            &config,
-            metrics.clone(),
-            config.deployment_target.clone(),
-        )?;
+        let cache_manager =
+            setup_cache(&config, metrics.clone(), &config.deployment_target)?;
 
         let app_state = AppState(Arc::new(InnerAppState {
             config,
@@ -504,7 +501,7 @@ fn setup_redis_cache(
 fn setup_cache(
     config: &Config,
     metrics: Metrics,
-    deployment_target: DeploymentTarget,
+    deployment_target: &DeploymentTarget,
 ) -> std::result::Result<Option<CacheClient>, InitError> {
     match &config.cache_store {
         Some(CacheStore::InMemory { max_size }) => {

@@ -1,7 +1,8 @@
-use crate::{config::database::DatabaseConfig, error::init::InitError};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tracing::error;
 use uuid::Uuid;
+
+use crate::{config::database::DatabaseConfig, error::init::InitError};
 
 #[derive(Debug)]
 pub struct Database {
@@ -35,7 +36,8 @@ impl Database {
         &self,
     ) -> Result<Vec<DBRouterConfig>, InitError> {
         let res = sqlx::query_as::<_, DBRouterConfig>(
-            "SELECT DISTINCT ON (router_id) router_id, config FROM router_config_versions ORDER BY router_id, created_at DESC"
+            "SELECT DISTINCT ON (router_id) router_id, config FROM \
+             router_config_versions ORDER BY router_id, created_at DESC",
         )
         .fetch_all(&self.pool)
         .await
@@ -43,12 +45,6 @@ impl Database {
             error!(error = %e, "failed to get all routers");
             InitError::DatabaseConnection(e)
         })?;
-
-        tracing::info!("found {} routers", res.len());
-        for router in res.iter() {
-            tracing::info!("router: {}", router.router_id);
-            tracing::info!("config: {:?}", router.config);
-        }
         Ok(res)
     }
 }

@@ -22,10 +22,14 @@ pub struct DatabaseListener {
 
 #[derive(Debug, Deserialize, Serialize)]
 enum Op {
-    INSERT,
-    UPDATE,
-    DELETE,
-    TRUNCATE,
+    #[serde(rename = "INSERT")]
+    Insert,
+    #[serde(rename = "UPDATE")]
+    Update,
+    #[serde(rename = "DELETE")]
+    Delete,
+    #[serde(rename = "TRUNCATE")]
+    Truncate,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -38,11 +42,11 @@ enum ConnectedCloudGatewaysNotification {
         organization_id: String,
         version: String,
         op: Op,
-        config: RouterConfig,
+        config: Box<RouterConfig>,
     },
     #[serde(rename = "router_keys_updated")]
     RouterKeysUpdated {
-        router_id: String,
+        router_id: RouterId,
         organization_id: String,
         api_key_hash: String,
         op: Op,
