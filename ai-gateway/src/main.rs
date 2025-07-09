@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{future::Future, path::PathBuf, pin::Pin};
 
 use ai_gateway::{
     app::App,
@@ -14,7 +14,7 @@ use ai_gateway::{
     utils::meltdown::TaggedService,
 };
 use clap::Parser;
-use meltdown::Meltdown;
+use meltdown::{Meltdown, Service, Token};
 use opentelemetry_sdk::{
     logs::SdkLoggerProvider, metrics::SdkMeterProvider,
     trace::SdkTracerProvider,
@@ -99,15 +99,63 @@ fn init_telemetry(
     Ok((logger_provider, tracer_provider, metrics_provider))
 }
 
+struct FnService<F>(F);
+
+impl<F, Fut> Service for FnService<F>
+where
+    F: FnOnce(Token) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<(), RuntimeError>> + Send + 'static,
+{
+    type Future =
+        Pin<Box<dyn Future<Output = Result<(), RuntimeError>> + Send>>;
+
+    fn run(self, token: Token) -> Self::Future {
+        Box::pin((self.0)(token))
+    }
+}
+
+enum AllServices {
+    App(App),
+    HealthMonitor(HealthMonitor),
+    RateLimitMonitor(RateLimitMonitor),
+    RateLimitCleanup(rate_limit::cleanup::GarbageCollector),
+    SystemMetrics(SystemMetrics),
+    Shutdown(
+        FnService<
+            fn(
+                Token,
+            ) -> Pin<
+                Box<dyn Future<Output = Result<(), RuntimeError>> + Send>,
+            >,
+        >,
+    ),
+    ControlPlane(ControlPlaneClient),
+    DbListener(DatabaseListener),
+}
+
+impl Service for AllServices {
+    type Future =
+        Pin<Box<dyn Future<Output = Result<(), RuntimeError>> + Send>>;
+
+    fn run(self, token: Token) -> Self::Future {
+        match self {
+            Self::App(s) => Box::pin(s.run(token)),
+            Self::HealthMonitor(s) => Box::pin(s.run(token)),
+            Self::RateLimitMonitor(s) => Box::pin(s.run(token)),
+            Self::RateLimitCleanup(s) => Box::pin(s.run(token)),
+            Self::SystemMetrics(s) => Box::pin(s.run(token)),
+            Self::Shutdown(s) => s.run(token),
+            Self::ControlPlane(s) => Box::pin(s.run(token)),
+            Self::DbListener(s) => Box::pin(s.run(token)),
+        }
+    }
+}
+
 async fn run_app(config: Config) -> Result<(), RuntimeError> {
-    let mut shutting_down = false;
-    let helicone_config = config.helicone.clone();
     let app = App::new(config).await?;
     let config = app.state.config();
     let health_monitor = HealthMonitor::new(app.state.clone());
     let rate_limit_monitor = RateLimitMonitor::new(app.state.clone());
-    let control_plane_state = app.state.0.control_plane_state.clone();
-
     let rate_limiting_cleanup_service =
         config.global.rate_limit.as_ref().map(|rl| {
             rate_limit::cleanup::GarbageCollector::new(
@@ -116,6 +164,36 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
             )
         });
 
+    fn wait_for_shutdown_signals_service(
+        token: Token,
+    ) -> Pin<Box<dyn Future<Output = Result<(), RuntimeError>> + Send>> {
+        Box::pin(ai_gateway::utils::meltdown::wait_for_shutdown_signals(
+            token,
+        ))
+    }
+
+    let shutdown_service =
+        FnService(wait_for_shutdown_signals_service as fn(_) -> _);
+
+    let mut meltdown = Meltdown::new()
+        .register(TaggedService::new(
+            "shutdown-signals",
+            AllServices::Shutdown(shutdown_service),
+        ))
+        .register(TaggedService::new("gateway", AllServices::App(app.clone())))
+        .register(TaggedService::new(
+            "provider-health-monitor",
+            AllServices::HealthMonitor(health_monitor),
+        ))
+        .register(TaggedService::new(
+            "provider-rate-limit-monitor",
+            AllServices::RateLimitMonitor(rate_limit_monitor),
+        ))
+        .register(TaggedService::new(
+            "system-metrics",
+            AllServices::SystemMetrics(SystemMetrics),
+        ));
+
     let mut tasks = vec![
         "shutdown-signals",
         "gateway",
@@ -123,16 +201,19 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
         "provider-rate-limit-monitor",
         "system-metrics",
     ];
-    let mut meltdown = Meltdown::new().register(TaggedService::new(
-        "shutdown-signals",
-        ai_gateway::utils::meltdown::wait_for_shutdown_signals,
-    ));
 
     if app.state.0.config.helicone.is_auth_enabled() {
+        let control_plane_state = app.state.0.control_plane_state.clone();
+        let helicone_config = app.state.0.config.helicone.clone();
         meltdown = meltdown.register(TaggedService::new(
             "control-plane-client",
-            ControlPlaneClient::connect(control_plane_state, helicone_config)
+            AllServices::ControlPlane(
+                ControlPlaneClient::connect(
+                    control_plane_state,
+                    helicone_config,
+                )
                 .await?,
+            ),
         ));
         tasks.push("control-plane-client");
     }
@@ -140,33 +221,25 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     if app.state.0.config.deployment_target == DeploymentTarget::Cloud {
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(app.state.0.config.database.clone()).await?,
+            AllServices::DbListener(
+                DatabaseListener::new(app.state.0.config.database.clone())
+                    .await?,
+            ),
         ));
         tasks.push("database-listener");
     }
 
-    meltdown = meltdown
-        .register(TaggedService::new("gateway", app))
-        .register(TaggedService::new(
-            "provider-health-monitor",
-            health_monitor,
-        ))
-        .register(TaggedService::new(
-            "provider-rate-limit-monitor",
-            rate_limit_monitor,
-        ))
-        .register(TaggedService::new("system-metrics", SystemMetrics));
-
     if let Some(rate_limiting_cleanup_service) = rate_limiting_cleanup_service {
         meltdown = meltdown.register(TaggedService::new(
             "rate-limiting-cleanup",
-            rate_limiting_cleanup_service,
+            AllServices::RateLimitCleanup(rate_limiting_cleanup_service),
         ));
         tasks.push("rate-limiting-cleanup");
     }
 
     info!(tasks = ?tasks, "starting services");
 
+    let mut shutting_down = false;
     while let Some((service, result)) = meltdown.next().await {
         match result {
             Ok(()) => info!(%service, "service stopped successfully"),
@@ -179,6 +252,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
             shutting_down = true;
         }
     }
+
     Ok(())
 }
 
