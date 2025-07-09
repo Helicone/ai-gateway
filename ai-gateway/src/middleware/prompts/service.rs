@@ -12,7 +12,11 @@ use crate::{
         invalid_req::InvalidRequestError, prompts::PromptError,
     },
     s3::S3Client,
-    types::{extensions::AuthContext, request::Request, response::{JawnResponse, Response}},
+    types::{
+        extensions::AuthContext,
+        request::Request,
+        response::{JawnResponse, Response},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -102,14 +106,10 @@ async fn build_prompt_request(
         .map_err(InternalError::CollectBodyError)?
         .to_bytes();
 
-    let request_json: serde_json::Value =
-        serde_json::from_slice(&body_bytes)
-            .map_err(|e| ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(e)))?;
-
-    tracing::debug!(
-        "Original request body: {}",
-        serde_json::to_string_pretty(&request_json).unwrap_or_default()
-    );
+    let request_json: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|e| {
+        ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(e))
+    })?;
 
     let Some(prompt_id) = request_json
         .get("promptId")
@@ -128,11 +128,15 @@ async fn build_prompt_request(
         .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
 
     let version_response =
-        get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?
-        .data().map_err(|e| {
-            tracing::error!(error = %e, "failed to get production version");
-            ApiError::Internal(InternalError::PromptError(PromptError::UnexpectedResponse(e)))
-        })?;
+        get_prompt_version(&app_state, &prompt_id, &auth_ctx)
+            .await?
+            .data()
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to get production version");
+                ApiError::Internal(InternalError::PromptError(
+                    PromptError::UnexpectedResponse(e),
+                ))
+            })?;
 
     let s3_client = match app_state.config().deployment_target {
         DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),

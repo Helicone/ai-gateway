@@ -220,7 +220,7 @@ impl<'a> S3Client<'a> {
             .await
             .map_err(|e| {
                 tracing::debug!(error = %e, "failed to send request to S3 for prompt body");
-                PromptError::FailedToGetPromptBody(e)
+                PromptError::FailedToSendRequest(e)
             })?
             .error_for_status()
             .map_err(|e| {
