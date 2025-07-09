@@ -62,10 +62,8 @@ impl HeliconeConfig {
 
     #[must_use]
     pub fn is_prompts_enabled(&self) -> bool {
-        // Temporarily disabled
-        false
-        // self.features == HeliconeFeatures::All
-        //     || self.features == HeliconeFeatures::Prompts
+        self.features == HeliconeFeatures::All
+            || self.features == HeliconeFeatures::Prompts
     }
 }
 

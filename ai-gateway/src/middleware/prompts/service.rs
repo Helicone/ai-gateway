@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     string::ToString,
     task::{Context, Poll},
 };
