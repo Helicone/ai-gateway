@@ -64,4 +64,8 @@ pub enum InitError {
     DatabaseConnection(sqlx::Error),
     /// Provider not yet supported: {0}
     ProviderNotSupported(InferenceProvider),
+    /// Router rx not configured
+    RouterRxNotConfigured,
+    /// Router store not configured
+    RouterStoreNotConfigured,
 }

@@ -28,7 +28,7 @@ use crate::{
     app_state::{AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
-    config::{Config, cache::CacheStore, server::TlsConfig},
+    config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
     control_plane::control_plane_state::ControlPlaneState,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
@@ -44,6 +44,7 @@ use crate::{
     },
     minio::Minio,
     router::meta::MetaRouter,
+    store::{connect, router_store::RouterStore},
     types::provider::ProviderKeys,
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
@@ -181,7 +182,7 @@ impl tower::Service<crate::types::request::Request> for App {
 impl App {
     pub async fn new(config: Config) -> Result<Self, InitError> {
         tracing::debug!("creating app");
-        let app_state = Self::build_app_state(config)?;
+        let app_state = Self::build_app_state(config).await?;
         let service_stack =
             Self::build_service_stack(app_state.clone()).await?;
 
@@ -196,8 +197,16 @@ impl App {
     /// Initializes all the clients, managers, and other stateful components
     /// that are shared across the application. This includes setting up
     /// metrics, monitoring, caching, and API keys.
-    fn build_app_state(config: Config) -> Result<AppState, InitError> {
+    async fn build_app_state(config: Config) -> Result<AppState, InitError> {
         let minio = Minio::new(config.minio.clone())?;
+        let (pg_pool, router_store) =
+            if config.deployment_target == DeploymentTarget::Cloud {
+                let pg_pool = connect(&config.database).await?;
+                let router_store = RouterStore::new(pg_pool.clone())?;
+                (Some(pg_pool), Some(router_store))
+            } else {
+                (None, None)
+            };
         let jawn_http_client = JawnClient::new()?;
 
         let meter = global::meter(SERVICE_NAME);
@@ -230,6 +239,8 @@ impl App {
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
+            router_store,
+            pg_pool,
             jawn_http_client,
             control_plane_state: Arc::new(RwLock::new(
                 ControlPlaneState::default(),
@@ -245,6 +256,7 @@ impl App {
             rate_limit_senders: RwLock::new(HashMap::default()),
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
+            router_tx: RwLock::new(None),
         }));
 
         Ok(app_state)

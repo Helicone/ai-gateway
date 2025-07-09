@@ -1,9 +1,9 @@
 [package]
 name = "mock-server"
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-version.workspace = true
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+version = { workspace = true }
 publish = false
 
 [dependencies]

@@ -5,7 +5,6 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod control_plane;
-pub mod db_listener;
 pub mod discover;
 pub(crate) mod dispatcher;
 pub mod endpoints;
@@ -16,6 +15,7 @@ pub mod middleware;
 pub mod minio;
 pub(crate) mod router;
 pub mod s3;
+pub mod store;
 #[cfg(feature = "testing")]
 pub mod tests;
 pub mod types;

@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap as HashMap;
+use sqlx::PgPool;
 use tokio::sync::{
     RwLock,
     mpsc::{Receiver, Sender},
 };
+use tower::discover::Change;
 
 use crate::{
     cache::CacheClient,
@@ -21,6 +23,8 @@ use crate::{
     logger::service::JawnClient,
     metrics::Metrics,
     minio::Minio,
+    router::service::Router,
+    store::router_store::RouterStore,
     types::{
         provider::{InferenceProvider, ProviderKey, ProviderKeys},
         rate_limit::{
@@ -49,6 +53,8 @@ impl AppState {
 pub struct InnerAppState {
     pub config: Config,
     pub minio: Minio,
+    pub router_store: Option<RouterStore>,
+    pub pg_pool: Option<PgPool>,
     pub jawn_http_client: JawnClient,
     pub control_plane_state: Arc<RwLock<ControlPlaneState>>,
     pub direct_proxy_api_keys: ProviderKeys,
@@ -66,6 +72,8 @@ pub struct InnerAppState {
     pub rate_limit_monitors: RateLimitMonitorMap,
     pub rate_limit_senders: RateLimitEventSenders,
     pub rate_limit_receivers: RateLimitEventReceivers,
+
+    pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
 }
 
 impl AppState {
@@ -130,5 +138,17 @@ impl AppState {
         provider: &InferenceProvider,
     ) -> Result<Option<ProviderKey>, ProviderError> {
         Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
+    }
+
+    pub async fn get_router_tx(
+        &self,
+    ) -> Option<Sender<Change<RouterId, Router>>> {
+        let router_tx = self.0.router_tx.read().await;
+        router_tx.clone()
+    }
+
+    pub async fn set_router_tx(&self, tx: Sender<Change<RouterId, Router>>) {
+        let mut router_tx = self.0.router_tx.write().await;
+        *router_tx = Some(tx);
     }
 }

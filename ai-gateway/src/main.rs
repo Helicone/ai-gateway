@@ -4,13 +4,13 @@ use ai_gateway::{
     app::App,
     config::{Config, DeploymentTarget},
     control_plane::websocket::ControlPlaneClient,
-    db_listener::DatabaseListener,
     discover::monitor::{
         health::provider::HealthMonitor, rate_limit::RateLimitMonitor,
     },
     error::{init::InitError, runtime::RuntimeError},
     metrics::system::SystemMetrics,
     middleware::rate_limit,
+    store::db_listener::DatabaseListener,
     utils::meltdown::TaggedService,
 };
 use clap::Parser;
@@ -139,10 +139,12 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
         tasks.push("control-plane-client");
     }
 
-    if app.state.0.config.deployment_target == DeploymentTarget::Cloud {
+    if app.state.0.config.deployment_target == DeploymentTarget::Cloud
+        && let Some(pg_pool) = &app.state.0.pg_pool
+    {
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(app.state.0.config.database.clone()).await?,
+            DatabaseListener::new(pg_pool.clone(), app.state.clone())?,
         ));
         tasks.push("database-listener");
     }

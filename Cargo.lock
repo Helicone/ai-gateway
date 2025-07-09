@@ -64,6 +64,7 @@ dependencies = [
  "derive_more",
  "displaydoc",
  "dotenvy",
+ "dynamic-router",
  "eventsource-stream",
  "flate2",
  "futures",
@@ -1758,6 +1759,21 @@ name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c7a8fb8a9fbf66c1f703fe16184d10ca0ee9d23be5b4436400408ba54a95005"
+
+[[package]]
+name = "dynamic-router"
+version = "0.2.0-beta.27"
+dependencies = [
+ "futures",
+ "http 1.3.1",
+ "pin-project-lite",
+ "rand 0.9.1",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-test",
+ "tower 0.5.2",
+ "tracing",
+]
 
 [[package]]
 name = "either"
@@ -5226,6 +5242,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -5305,6 +5322,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.12",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -5342,6 +5360,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.12",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -5367,6 +5386,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
