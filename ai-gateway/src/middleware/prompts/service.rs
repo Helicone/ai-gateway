@@ -3,12 +3,12 @@ use std::task::{Context, Poll};
 use futures::future::BoxFuture;
 use http_body_util::BodyExt;
 use tracing::{Instrument, info_span};
-
+use std::string::ToString;
 use crate::{
     app_state::AppState,
     config::DeploymentTarget,
     error::{
-        api::ApiError, init::InitError, internal::InternalError,
+        api::ApiError, internal::InternalError,
         invalid_req::InvalidRequestError, prompts::PromptError,
     },
     s3::S3Client,
@@ -25,8 +25,8 @@ pub struct PromptLayer {
 }
 
 impl PromptLayer {
-    pub fn new(app_state: AppState) -> Result<Self, InitError> {
-        Ok(Self { app_state })
+    pub fn new(app_state: AppState) -> PromptLayer {
+        Self { app_state }
     }
 }
 
@@ -114,7 +114,7 @@ async fn build_prompt_request(
     let Some(prompt_id) = request_json
         .get("promptId")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+        .map(ToString::to_string)
     else {
         let req =
             Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
@@ -161,7 +161,7 @@ async fn build_prompt_request(
     );
 
     let merged_body =
-        merge_prompt_with_request(prompt_body_json, request_json)?;
+        merge_prompt_with_request(prompt_body_json, &request_json)?;
 
     tracing::debug!(
         "Merged body: {}",
@@ -227,7 +227,7 @@ async fn get_prompt_version(
 // TODO: Message templating with inputs/variables.
 fn merge_prompt_with_request(
     mut prompt_body: serde_json::Value,
-    request_body: serde_json::Value,
+    request_body: &serde_json::Value,
 ) -> Result<serde_json::Value, ApiError> {
     let Some(prompt_obj) = prompt_body.as_object_mut() else {
         return Err(ApiError::Internal(InternalError::Internal));

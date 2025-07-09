@@ -179,7 +179,7 @@ impl From<&InternalError> for InternalErrorMetric {
             InternalError::BufferError(_) => Self::BufferError,
             InternalError::InvalidUri(_) => Self::InvalidUri,
             InternalError::InvalidHeader(_) => Self::InvalidHeader,
-            InternalError::MappingTaskError(_) => Self::TokioTaskError,
+            InternalError::MappingTaskError(_) | InternalError::PromptTaskError(_) => Self::TokioTaskError,
             InternalError::InvalidConverter(_, _) => Self::InvalidConverter,
             InternalError::Provider5xxError(_) => Self::Provider5xxError,
             InternalError::MetricsNotConfigured(_) => {
@@ -192,7 +192,6 @@ impl From<&InternalError> for InternalErrorMetric {
             InternalError::RedisError(_) => Self::RedisError,
             InternalError::PoolError(_) => Self::PoolError,
             InternalError::PromptError(_) => Self::PromptError,
-            InternalError::PromptTaskError(_) => Self::TokioTaskError,
         }
     }
 }
