@@ -22,7 +22,7 @@ impl Layer {
             return Ok(Self { inner: None });
         }
 
-        let layer = PromptLayer::new(app_state.clone())?;
+        let layer = PromptLayer::new(app_state.clone());
         Ok(Self { inner: Some(layer) })
     }
 
