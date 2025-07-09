@@ -3,106 +3,89 @@ gpt-4:
   - "claude-3-7-sonnet"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-large"
   - "us.deepseek.r1-v1:0"
 gpt-4-turbo:
   - "claude-3-7-sonnet"
   - "gemini-2.5-pro"
   - "llama4"
-  - "mistral-large"
   - "amazon.nova-sonic-v1:0"
 gpt-4o:
   - "claude-3-7-sonnet"
   - "gemini-2.5-pro"
   - "llama4"
-  - "mistral-large"
   - "us.deepseek.r1-v1:0"
 gpt-4o-mini:
   - "claude-3-5-haiku"
   - "gemini-2.0-flash"
   - "llama3.2"
   - "llama3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 gpt-4.1:
   - "claude-3-7-sonnet"
   - "gemini-2.5-pro"
   - "llama4"
-  - "mistral-large"
   - "us.deepseek.r1-v1:0"
 gpt-4.1-mini:
   - "claude-3-5-haiku"
   - "gemini-2.0-flash"
   - "llama3.3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 gpt-4.1-nano:
   - "claude-3-5-haiku"
   - "gemini-1.5-flash-8b"
   - "phi4"
-  - "ministral-3b"
   - "amazon.nova-micro-v1:0"
 gpt-4.5:
   - "claude-opus-4-0"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.deepseek.r1-v1:0"
 o1:
   - "claude-sonnet-4-0"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.deepseek.r1-v1:0"
 o1-mini:
   - "claude-3-5-haiku"
   - "gemini-2.0-flash"
   - "llama3.3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 o1-pro:
   - "claude-opus-4-0"
   - "gemini-2.5-pro"
   - "us.deepseek.r1-v1:0"
-  - "mistral-saba"
   - "us.anthropic.claude-opus-4-20250514-v1:0"
 o3:
   - "claude-opus-4-0"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.anthropic.claude-opus-4-20250514-v1:0"
 o3-mini:
   - "claude-3-5-haiku"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "gemini-2.0-flash"
   - "llama3.3"
-  - "mistral-small"
   - "anthropic.claude-3-5-sonnet-20240620-v1:0"
 o4-mini:
   - "claude-3-5-haiku"
   - "gemini-2.0-flash"
   - "gpt-4.1"
   - "llama3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 codex-mini:
   - "claude-3-7-sonnet"
   - "gemini-2.0-flash"
   - "gemma3"
-  - "codestral"
   - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 gpt-4o-mini-search:
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
   - "llama3"
-  - "mistral-small"
   - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 gpt-4o-search:
   - "claude-3-7-sonnet"
   - "gemini-2.5-pro"
   - "llama4"
-  - "mistral-large"
   - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 
 # Anthropic Models
@@ -110,40 +93,34 @@ claude-opus-4-0:
   - "o3"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.anthropic.claude-opus-4-20250514-v1:0"
 claude-sonnet-4-0:
   - "o4-mini"
   - "gemini-2.0-flash"
   - "llama4"
-  - "mistral-large"
   - "us.deepseek.r1-v1:0"
   - "us.anthropic.claude-sonnet-4-20250514-v1:0"
 claude-3-7-sonnet:
   - "o4-mini"
   - "gemini-2.0-flash"
   - "llama4"
-  - "mistral-large"
   - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 claude-3-5-haiku:
   - "gemini-2.0-flash"
   - "gpt-4o-mini"
   - "llama3"
-  - "mistral-small"
   - "us.deepseek.r1-v1:0"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 claude-3-5-sonnet:
   - "o3-mini"
   - "gemini-2.0-flash"
   - "llama4"
-  - "mistral-medium"
   - "us.deepseek.r1-v1:0"
   - "anthropic.claude-3-5-sonnet-20240620-v1:0"
 claude-3-opus:
   - "gpt-4.5"
   - "gemini-2.5-pro"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.anthropic.claude-3-opus-20240229-v1:0"
 
 # Gemini Models
@@ -151,43 +128,36 @@ gemini-2.5-flash:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemma3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 gemini-2.5-pro:
   - "gpt-4.5"
   - "claude-sonnet-4-0"
   - "deepseek-r1"
-  - "mistral-saba"
   - "us.anthropic.claude-sonnet-4-20250514-v1:0"
 gemini-2.0-flash:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "llama3"
-  - "mistral-small"
   - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 gemini-2.0-flash-lite:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "llama3"
-  - "mistral-small"
   - "amazon.nova-sonic-v1:0"
 gemini-1.5-flash:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "llama3"
-  - "mistral-small"
   - "amazon.nova-sonic-v1:0"
 gemini-1.5-flash-8b:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "phi4"
-  - "ministral-8b"
   - "amazon.nova-sonic-v1:0"
 gemini-1.5-pro:
   - "gpt-4o"
   - "claude-3-5-sonnet"
   - "llama4"
-  - "mistral-medium"
   - "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
 # Bedrock models
@@ -195,161 +165,78 @@ gemini-1.5-pro:
   - "gemini-2.0-flash"
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
-  - "mistral-small"
   - "us.deepseek.r1-v1:0"
 "anthropic.claude-3-5-sonnet-20240620-v1:0":
   - "o3-mini"
   - "gemini-2.0-flash"
   - "claude-3-5-sonnet"
-  - "mistral-medium"
   - "us.deepseek.r1-v1:0"
 "us.anthropic.claude-3-opus-20240229-v1:0":
   - "gpt-4.5"
   - "gemini-2.5-pro"
   - "claude-3-opus"
   - "claude-3-7-sonnet"
-  - "mistral-saba"
   - "us.deepseek.r1-v1:0"
 "us.anthropic.claude-3-7-sonnet-20250219-v1:0":
   - "o4-mini"
   - "gemini-2.0-flash"
   - "us.deepseek.r1-v1:0"
   - "claude-3-7-sonnet"
-  - "mistral-large"
 "us.anthropic.claude-opus-4-20250514-v1:0":
   - "o3"
   - "gemini-2.5-pro"
   - "us.deepseek.r1-v1:0"
   - "claude-opus-4-0"
-  - "mistral-saba"
 "us.anthropic.claude-sonnet-4-20250514-v1:0":
   - "o4-mini"
   - "gemini-2.0-flash"
   - "us.deepseek.r1-v1:0"
   - "claude-sonnet-4-0"
-  - "mistral-large"
 "us.deepseek.r1-v1:0":
   - "gpt-4o"
   - "claude-3-5-sonnet"
   - "gemini-2.0-flash"
   - "claude-3-7-sonnet"
-  - "mistral-large"
-
-# mistral models
-ministral-8b:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-ministral-3b:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-1.5-flash-8b"
-  - "amazon.nova-micro-v1:0"
-mistral-small:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-mistral-medium:
-  - "gpt-4o"
-  - "claude-3-5-sonnet"
-  - "gemini-2.0-flash"
-  - "anthropic.claude-3-5-sonnet-20240620-v1:0"
-mistral-large:
-  - "o3"
-  - "claude-sonnet-4-0"
-  - "gemini-2.5-pro"
-  - "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-mistral-saba:
-  - "o3"
-  - "claude-opus-4-0"
-  - "gemini-2.5-pro"
-  - "us.anthropic.claude-opus-4-20250514-v1:0"
-magistral-small:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-magistral-medium:
-  - "gpt-4o"
-  - "claude-3-5-sonnet"
-  - "gemini-2.0-flash"
-  - "anthropic.claude-3-5-sonnet-20240620-v1:0"
-ministral-small:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-devstral-small:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-codestral:
-  - "gpt-4o"
-  - "claude-3-5-sonnet"
-  - "gemini-2.0-flash"
-  - "anthropic.claude-3-5-sonnet-20240620-v1:0"
-open-mistral-nemo:
-  - "gpt-4o"
-  - "claude-3-5-sonnet"
-  - "gemini-2.0-flash"
-  - "anthropic.claude-3-5-sonnet-20240620-v1:0"
-mistral-ocr:
-  - "gpt-4o-mini"
-  - "claude-3-5-haiku"
-  - "gemini-2.0-flash"
-  - "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-
 
 # Ollama Models
 deepseek-r1:
   - "gpt-4o"
   - "claude-3-5-sonnet"
   - "gemini-2.0-flash"
-  - "mistral-large"
   - "us.deepseek.r1-v1:0"
 llama4:
   - "gpt-4o"
   - "claude-3-5-sonnet"
   - "gemini-2.0-flash"
-  - "mistral-large"
   # bedrock doesn't have fullsize llama4
   - "us.deepseek.r1-v1:0"
 llama3.3:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "mistral-small"
   - "meta.llama3-8b-instruct-v1:0"
 llama3:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "mistral-small"
   - "meta.llama3-8b-instruct-v1:0"
 gemma3:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "mistral-small"
   - "us.deepseek.r1-v1:0"
 qwen3:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "mistral-small"
   - "us.deepseek.r1-v1:0"
 phi4:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "ministral-3b"
   - "amazon.nova-lite-v1:0"
 llava:
   - "gpt-4o-mini"
   - "claude-3-5-haiku"
   - "gemini-1.5-flash"
-  - "mistral-small"
   - "us.deepseek.r1-v1:0"

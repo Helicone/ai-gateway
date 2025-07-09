@@ -151,11 +151,6 @@ impl Mock {
             args.mistral_port,
         )
         .await;
-        config
-            .providers
-            .get_mut(&InferenceProvider::Named("mistral".into()))
-            .unwrap()
-            .base_url = Url::parse(&mistral_mock.uri()).unwrap();
 
         let minio_mock = start_mock_for_test(
             &get_stubs_path("minio"),

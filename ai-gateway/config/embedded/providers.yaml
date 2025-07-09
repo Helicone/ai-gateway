@@ -43,23 +43,6 @@ gemini:
     - "gemini-1.5-pro"
   base-url: https://generativelanguage.googleapis.com
 
-mistral:
-  models:
-    - "ministral-8b"
-    - "ministral-3b"
-    - "mistral-small"
-    - "mistral-medium"
-    - "mistral-large"
-    - "mistral-saba"
-    - "magistral-small"
-    - "magistral-medium"
-    - "ministral-small"
-    - "devstral-small"
-    - "codestral"
-    - "open-mistral-nemo"
-    - "mistral-ocr"
-  base-url: https://api.mistral.ai
-
 ollama:
   models:
     - "deepseek-r1"
