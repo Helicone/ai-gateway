@@ -67,11 +67,11 @@ pub enum Error {
 pub struct DynamicRouter<D, ReqBody>
 where
     D: Discover,
-    D::Key: Hash,
+    D::Key: Hash + Send + Sync,
 {
     discover: D,
 
-    services: ReadyCache<D::Key, D::Service, ReqBody>,
+    services: ReadyCache<D::Key, D::Service, http::Request<ReqBody>>,
     ready_index: Option<usize>,
 
     _req: PhantomData<ReqBody>,
@@ -80,7 +80,7 @@ where
 impl<D: Discover, ReqBody> fmt::Debug for DynamicRouter<D, ReqBody>
 where
     D: fmt::Debug,
-    D::Key: Hash + fmt::Debug,
+    D::Key: Hash + fmt::Debug + Send + Sync,
     D::Service: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -94,7 +94,7 @@ where
 impl<D, ReqBody> DynamicRouter<D, ReqBody>
 where
     D: Discover,
-    D::Key: Hash,
+    D::Key: Hash + Send + Sync,
     D::Service: Service<http::Request<ReqBody>>,
     <D::Service as Service<http::Request<ReqBody>>>::Error:
         Into<tower::BoxError>,
@@ -124,7 +124,7 @@ where
 impl<D, ReqBody> DynamicRouter<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone,
+    D::Key: Hash + Clone + Send + Sync,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>>,
     <D::Service as Service<http::Request<ReqBody>>>::Error:
@@ -223,7 +223,7 @@ where
 impl<D, ReqBody> Service<http::Request<ReqBody>> for DynamicRouter<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone,
+    D::Key: Hash + Clone + Send + Sync,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>>,
     <D::Service as Service<http::Request<ReqBody>>>::Error:
@@ -289,8 +289,9 @@ where
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
         tracing::trace!("DynamicRouter::call");
         let key = request.extensions().get::<D::Key>().unwrap();
-        let router_service = self.services.get_ready(key);
-        let response = router_service.call(request);
+        let (_, router_service, mut service) =
+            self.services.get_ready_mut(key).unwrap();
+        let response = service.call(request).map_err(|e| e.into());
         response
     }
 }
