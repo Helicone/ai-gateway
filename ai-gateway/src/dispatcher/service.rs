@@ -535,7 +535,8 @@ impl Dispatcher {
             .await?
         };
 
-        // Handle error and rate limiting (do this before processing response to avoid borrowing issues)
+        // Handle error and rate limiting (do this before processing response to
+        // avoid borrowing issues)
         let response_status = client_response.status();
         let response_headers = client_response.headers().clone();
         self.handle_error_and_rate_limiting(
@@ -774,7 +775,8 @@ impl Dispatcher {
             .await
     }
 
-    /// Generic retry function that handles both exponential and constant retry strategies
+    /// Generic retry function that handles both exponential and constant retry
+    /// strategies
     async fn execute_with_retry<F, T, E, W, N>(
         retry_config: Option<&RetryConfig>,
         future_fn: F,
