@@ -8,19 +8,27 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    error::logger::LoggerError,
+    error::{logger::LoggerError, prompts::PromptError},
     logger::service::JawnClient,
     minio::Minio,
     types::{extensions::AuthContext, logger::S3Log, response::JawnResponse},
 };
 
 const PUT_OBJECT_SIGN_DURATION: Duration = Duration::from_secs(120);
+const GET_OBJECT_SIGN_DURATION: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SignedUrlRequest {
     request_id: Uuid,
     payload_size: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignedGetUrlRequest<'a> {
+    prompt_id: &'a str,
+    version_id: &'a str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,5 +145,97 @@ impl<'a> S3Client<'a> {
                 LoggerError::ResponseError(e)
             })?;
         Ok(())
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn pull_prompt_body(
+        &self,
+        app_state: &AppState,
+        auth_ctx: &AuthContext,
+        prompt_id: &str,
+        version_id: &str,
+    ) -> Result<serde_json::Value, PromptError> {
+        let object_path = format!(
+            "organizations/{}/prompts/{}/versions/{}/prompt_body",
+            auth_ctx.org_id.as_ref(),
+            prompt_id,
+            version_id,
+        );
+
+        let signed_url = match self {
+            Self::SelfSigned(minio) => {
+                let action = minio.get_object(&object_path);
+                action.sign(GET_OBJECT_SIGN_DURATION)
+            }
+            Self::SignedByJawn(client) => {
+                let signed_request_url =
+                    app_state
+                        .config()
+                        .helicone
+                        .base_url
+                        .join("/v1/router/control-plane/sign-s3-get-url")?;
+
+                let signed_url = client
+                    .request_client
+                    .post(signed_request_url)
+                    .json(&SignedGetUrlRequest {
+                        prompt_id,
+                        version_id,
+                    })
+                    .header(
+                        "authorization",
+                        format!("Bearer {}", auth_ctx.api_key.expose()),
+                    )
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(error = %e, "failed to send request for signed get url");
+                        PromptError::FailedToSendRequest(e)
+                    })?
+                    .error_for_status()
+                    .map_err(|e| {
+                        tracing::error!(error = %e, "failed to get signed get url");
+                        PromptError::FailedToGetPromptBody(e)
+                    })?;
+
+                let signed_url = signed_url.json::<JawnResponse<SignedUrlResponse>>().await.map_err(|e| {
+                    tracing::error!(error = %e, "failed to deserialize signed get url response");
+                    PromptError::FailedToGetPromptBody(e)
+                })?.data().map_err(|e| {
+                    tracing::error!(error = %e, "failed to get signed get url");
+                    PromptError::UnexpectedResponse(e)
+                })?;
+                tracing::trace!("got signed get url for sidecar");
+
+                signed_url.url
+            }
+        };
+
+        let response = app_state
+            .0
+            .minio
+            .client
+            .get(signed_url)
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::debug!(error = %e, "failed to send request to S3 for prompt body");
+                PromptError::FailedToSendRequest(e)
+            })?
+            .error_for_status()
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to get prompt body from S3");
+                PromptError::FailedToGetPromptBody(e)
+            })?;
+
+        let response_bytes = response.bytes().await.map_err(|e| {
+            tracing::error!(error = %e, "failed to read prompt body bytes");
+            PromptError::FailedToGetPromptBody(e)
+        })?;
+
+        serde_json::from_slice(&response_bytes).map_err(|e| {
+            tracing::error!(error = %e, "failed to deserialize prompt body JSON");
+            PromptError::UnexpectedResponse(e.to_string())
+        })
     }
 }

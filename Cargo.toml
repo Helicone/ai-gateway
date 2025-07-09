@@ -70,6 +70,7 @@ derive_more = { version = "2.0.1", features = ['as_ref', 'constructor', 'debug',
 displaydoc = "0.2.5"
 dotenvy = { version = "0.15.7" }
 eventsource-stream = "0.2.3"
+flate2 = "1.1.2"
 futures = "0.3.31"
 governor = "0.8.1"
 heck = "0.5.0"
@@ -108,7 +109,7 @@ r2d2 = "0.8.10"
 rand = "0.9.1"
 redis = { version = "0.32.3", features = ["r2d2"] }
 regex = "1.11.1"
-reqwest = { version = "0.12.21", features = ["json", "stream", "multipart", "native-tls", "charset"], default-features = false }
+reqwest = { version = "0.12.21", features = ["json", "stream", "multipart", "native-tls", "charset", "gzip"], default-features = false }
 reqwest-eventsource = "0.6.0"
 rust_decimal = "1.37.2"
 rustc-hash = "2.1.1"

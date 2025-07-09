@@ -17,6 +17,11 @@ pub enum HeliconeFeatures {
     /// Authentication only.
     Auth,
     /// Authentication and observability.
+    Observability,
+    /// Authentication and prompts.
+    #[serde(rename = "__prompts")]
+    Prompts,
+    /// Authentication and observability (does not include prompts).
     All,
 }
 
@@ -41,8 +46,7 @@ pub struct HeliconeConfig {
 impl HeliconeConfig {
     #[must_use]
     pub fn is_auth_enabled(&self) -> bool {
-        self.features == HeliconeFeatures::Auth
-            || self.features == HeliconeFeatures::All
+        self.features != HeliconeFeatures::None
     }
 
     #[must_use]
@@ -53,6 +57,15 @@ impl HeliconeConfig {
     #[must_use]
     pub fn is_observability_enabled(&self) -> bool {
         self.features == HeliconeFeatures::All
+            || self.features == HeliconeFeatures::Observability
+    }
+
+    #[must_use]
+    pub fn is_prompts_enabled(&self) -> bool {
+        // Temporarily disabled
+        false
+        // self.features == HeliconeFeatures::All
+        //     || self.features == HeliconeFeatures::Prompts
     }
 }
 
@@ -120,6 +133,8 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
             Features,
             Authentication,
             Observability,
+            #[serde(rename = "__prompts")]
+            Prompts,
         }
 
         struct HeliconeConfigVisitor;
@@ -144,6 +159,7 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
                 let mut features = None;
                 let mut authentication = None;
                 let mut observability = None;
+                let mut prompts = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -195,22 +211,39 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
                             }
                             observability = Some(map.next_value()?);
                         }
+                        Field::Prompts => {
+                            if prompts.is_some() {
+                                return Err(de::Error::duplicate_field(
+                                    "prompts",
+                                ));
+                            }
+                            prompts = Some(map.next_value()?);
+                        }
                     }
                 }
 
                 // Determine features precedence:
                 // 1. If features is set, use it.
-                // 2. Otherwise, use authentication/observability booleans.
+                // 2. Otherwise, use authentication/observability/prompts
+                //    booleans.
                 // 3. Otherwise, default to None.
 
                 let features = if let Some(f) = features {
                     f
                 } else {
-                    match (authentication, observability) {
-                        (_, Some(true)) => HeliconeFeatures::All,
-                        (Some(true), Some(false) | None) => {
-                            HeliconeFeatures::Auth
+                    match (authentication, observability, prompts) {
+                        (_, Some(true), Some(true)) => HeliconeFeatures::All,
+                        (_, Some(true), Some(false) | None) => {
+                            HeliconeFeatures::Observability
                         }
+                        (_, Some(false) | None, Some(true)) => {
+                            HeliconeFeatures::Prompts
+                        }
+                        (
+                            Some(true),
+                            Some(false) | None,
+                            Some(false) | None,
+                        ) => HeliconeFeatures::Auth,
                         _ => HeliconeFeatures::None,
                     }
                 };
@@ -232,6 +265,7 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
             "features",
             "authentication",
             "observability",
+            "__prompts",
         ];
         deserializer.deserialize_struct(
             "HeliconeConfig",
@@ -259,11 +293,12 @@ features: "all"
     }
 
     #[test]
-    fn test_deserialize_auth_and_observability_both_true() {
+    fn test_deserialize_all_flags_true() {
         let yaml = r#"
 api-key: "sk-test-key"
 authentication: true
 observability: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -271,11 +306,12 @@ observability: true
     }
 
     #[test]
-    fn test_deserialize_auth_true_observability_false() {
+    fn test_deserialize_auth_true_others_false() {
         let yaml = r#"
 api-key: "sk-test-key"
 authentication: true
 observability: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -283,23 +319,38 @@ observability: false
     }
 
     #[test]
-    fn test_deserialize_auth_false_observability_true() {
+    fn test_deserialize_observability_true_others_false() {
         let yaml = r#"
 api-key: "sk-test-key"
 authentication: false
 observability: true
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(config.features, HeliconeFeatures::Observability);
     }
 
     #[test]
-    fn test_deserialize_auth_and_observability_both_false() {
+    fn test_deserialize_prompts_true_others_false() {
         let yaml = r#"
 api-key: "sk-test-key"
 authentication: false
 observability: false
+__prompts: true
+"#;
+
+        let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(config.features, HeliconeFeatures::Prompts);
+    }
+
+    #[test]
+    fn test_deserialize_all_flags_false() {
+        let yaml = r#"
+api-key: "sk-test-key"
+authentication: false
+observability: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -325,7 +376,18 @@ observability: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.features, HeliconeFeatures::All);
+        assert_eq!(config.features, HeliconeFeatures::Observability);
+    }
+
+    #[test]
+    fn test_deserialize_prompts_true_only() {
+        let yaml = r#"
+api-key: "sk-test-key"
+__prompts: true
+"#;
+
+        let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(config.features, HeliconeFeatures::Prompts);
     }
 
     #[test]
@@ -351,6 +413,17 @@ observability: false
     }
 
     #[test]
+    fn test_deserialize_prompts_false_only() {
+        let yaml = r#"
+api-key: "sk-test-key"
+__prompts: false
+"#;
+
+        let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(config.features, HeliconeFeatures::None);
+    }
+
+    #[test]
     fn test_deserialize_no_feature_fields() {
         let yaml = r#"
 api-key: "sk-test-key"
@@ -368,10 +441,12 @@ api-key: "sk-test-key"
 features: "auth"
 authentication: true
 observability: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        // features field should take precedence over auth/observability
+        // features field should take precedence over
+        // auth/observability/__prompts
         assert_eq!(config.features, HeliconeFeatures::Auth);
     }
 
@@ -382,6 +457,7 @@ api-key: "sk-test-key"
 features: "none"
 authentication: true
 observability: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -394,6 +470,8 @@ observability: true
         let test_cases = vec![
             ("none", HeliconeFeatures::None),
             ("auth", HeliconeFeatures::Auth),
+            ("observability", HeliconeFeatures::Observability),
+            ("__prompts", HeliconeFeatures::Prompts),
             ("all", HeliconeFeatures::All),
         ];
 

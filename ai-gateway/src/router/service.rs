@@ -19,7 +19,9 @@ use crate::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
     },
-    middleware::{cache::CacheLayer, rate_limit, request_context},
+    middleware::{
+        cache::CacheLayer, prompts::PromptLayer, rate_limit, request_context,
+    },
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
 };
@@ -69,6 +71,7 @@ impl Router {
             &router_config,
         )
         .await?;
+        let prompt_layer = PromptLayer::new(&app_state)?;
         let cache_layer = CacheLayer::for_router(&app_state, &id)?;
         let request_context_layer = request_context::Layer::for_router(
             router_config.clone(),
@@ -85,6 +88,7 @@ impl Router {
             )
             .await?;
             let service_stack = ServiceBuilder::new()
+                .layer(prompt_layer.clone())
                 .layer(cache_layer.clone())
                 .layer(ErrorHandlerLayer::new(app_state.clone()))
                 .layer(rl_layer.clone())
