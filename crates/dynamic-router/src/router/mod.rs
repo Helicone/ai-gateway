@@ -200,9 +200,9 @@ where
 
     //           //     //     key.weight()
     //           //     // };
-    //           //     // // NOTE: This is O(n) over number of services, but it can
-    //           //     // // be made to O(1) using precomputed probability tables as
-    //           //     // // described here: https://www.keithschwarz.com/darts-dice-coins/
+    //           //     // // NOTE: This is O(n) over number of services, but it
+    // can           //     // // be made to O(1) using precomputed
+    // probability tables as           //     // // described here: https://www.keithschwarz.com/darts-dice-coins/
     //           //     // let sample = rand::seq::index::sample_weighted(
     //           //     //     &mut self.rng,
     //           //     //     len,
@@ -250,16 +250,16 @@ where
 
         Poll::Ready(Ok(()))
         // loop {
-        //     // If a service has already been selected, ensure that it is ready.
-        //     // This ensures that the underlying service is ready immediately
-        //     // before a request is dispatched to it (i.e. in the same task
-        //     // invocation). If, e.g., a failure detector has changed the state
-        //     // of the service, it may be evicted from the ready set so that
-        //     // another service can be selected.
-        //     if let Some(index) = self.ready_index.take() {
-        //         match self.services.check_ready_index(cx, index) {
-        //             Ok(true) => {
-        //                 // The service remains ready.
+        //     // If a service has already been selected, ensure that it is
+        // ready.     // This ensures that the underlying service is
+        // ready immediately     // before a request is dispatched to it
+        // (i.e. in the same task     // invocation). If, e.g., a
+        // failure detector has changed the state     // of the service,
+        // it may be evicted from the ready set so that     // another
+        // service can be selected.     if let Some(index) =
+        // self.ready_index.take() {         match
+        // self.services.check_ready_index(cx, index) {             
+        // Ok(true) => {                 // The service remains ready.
         //                 self.ready_index = Some(index);
         //                 return Poll::Ready(Ok(()));
         //             }
@@ -269,8 +269,8 @@ where
         //                 trace!("ready service became unavailable");
         //             }
         //             Err(Failed(_, error)) => {
-        //                 // The ready endpoint failed, so log the error and try
-        //                 // to find a new one.
+        //                 // The ready endpoint failed, so log the error and
+        // try                 // to find a new one.
         //                 debug!(%error, "endpoint failed");
         //             }
         //         }
