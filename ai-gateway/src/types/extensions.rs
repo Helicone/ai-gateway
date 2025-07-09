@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use derive_more::{AsRef, From, Into};
 
@@ -35,4 +35,11 @@ pub struct MapperContext {
     /// first class support for mapping between different provider
     /// models.
     pub model: Option<ModelId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PromptContext {
+    pub prompt_id: String,
+    pub prompt_version_id: Option<String>,
+    pub inputs: Option<HashMap<String, String>>,
 }

@@ -1,10 +1,12 @@
 use std::{
+    collections::HashMap,
     string::ToString,
     task::{Context, Poll},
 };
 
 use futures::future::BoxFuture;
 use http_body_util::BodyExt;
+use serde_json::Value;
 use tracing::{Instrument, info_span};
 
 use crate::{
@@ -16,7 +18,7 @@ use crate::{
     },
     s3::S3Client,
     types::{
-        extensions::AuthContext,
+        extensions::{AuthContext, PromptContext},
         request::Request,
         response::{JawnResponse, Response},
     },
@@ -114,15 +116,22 @@ async fn build_prompt_request(
         ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(e))
     })?;
 
-    let Some(prompt_id) = request_json
-        .get("promptId")
-        .and_then(|v| v.as_str())
-        .map(ToString::to_string)
-    else {
-        let req =
-            Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
-        return Ok(req);
+    tracing::debug!(
+        "Request JSON: {}",
+        serde_json::to_string_pretty(&request_json).unwrap_or_default()
+    );
+
+    let prompt_ctx = match get_prompt_params(&request_json) {
+        Ok(ctx) => ctx,
+        Err(_) => {
+            let req = Request::from_parts(
+                parts,
+                axum_core::body::Body::from(body_bytes),
+            );
+            return Ok(req);
+        }
     };
+    // TODO: Insert to extensions later and process in RequestLog
 
     let auth_ctx = parts
         .extensions
@@ -130,16 +139,24 @@ async fn build_prompt_request(
         .cloned()
         .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
 
-    let version_response =
-        get_prompt_version(&app_state, &prompt_id, &auth_ctx)
-            .await?
-            .data()
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to get production version");
-                ApiError::Internal(InternalError::PromptError(
-                    PromptError::UnexpectedResponse(e),
-                ))
-            })?;
+    let version_id = if let Some(version_id) = prompt_ctx.prompt_version_id {
+        version_id
+    } else {
+        let version_response = get_prompt_version(
+            &app_state,
+            &prompt_ctx.prompt_id,
+            &auth_ctx,
+        )
+        .await?
+        .data()
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get production version");
+            ApiError::Internal(InternalError::PromptError(
+                PromptError::UnexpectedResponse(e),
+            ))
+        })?;
+        version_response.id
+    };
 
     let s3_client = match app_state.config().deployment_target {
         DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),
@@ -152,8 +169,8 @@ async fn build_prompt_request(
         .pull_prompt_body(
             &app_state,
             &auth_ctx,
-            &prompt_id,
-            &version_response.id,
+            &prompt_ctx.prompt_id,
+            &version_id,
         )
         .await
         .map_err(|e| ApiError::Internal(InternalError::PromptError(e)))?;
@@ -177,6 +194,44 @@ async fn build_prompt_request(
     let req =
         Request::from_parts(parts, axum_core::body::Body::from(merged_bytes));
     Ok(req)
+}
+
+fn get_prompt_params(request_json: &Value) -> Result<PromptContext, ()> {
+    let Some(request_obj) = request_json.as_object() else {
+        return Err(());
+    };
+
+    let Some(prompt_id) = request_obj
+        .get("promptId")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    else {
+        tracing::error!("Missing promptId field");
+        return Err(());
+    };
+
+    let prompt_version_id = request_obj
+        .get("promptVersionId")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    let inputs = request_obj
+        .get("inputs")
+        .and_then(|v| v.as_object())
+        .filter(|obj| !obj.is_empty())
+        .map(|obj| {
+            obj.iter()
+                .filter_map(|(k, v)| {
+                    v.as_str().map(|s| (k.clone(), s.to_string()))
+                })
+                .collect()
+        });
+
+    Ok(PromptContext {
+        prompt_id,
+        prompt_version_id,
+        inputs,
+    })
 }
 
 async fn get_prompt_version(
