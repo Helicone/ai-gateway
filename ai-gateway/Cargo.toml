@@ -75,7 +75,7 @@ serde_yml = { workspace = true }
 serial_test = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
 stubr = { workspace = true, optional = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["uuid"] }
 telemetry = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

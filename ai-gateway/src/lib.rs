@@ -5,6 +5,7 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod control_plane;
+pub mod database;
 pub mod db_listener;
 pub mod discover;
 pub(crate) mod dispatcher;

@@ -13,7 +13,7 @@ use crate::{
     app::BUFFER_SIZE,
     app_state::AppState,
     balancer::provider::ProviderBalancer,
-    config::DeploymentTarget,
+    config::router::RouterConfig,
     endpoints::{ApiEndpoint, EndpointType},
     error::{
         api::ApiError, init::InitError, internal::InternalError,
@@ -40,24 +40,9 @@ pub struct Router {
 impl Router {
     pub async fn new(
         id: RouterId,
+        router_config: Arc<RouterConfig>,
         app_state: AppState,
     ) -> Result<Self, InitError> {
-        let router_config = match &app_state.0.config.deployment_target {
-            DeploymentTarget::Cloud | DeploymentTarget::Sidecar => {
-                // Note: Cloud will eventually get router configs from the
-                // database, but for not we are just allowing
-                // the cloud to be deployed to start dogfooding
-                let router_config = app_state
-                    .0
-                    .config
-                    .routers
-                    .as_ref()
-                    .get(&id)
-                    .ok_or(InitError::DefaultRouterNotFound)?
-                    .clone();
-                Arc::new(router_config)
-            }
-        };
         router_config.validate()?;
 
         let provider_keys = app_state
@@ -72,7 +57,7 @@ impl Router {
         )
         .await?;
         let prompt_layer = PromptLayer::new(&app_state)?;
-        let cache_layer = CacheLayer::for_router(&app_state, &id)?;
+        let cache_layer = CacheLayer::for_router(&app_state, &router_config)?;
         let request_context_layer = request_context::Layer::for_router(
             router_config.clone(),
             provider_keys.clone(),

@@ -1,5 +1,6 @@
 use futures::future::BoxFuture;
 use meltdown::Token;
+use serde::{Deserialize, Serialize};
 use sqlx::{
     PgPool,
     postgres::{PgListener, PgPoolOptions},
@@ -7,8 +8,9 @@ use sqlx::{
 use tracing::{debug, error, info};
 
 use crate::{
-    config::database::DatabaseConfig,
+    config::{database::DatabaseConfig, router::RouterConfig},
     error::{init::InitError, runtime::RuntimeError},
+    types::router::RouterId,
 };
 
 /// A database listener service that handles LISTEN/NOTIFY functionality.
@@ -16,6 +18,40 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct DatabaseListener {
     pool: PgPool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+enum Op {
+    INSERT,
+    UPDATE,
+    DELETE,
+    TRUNCATE,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "event")]
+enum ConnectedCloudGatewaysNotification {
+    #[serde(rename = "router_config_updated")]
+    RouterConfigUpdated {
+        router_id: RouterId,
+        router_config_id: String,
+        organization_id: String,
+        version: String,
+        op: Op,
+        config: RouterConfig,
+    },
+    #[serde(rename = "router_keys_updated")]
+    RouterKeysUpdated {
+        router_id: String,
+        organization_id: String,
+        api_key_hash: String,
+        op: Op,
+    },
+    #[serde(rename = "unknown")]
+    Unknown {
+        #[serde(flatten)]
+        data: serde_json::Value,
+    },
 }
 
 impl DatabaseListener {
@@ -87,6 +123,51 @@ impl DatabaseListener {
             payload = notification.payload(),
             "processing notification"
         );
+
+        if notification.channel() == "connected_cloud_gateways" {
+            let payload: ConnectedCloudGatewaysNotification =
+                serde_json::from_str(notification.payload()).unwrap();
+
+            match payload {
+                ConnectedCloudGatewaysNotification::RouterConfigUpdated {
+                    router_id,
+                    router_config_id,
+                    organization_id,
+                    version,
+                    op,
+                    config,
+                } => {
+                    info!("Router configuration updated");
+                    info!("router_id: {}", router_id);
+                    info!("router_config_id: {}", router_config_id);
+                    info!("organization_id: {}", organization_id);
+                    info!("version: {}", version);
+                    info!("op: {:?}", op);
+                    info!("config: {:?}", config);
+                    // TODO: Handle router configuration update
+                }
+                ConnectedCloudGatewaysNotification::RouterKeysUpdated {
+                    router_id,
+                    organization_id,
+                    api_key_hash,
+                    op,
+                } => {
+                    info!("Router keys updated");
+                    info!("router_id: {}", router_id);
+                    info!("organization_id: {}", organization_id);
+                    info!("api_key_hash: {}", api_key_hash);
+                    info!("op: {:?}", op);
+                    // TODO: Handle router configuration deletion
+                }
+                ConnectedCloudGatewaysNotification::Unknown { data } => {
+                    info!("Unknown notification event");
+                    info!("data: {:?}", data);
+                    // TODO: Handle unknown event
+                }
+            }
+        } else {
+            info!("received unknown notification");
+        }
 
         // Example: You could dispatch to different handlers based on the
         // channel

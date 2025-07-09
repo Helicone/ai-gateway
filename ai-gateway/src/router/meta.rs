@@ -1,6 +1,7 @@
 use std::{
     future::{Ready, ready},
     str::FromStr,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -13,7 +14,7 @@ use tower::{Service as _, ServiceBuilder};
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
+    config::{DeploymentTarget, router::RouterConfig},
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
@@ -61,7 +62,7 @@ const UNIFIED_URL_REGEX: &str =
 
 /// Legacy regex for router-specific matching (kept for backward compatibility)
 const ROUTER_URL_REGEX: &str =
-    r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
+    r"^/router/(?P<id>[A-Za-z0-9_-]+)(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
     rate_limit::Service<CacheService<ErrorHandler<unified_api::Service>>>;
@@ -94,12 +95,10 @@ pub struct MetaRouter {
 impl MetaRouter {
     pub async fn new(app_state: AppState) -> Result<Self, InitError> {
         let meta_router = match app_state.0.config.deployment_target {
-            DeploymentTarget::Cloud | DeploymentTarget::Sidecar => {
-                // Note: Cloud will eventually get router configs from the
-                // database, but for not we are just allowing
-                // the cloud to be deployed to start dogfooding
-                Self::from_config(app_state).await
+            DeploymentTarget::Sidecar => {
+                Self::sidecar_from_config(app_state).await
             }
+            DeploymentTarget::Cloud => Self::cloud_from_config(app_state).await,
         }?;
         tracing::info!(
             num_routers = meta_router.inner.len(),
@@ -108,15 +107,86 @@ impl MetaRouter {
         Ok(meta_router)
     }
 
-    pub async fn from_config(app_state: AppState) -> Result<Self, InitError> {
+    pub async fn cloud_from_config(
+        app_state: AppState,
+    ) -> Result<Self, InitError> {
+        let unified_url_regex =
+            Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
+        let router_url_regex =
+            Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
+        let mut inner = HashMap::default();
+
+        let database = &app_state.0.database;
+        let routers =
+            database.as_ref().unwrap().get_all_routers().await.map_err(
+                |e| {
+                    tracing::error!(error = %e, "failed to get all routers");
+                    InitError::DefaultRouterNotFound
+                },
+            )?;
+        for router in routers {
+            let router_id = RouterId::Named(CompactString::from(
+                router.router_id.to_string(),
+            ));
+            let router_config = serde_json::from_value::<RouterConfig>(
+                router.config.clone(),
+            )
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to parse router config");
+                InitError::DefaultRouterNotFound
+            })?;
+
+            let router = Router::new(
+                router_id.clone(),
+                Arc::new(router_config),
+                app_state.clone(),
+            )
+            .await?;
+            inner.insert(router_id.clone(), router);
+        }
+        let unified_api = ServiceBuilder::new()
+            // TODO: should we change how global configs work for rate limiting,
+            // caching?       For now, leave these types here to
+            // make it easier to change later on.
+            .layer(rate_limit::Layer::disabled())
+            .layer(CacheLayer::disabled())
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .service(unified_api::Service::new(&app_state)?);
+        let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
+
+        let meta_router = Self {
+            inner,
+            unified_api,
+            direct_proxies,
+            unified_url_regex,
+            router_url_regex,
+        };
+        Ok(meta_router)
+    }
+
+    pub async fn sidecar_from_config(
+        app_state: AppState,
+    ) -> Result<Self, InitError> {
         let unified_url_regex =
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
         let mut inner = HashMap::default();
         for router_id in app_state.0.config.routers.as_ref().keys() {
-            let router =
-                Router::new(router_id.clone(), app_state.clone()).await?;
+            let router_config = app_state
+                .0
+                .config
+                .routers
+                .as_ref()
+                .get(router_id)
+                .ok_or(InitError::DefaultRouterNotFound)?
+                .clone();
+            let router = Router::new(
+                router_id.clone(),
+                Arc::new(router_config),
+                app_state.clone(),
+            )
+            .await?;
             inner.insert(router_id.clone(), router);
         }
         let unified_api = ServiceBuilder::new()

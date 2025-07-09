@@ -7,9 +7,10 @@ use std::{
 
 use crate::{
     app_state::AppState,
+    config::router::RouterConfig,
     error::{api::ApiError, init::InitError, internal::InternalError},
     middleware::cache::service::{CacheLayer, CacheService},
-    types::{request::Request, response::Response, router::RouterId},
+    types::{request::Request, response::Response},
 };
 
 #[derive(Debug, Clone)]
@@ -20,13 +21,8 @@ pub struct Layer {
 impl Layer {
     pub fn for_router(
         app_state: &AppState,
-        router_id: &RouterId,
+        router_config: &RouterConfig,
     ) -> Result<Self, InitError> {
-        let config = app_state.config();
-        let router_config = config
-            .routers
-            .get(router_id)
-            .ok_or(InitError::InvalidRouterId(router_id.to_string()))?;
         let layer = CacheLayer::for_router(app_state.clone(), router_config);
         Ok(Self { inner: layer })
     }

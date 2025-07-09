@@ -28,8 +28,9 @@ use crate::{
     app_state::{AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
-    config::{Config, cache::CacheStore, server::TlsConfig},
+    config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
     control_plane::control_plane_state::ControlPlaneState,
+    database::Database,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -181,7 +182,7 @@ impl tower::Service<crate::types::request::Request> for App {
 impl App {
     pub async fn new(config: Config) -> Result<Self, InitError> {
         tracing::debug!("creating app");
-        let app_state = Self::build_app_state(config)?;
+        let app_state = Self::build_app_state(config).await?;
         let service_stack =
             Self::build_service_stack(app_state.clone()).await?;
 
@@ -196,8 +197,13 @@ impl App {
     /// Initializes all the clients, managers, and other stateful components
     /// that are shared across the application. This includes setting up
     /// metrics, monitoring, caching, and API keys.
-    fn build_app_state(config: Config) -> Result<AppState, InitError> {
+    async fn build_app_state(config: Config) -> Result<AppState, InitError> {
         let minio = Minio::new(config.minio.clone())?;
+        let database = if config.deployment_target == DeploymentTarget::Cloud {
+            Some(Database::new(config.database.clone()).await?)
+        } else {
+            None
+        };
         let jawn_http_client = JawnClient::new()?;
 
         let meter = global::meter(SERVICE_NAME);
@@ -225,11 +231,16 @@ impl App {
                     );
                 })?;
 
-        let cache_manager = setup_cache(&config, metrics.clone())?;
+        let cache_manager = setup_cache(
+            &config,
+            metrics.clone(),
+            config.deployment_target.clone(),
+        )?;
 
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
+            database,
             jawn_http_client,
             control_plane_state: Arc::new(RwLock::new(
                 ControlPlaneState::default(),
@@ -493,6 +504,7 @@ fn setup_redis_cache(
 fn setup_cache(
     config: &Config,
     metrics: Metrics,
+    deployment_target: DeploymentTarget,
 ) -> std::result::Result<Option<CacheClient>, InitError> {
     match &config.cache_store {
         Some(CacheStore::InMemory { max_size }) => {

@@ -13,6 +13,7 @@ use crate::{
         response_headers::ResponseHeadersConfig, router::RouterConfig,
     },
     control_plane::control_plane_state::ControlPlaneState,
+    database::Database,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -49,6 +50,7 @@ impl AppState {
 pub struct InnerAppState {
     pub config: Config,
     pub minio: Minio,
+    pub database: Option<Database>,
     pub jawn_http_client: JawnClient,
     pub control_plane_state: Arc<RwLock<ControlPlaneState>>,
     pub direct_proxy_api_keys: ProviderKeys,
