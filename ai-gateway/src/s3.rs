@@ -26,9 +26,9 @@ struct SignedUrlRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SignedGetUrlRequest {
-    prompt_id: String,
-    version_id: String,
+struct SignedGetUrlRequest<'a> {
+    prompt_id: &'a str,
+    version_id: &'a str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,8 +179,8 @@ impl<'a> S3Client<'a> {
                     .request_client
                     .post(signed_request_url)
                     .json(&SignedGetUrlRequest {
-                        prompt_id: prompt_id.to_string(),
-                        version_id: version_id.to_string(),
+                        prompt_id,
+                        version_id,
                     })
                     .header(
                         "authorization",
@@ -195,12 +195,12 @@ impl<'a> S3Client<'a> {
                     .error_for_status()
                     .map_err(|e| {
                         tracing::error!(error = %e, "failed to get signed get url");
-                        PromptError::FailedToSendRequest(e)
+                        PromptError::FailedToGetPromptBody(e)
                     })?;
 
                 let signed_url = signed_url.json::<JawnResponse<SignedUrlResponse>>().await.map_err(|e| {
                     tracing::error!(error = %e, "failed to deserialize signed get url response");
-                    PromptError::FailedToSendRequest(e)
+                    PromptError::FailedToGetPromptBody(e)
                 })?.data().map_err(|e| {
                     tracing::error!(error = %e, "failed to get signed get url");
                     PromptError::UnexpectedResponse(e)

@@ -9,10 +9,10 @@ use crate::{
     config::DeploymentTarget,
     error::{
         api::ApiError, init::InitError, internal::InternalError,
-        prompts::PromptError,
+        invalid_req::InvalidRequestError, prompts::PromptError,
     },
     s3::S3Client,
-    types::{extensions::AuthContext, request::Request, response::Response},
+    types::{extensions::AuthContext, request::Request, response::{JawnResponse, Response}},
 };
 
 #[derive(Debug, Clone)]
@@ -87,11 +87,6 @@ where
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct Prompt2025VersionResponse {
-    data: Prompt2025Version,
-}
-
-#[derive(Debug, serde::Deserialize)]
 struct Prompt2025Version {
     id: String,
 }
@@ -107,15 +102,9 @@ async fn build_prompt_request(
         .map_err(InternalError::CollectBodyError)?
         .to_bytes();
 
-    if !app_state.config().helicone.is_prompts_enabled() {
-        let req =
-            Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
-        return Ok(req);
-    }
-
     let request_json: serde_json::Value =
         serde_json::from_slice(&body_bytes)
-            .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+            .map_err(|e| ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(e)))?;
 
     tracing::debug!(
         "Original request body: {}",
@@ -139,7 +128,11 @@ async fn build_prompt_request(
         .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
 
     let version_response =
-        get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?;
+        get_prompt_version(&app_state, &prompt_id, &auth_ctx).await?
+        .data().map_err(|e| {
+            tracing::error!(error = %e, "failed to get production version");
+            ApiError::Internal(InternalError::PromptError(PromptError::UnexpectedResponse(e)))
+        })?;
 
     let s3_client = match app_state.config().deployment_target {
         DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),
@@ -153,7 +146,7 @@ async fn build_prompt_request(
             &app_state,
             &auth_ctx,
             &prompt_id,
-            &version_response.data.id,
+            &version_response.id,
         )
         .await
         .map_err(|e| ApiError::Internal(InternalError::PromptError(e)))?;
@@ -183,7 +176,7 @@ async fn get_prompt_version(
     app_state: &AppState,
     prompt_id: &str,
     auth_ctx: &AuthContext,
-) -> Result<Prompt2025VersionResponse, ApiError> {
+) -> Result<JawnResponse<Prompt2025Version>, ApiError> {
     let endpoint_url = app_state
         .config()
         .helicone
@@ -217,7 +210,7 @@ async fn get_prompt_version(
         })?;
 
     response
-        .json::<Prompt2025VersionResponse>()
+        .json::<JawnResponse<Prompt2025Version>>()
         .await
         .map_err(|e| {
             ApiError::Internal(InternalError::PromptError(
