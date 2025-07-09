@@ -7,6 +7,12 @@ helicone:
   websocket-url: "ws://localhost:8585/ws/v1/router/control-plane"
   features: all
 
+deployment-target: sidecar
+
+# cache-store:
+#   type: redis
+#   host-url: "redis://localhost:6379"
+
 routers:
   my-router:
     load-balance:

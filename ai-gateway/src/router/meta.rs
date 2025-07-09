@@ -286,6 +286,7 @@ impl MetaRouter {
         if let Some(router) = self.inner.get_mut(router_id) {
             req.extensions_mut().insert(extracted_path_and_query);
             req.extensions_mut().insert(RequestKind::Router);
+            req.extensions_mut().insert(router_id.clone());
             ResponseFuture::RouterRequest {
                 future: router.call(req),
             }

@@ -1,8 +1,8 @@
 [package]
 name = "ai-gateway"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
 repository = "https://github.com/Helicone/ai-gateway"
 default-run = "ai-gateway"
 description = "A high-performance LLM proxy router."
@@ -87,7 +87,7 @@ tower_governor = { workspace = true, features = [] }
 tower-http = { workspace = true, features = [ 'default', 'auth', 'catch-panic', 'add-extension', 'normalize-path', 'request-id', 'trace', 'util', 'sensitive-headers', 'compression-br', 'compression-deflate', 'compression-gzip', 'compression-zstd', 'decompression-br', 'decompression-deflate', 'decompression-gzip', 'decompression-zstd' ] }
 tower-otel-http-metrics = { workspace = true }
 tracing = { workspace = true }
-tracing-opentelemetry.workspace = true
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ['env-filter', 'std'] }
 typed-builder = { workspace = true }
 url = { workspace = true, features = ['serde'] }
