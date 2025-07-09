@@ -19,8 +19,9 @@ pub enum HeliconeFeatures {
     /// Authentication and observability.
     Observability,
     /// Authentication and prompts.
+    #[serde(rename = "__prompts")]
     Prompts,
-    /// Authentication, observability, and prompts.
+    /// Authentication and observability (does not include prompts).
     All,
 }
 
@@ -61,8 +62,10 @@ impl HeliconeConfig {
 
     #[must_use]
     pub fn is_prompts_enabled(&self) -> bool {
-        self.features == HeliconeFeatures::All
-            || self.features == HeliconeFeatures::Prompts
+        // Temporarily disabled
+        false
+        // self.features == HeliconeFeatures::All
+        //     || self.features == HeliconeFeatures::Prompts
     }
 }
 
@@ -130,6 +133,7 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
             Features,
             Authentication,
             Observability,
+            #[serde(rename = "__prompts")]
             Prompts,
         }
 
@@ -261,7 +265,7 @@ impl<'de> Deserialize<'de> for HeliconeConfig {
             "features",
             "authentication",
             "observability",
-            "prompts",
+            "__prompts",
         ];
         deserializer.deserialize_struct(
             "HeliconeConfig",
@@ -294,7 +298,7 @@ features: "all"
 api-key: "sk-test-key"
 authentication: true
 observability: true
-prompts: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -307,7 +311,7 @@ prompts: true
 api-key: "sk-test-key"
 authentication: true
 observability: false
-prompts: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -320,7 +324,7 @@ prompts: false
 api-key: "sk-test-key"
 authentication: false
 observability: true
-prompts: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -333,7 +337,7 @@ prompts: false
 api-key: "sk-test-key"
 authentication: false
 observability: false
-prompts: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -346,7 +350,7 @@ prompts: true
 api-key: "sk-test-key"
 authentication: false
 observability: false
-prompts: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -379,7 +383,7 @@ observability: true
     fn test_deserialize_prompts_true_only() {
         let yaml = r#"
 api-key: "sk-test-key"
-prompts: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -412,7 +416,7 @@ observability: false
     fn test_deserialize_prompts_false_only() {
         let yaml = r#"
 api-key: "sk-test-key"
-prompts: false
+__prompts: false
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -437,11 +441,11 @@ api-key: "sk-test-key"
 features: "auth"
 authentication: true
 observability: true
-prompts: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
-        // features field should take precedence over auth/observability/prompts
+        // features field should take precedence over auth/observability/__prompts
         assert_eq!(config.features, HeliconeFeatures::Auth);
     }
 
@@ -452,7 +456,7 @@ api-key: "sk-test-key"
 features: "none"
 authentication: true
 observability: true
-prompts: true
+__prompts: true
 "#;
 
         let config: HeliconeConfig = serde_yml::from_str(yaml).unwrap();
@@ -466,7 +470,7 @@ prompts: true
             ("none", HeliconeFeatures::None),
             ("auth", HeliconeFeatures::Auth),
             ("observability", HeliconeFeatures::Observability),
-            ("prompts", HeliconeFeatures::Prompts),
+            ("__prompts", HeliconeFeatures::Prompts),
             ("all", HeliconeFeatures::All),
         ];
 
