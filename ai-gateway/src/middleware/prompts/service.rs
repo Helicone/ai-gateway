@@ -6,7 +6,7 @@ use std::{
 use futures::future::BoxFuture;
 use http_body_util::BodyExt;
 use tracing::{Instrument, info_span};
-use std::string::ToString;
+
 use crate::{
     app_state::AppState,
     config::DeploymentTarget,
