@@ -37,7 +37,7 @@ pub struct MapperContext {
     pub model: Option<ModelId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PromptContext {
     pub prompt_id: String,
     pub prompt_version_id: Option<String>,

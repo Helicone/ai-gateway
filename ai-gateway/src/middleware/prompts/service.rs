@@ -190,42 +190,11 @@ async fn build_prompt_request(
     Ok(req)
 }
 
-fn get_prompt_params(request_json: &Value) -> Result<PromptContext, ()> {
-    let Some(request_obj) = request_json.as_object() else {
-        return Err(());
-    };
-
-    let Some(prompt_id) = request_obj
-        .get("promptId")
-        .and_then(|v| v.as_str())
-        .map(str::to_string)
-    else {
-        tracing::error!("Missing promptId field");
-        return Err(());
-    };
-
-    let prompt_version_id = request_obj
-        .get("promptVersionId")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-
-    let inputs = request_obj
-        .get("inputs")
-        .and_then(|v| v.as_object())
-        .filter(|obj| !obj.is_empty())
-        .map(|obj| {
-            obj.iter()
-                .filter_map(|(k, v)| {
-                    v.as_str().map(|s| (k.clone(), s.to_string()))
-                })
-                .collect()
-        });
-
-    Ok(PromptContext {
-        prompt_id,
-        prompt_version_id,
-        inputs,
-    })
+fn get_prompt_params(
+    request_json: &Value,
+) -> Result<PromptContext, InvalidRequestError> {
+    let prompt_ctx = serde_json::from_value(request_json.clone())?;
+    Ok(prompt_ctx)
 }
 
 async fn get_prompt_version(
