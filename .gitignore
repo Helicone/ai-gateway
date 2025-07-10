@@ -6,6 +6,7 @@ node_modules
 .DS_Store
 bindings/
 
+__pycache__/
 # Terraform files
 .terraform/
 *.tfstate
