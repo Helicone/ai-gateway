@@ -138,36 +138,43 @@ impl MetaRouter {
 
     fn parse_route(&self, request: &Request) -> Result<RouteType, ApiError> {
         let path = request.uri().path();
-        if let Some(captures) = self.unified_url_regex.captures(path) {
-            let first_segment = captures
-                .name("first_segment")
-                .ok_or_else(|| {
-                    ApiError::InvalidRequest(InvalidRequestError::NotFound(
-                        path.to_string(),
-                    ))
-                })?
-                .as_str();
+        let Some(captures) = self.unified_url_regex.captures(path) else {
+            return Err(ApiError::InvalidRequest(
+                InvalidRequestError::NotFound(path.to_string()),
+            ));
+        };
 
-            let is_router_request = first_segment == "router";
-            let is_unified_api_request = first_segment == "ai";
+        let first_segment = captures
+            .name("first_segment")
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(InvalidRequestError::NotFound(
+                    path.to_string(),
+                ))
+            })?
+            .as_str();
 
-            let rest_path = captures
-                .name("rest")
-                .map(|m| m.as_str())
-                .unwrap_or_default();
-            if let Some(forced_routing) =
-                request.headers().get(FORCED_ROUTING_HEADER)
-                && let Ok(forced_routing) = forced_routing.to_str()
-                && (is_router_request || is_unified_api_request)
-            {
-                let Ok(provider) = InferenceProvider::from_str(forced_routing);
-                return Ok(RouteType::DirectProxy {
-                    provider,
-                    path: rest_path.trim_start_matches('/').into(),
-                });
-            }
+        let rest_path = captures
+            .name("rest")
+            .map(|m| m.as_str())
+            .unwrap_or_default();
 
-            if is_router_request {
+        // Check for forced routing header that applies to router and unified
+        // API requests
+        if let Some(forced_routing) =
+            request.headers().get(FORCED_ROUTING_HEADER)
+            && let Ok(forced_routing) = forced_routing.to_str()
+            && matches!(first_segment, "router" | "ai")
+        {
+            let Ok(provider) = InferenceProvider::from_str(forced_routing);
+            return Ok(RouteType::DirectProxy {
+                provider,
+                path: rest_path.trim_start_matches('/').into(),
+            });
+        }
+
+        // Route based on first path segment
+        match first_segment {
+            "router" => {
                 // Use the router-specific regex for detailed parsing
                 let (router_id, extracted_api_path) =
                     extract_router_id_and_path(&self.router_url_regex, path)?;
@@ -175,21 +182,17 @@ impl MetaRouter {
                     id: router_id,
                     path: extracted_api_path.into(),
                 })
-            } else if is_unified_api_request {
-                Ok(RouteType::UnifiedApi {
-                    path: rest_path.into(),
-                })
-            } else {
-                let Ok(provider) = InferenceProvider::from_str(first_segment);
+            }
+            "ai" => Ok(RouteType::UnifiedApi {
+                path: rest_path.into(),
+            }),
+            provider_name => {
+                let Ok(provider) = InferenceProvider::from_str(provider_name);
                 Ok(RouteType::DirectProxy {
                     provider,
                     path: rest_path.trim_start_matches('/').into(),
                 })
             }
-        } else {
-            Err(ApiError::InvalidRequest(InvalidRequestError::NotFound(
-                path.to_string(),
-            )))
         }
     }
 

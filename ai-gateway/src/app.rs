@@ -338,32 +338,59 @@ impl meltdown::Service for App {
                             .await
                             .map_err(InitError::Tls)?;
 
-                    tokio::select! {
-                        biased;
-                        server_output = axum_server::bind_rustls(addr, tls_config)
+                    let server_future =
+                        axum_server::bind_rustls(addr, tls_config)
                             // https://brooker.co.za/blog/2024/05/09/nagle.html
                             .acceptor(NoDelayAcceptor)
                             .handle(handle.clone())
-                            .serve(app_factory) => server_output.map_err(RuntimeError::Serve)?,
-                        () = token => {
-                            handle.graceful_shutdown(Some(config.server.shutdown_timeout));
-                        }
-                    };
+                            .serve(app_factory);
+
+                    Self::run_server_with_shutdown(
+                        server_future,
+                        handle,
+                        token,
+                        config.server.shutdown_timeout,
+                    )
+                    .await?;
                 }
                 TlsConfig::Disabled => {
-                    tokio::select! {
-                        biased;
-                        server_output = axum_server::bind(addr)
-                            .handle(handle.clone())
-                            .serve(app_factory) => server_output.map_err(RuntimeError::Serve)?,
-                        () = token => {
-                            handle.graceful_shutdown(Some(config.server.shutdown_timeout));
-                        }
-                    };
+                    let server_future = axum_server::bind(addr)
+                        .handle(handle.clone())
+                        .serve(app_factory);
+
+                    Self::run_server_with_shutdown(
+                        server_future,
+                        handle,
+                        token,
+                        config.server.shutdown_timeout,
+                    )
+                    .await?;
                 }
             }
             Ok(())
         })
+    }
+}
+
+impl App {
+    /// Common server startup logic with graceful shutdown handling
+    async fn run_server_with_shutdown<F>(
+        server_future: F,
+        handle: axum_server::Handle,
+        token: Token,
+        shutdown_timeout: std::time::Duration,
+    ) -> Result<(), RuntimeError>
+    where
+        F: std::future::Future<Output = std::io::Result<()>>,
+    {
+        tokio::select! {
+            biased;
+            server_output = server_future => server_output.map_err(RuntimeError::Serve)?,
+            () = token => {
+                handle.graceful_shutdown(Some(shutdown_timeout));
+            }
+        };
+        Ok(())
     }
 }
 

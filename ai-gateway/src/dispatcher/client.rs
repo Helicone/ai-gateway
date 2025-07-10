@@ -110,6 +110,19 @@ impl Client {
         }
     }
 
+    /// Consolidated client creation logic that handles the common pattern
+    fn new_with_api_key(
+        app_state: &AppState,
+        inference_provider: InferenceProvider,
+        api_key: Option<ProviderKey>,
+    ) -> Result<Self, InitError> {
+        if inference_provider == InferenceProvider::Ollama {
+            return Self::new_inner(app_state, inference_provider, None);
+        }
+
+        Self::new_inner(app_state, inference_provider, api_key.as_ref())
+    }
+
     pub(crate) async fn new_for_router(
         app_state: &AppState,
         inference_provider: InferenceProvider,
@@ -118,11 +131,12 @@ impl Client {
         if inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
-        let api_key = &app_state
+
+        let api_key = app_state
             .get_provider_api_key_for_router(router_id, &inference_provider)
             .await?;
 
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
+        Self::new_with_api_key(app_state, inference_provider, api_key)
     }
 
     pub(crate) fn new_for_direct_proxy(
@@ -132,10 +146,11 @@ impl Client {
         if inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
-        let api_key = &app_state
+
+        let api_key = app_state
             .get_provider_api_key_for_direct_proxy(&inference_provider)?;
 
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
+        Self::new_with_api_key(app_state, inference_provider, api_key)
     }
 
     pub(crate) fn new_for_unified_api(
@@ -145,12 +160,13 @@ impl Client {
         if inference_provider == InferenceProvider::Ollama {
             return Self::new_inner(app_state, inference_provider, None);
         }
+
         // we're cheating here but this will be changed soon for cloud hosted
         // version
-        let api_key = &app_state
+        let api_key = app_state
             .get_provider_api_key_for_direct_proxy(&inference_provider)?;
 
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
+        Self::new_with_api_key(app_state, inference_provider, api_key)
     }
 }
 
