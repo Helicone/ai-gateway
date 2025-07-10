@@ -1,13 +1,14 @@
 use std::{
     string::ToString,
     task::{Context, Poll},
+    collections::HashSet,
 };
 
 use futures::future::BoxFuture;
 use http_body_util::BodyExt;
+use regex::Regex;
 use serde_json::Value;
 use tracing::{Instrument, info_span};
-use regex::Regex;
 
 use crate::{
     app_state::AppState,
@@ -134,7 +135,8 @@ async fn build_prompt_request(
         .cloned()
         .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
 
-    let version_id = if let Some(ref version_id) = prompt_ctx.prompt_version_id {
+    let version_id = if let Some(ref version_id) = prompt_ctx.prompt_version_id
+    {
         version_id.clone()
     } else {
         let version_response = get_prompt_version(
@@ -318,8 +320,11 @@ fn process_prompt_variables(
     let variable_regex = Regex::new(r"\{\{\s*hc\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
+    // track validated variables to avoid re-validation
+    let mut validated_variables = HashSet::new();
+
     for message_value in messages_array {
-        process_message_variables(message_value, inputs, &variable_regex)?;
+        process_message_variables(message_value, inputs, &variable_regex, &mut validated_variables)?;
     }
 
     Ok(body)
@@ -329,23 +334,31 @@ fn process_message_variables(
     message_value: &mut serde_json::Value,
     inputs: &std::collections::HashMap<String, String>,
     variable_regex: &Regex,
+    validated_variables: &mut HashSet<String>,
 ) -> Result<(), ApiError> {
-    
-    // We can do this without matching to role type (e.g specific types for User/Assistant...)
-    // since they all follow the same structure.
-    // Unsure whether or not we should match to all the types for very redundant but technically better code.
+    // We can do this without matching to role type (e.g specific types for
+    // User/Assistant...) since they all follow the same structure.
+    // Unsure whether or not we should match to all the types for very redundant
+    // but technically better code.
     if let Some(content_value) = message_value.get_mut("content") {
         match content_value {
             serde_json::Value::String(text) => {
-                let processed_text = replace_variables(text, inputs, variable_regex);
+                let processed_text =
+                    replace_variables(text, inputs, variable_regex, validated_variables)?;
                 *content_value = serde_json::Value::String(processed_text);
             }
             serde_json::Value::Array(parts) => {
                 for part in parts {
                     if let Some(text_value) = part.get_mut("text") {
                         if let Some(text_str) = text_value.as_str() {
-                            let processed_text = replace_variables(text_str, inputs, variable_regex);
-                            *text_value = serde_json::Value::String(processed_text);
+                            let processed_text = replace_variables(
+                                text_str,
+                                inputs,
+                                variable_regex,
+                                validated_variables,
+                            )?;
+                            *text_value =
+                                serde_json::Value::String(processed_text);
                         }
                     }
                 }
@@ -361,13 +374,55 @@ fn replace_variables(
     text: &str,
     inputs: &std::collections::HashMap<String, String>,
     variable_regex: &Regex,
-) -> String {
-    variable_regex.replace_all(text, |caps: &regex::Captures| {
-        // 3 capture groups: hc, name, type
+    validated_variables: &mut std::collections::HashSet<String>,
+) -> Result<String, ApiError> {
+    for caps in variable_regex.captures_iter(text) {
+        let variable_name = &caps[1];
+        let variable_type = &caps[2];
+        
+        if validated_variables.contains(variable_name) {
+            continue;
+        }
+        
+        if let Some(value) = inputs.get(variable_name) {
+            validate_variable_type(value, variable_type)?;
+            validated_variables.insert(variable_name.to_string());
+        }
+    }
+    
+    let result = variable_regex.replace_all(text, |caps: &regex::Captures| {
         let variable_name = &caps[1];
         inputs.get(variable_name).map_or_else(
             || caps.get(0).unwrap().as_str().to_string(), // Return original if not found
             |value| value.clone(),
         )
-    }).to_string()
+    });
+    
+    Ok(result.to_string())
+}
+
+fn validate_variable_type(value: &str, expected_type: &str) -> Result<String, ApiError> {
+    match expected_type {
+        "number" => {
+            value.parse::<f64>()
+                .map(|_| value.to_string())
+                .map_err(|_| {
+                    let error_msg = format!("Variable value '{}' cannot be converted to number", value);
+                    let json_error = serde_json::from_str::<serde_json::Value>(&error_msg).unwrap_err();
+                    ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(json_error))
+                })
+        }
+        "boolean" => {
+            let lowercase_value = value.to_lowercase();
+            match lowercase_value.as_str() {
+                "true" | "false" | "yes" | "no" => Ok(value.to_string()),
+                _ => {
+                    let error_msg = format!("Variable value '{}' is not a valid boolean (expected: true, false, yes, no)", value);
+                    let json_error = serde_json::from_str::<serde_json::Value>(&error_msg).unwrap_err();
+                    Err(ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(json_error)))
+                }
+            }
+        }
+        _ => Ok(value.to_string())
+    }
 }
