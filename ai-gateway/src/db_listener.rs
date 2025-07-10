@@ -65,8 +65,6 @@ enum ConnectedCloudGatewaysNotification {
     },
 }
 
-const MAX_CHANNEL_CAPACITY: usize = 100;
-
 impl DatabaseListener {
     pub async fn new(app_state: AppState) -> Result<Self, InitError> {
         let config = app_state.0.config.database.clone();
