@@ -118,40 +118,12 @@ impl MetaRouter {
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
         // let mut inner = HashMap::default();
 
-        let database = &app_state.0.database;
-        let routers =
-            database.as_ref().unwrap().get_all_routers().await.map_err(
-                |e| {
-                    tracing::error!(error = %e, "failed to get all routers");
-                    InitError::DefaultRouterNotFound
-                },
-            )?;
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
-        let rx = app_state.0.router_rx.read().await;
-        let discovery = discovery_factory.call(Some(rx)).await?;
+        let mut discovery_factory = DiscoverFactory::new(app_state.clone());
+        let rx = app_state.get_router_rx().await;
+        let discovery = discovery_factory.call(rx).await?;
         let dynamic_router = DynamicRouter::new(discovery);
         // let discovery = Discovery::new(&app_state).await?;
-        // let dynamic_router = DynamicRouter::new(discovery);
-        // for router in routers {
-        //     let router_id = RouterId::Named(CompactString::from(
-        //         router.router_id.to_string(),
-        //     ));
-        //     let router_config = serde_json::from_value::<RouterConfig>(
-        //         router.config.clone(),
-        //     )
-        //     .map_err(|e| {
-        //         tracing::error!(error = %e, "failed to parse router config");
-        //         InitError::DefaultRouterNotFound
-        //     })?;
 
-        //     let router = Router::new(
-        //         router_id.clone(),
-        //         Arc::new(router_config),
-        //         app_state.clone(),
-        //     )
-        //     .await?;
-        //     inner.insert(router_id.clone(), router);
-        // }
         let unified_api = ServiceBuilder::new()
             // TODO: should we change how global configs work for rate limiting,
             // caching?       For now, leave these types here to
@@ -179,7 +151,7 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let mut discovery_factory = DiscoverFactory::new(app_state.clone());
         let discovery = discovery_factory.call(None).await?;
         let dynamic_router = DynamicRouter::new(discovery);
         let unified_api = ServiceBuilder::new()
@@ -276,20 +248,25 @@ impl MetaRouter {
                     };
                 }
             };
-        if let Some(router) = self.inner.get_mut(router_id) {
-            req.extensions_mut().insert(extracted_path_and_query);
-            req.extensions_mut().insert(RequestKind::Router);
-            req.extensions_mut().insert(router_id.clone());
-            ResponseFuture::RouterRequest {
-                future: router.call(req),
-            }
-        } else {
-            ResponseFuture::Ready {
-                future: ready(Err(ApiError::InvalidRequest(
-                    InvalidRequestError::NotFound(req.uri().path().to_string()),
-                ))),
-            }
+
+        req.extensions_mut().insert(extracted_path_and_query);
+        req.extensions_mut().insert(RequestKind::Router);
+        req.extensions_mut().insert(router_id.clone());
+        ResponseFuture::RouterRequest {
+            future: self.dynamic_router.call(req),
         }
+
+        // if let Some(router) = self.inner.get_mut(router_id) {
+        //     ResponseFuture::RouterRequest {
+        //         future: router.call(req),
+        //     }
+        // } else {
+        //     ResponseFuture::Ready {
+        //         future: ready(Err(ApiError::InvalidRequest(
+        //             InvalidRequestError::NotFound(req.uri().path().to_string()),
+        //         ))),
+        //     }
+        // }
     }
 
     fn handle_unified_api_request(
@@ -373,11 +350,11 @@ impl tower::Service<crate::types::request::Request> for MetaRouter {
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let mut any_pending = false;
-        for router in self.inner.values_mut() {
-            if router.poll_ready(ctx).is_pending() {
-                any_pending = true;
-            }
+
+        if self.dynamic_router.poll_ready(ctx).is_pending() {
+            any_pending = true;
         }
+
         if self.unified_api.poll_ready(ctx).is_pending() {
             any_pending = true;
         }
@@ -453,7 +430,7 @@ pin_project! {
         },
         RouterRequest {
             #[pin]
-            future: <Router as tower::Service<crate::types::request::Request>>::Future,
+            future: <DynamicRouter<Discovery, axum_core::body::Body> as tower::Service<crate::types::request::Request>>::Future,
         },
         UnifiedApi {
             #[pin]

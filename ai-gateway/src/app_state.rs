@@ -138,6 +138,13 @@ impl AppState {
         Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
     }
 
+    pub async fn get_router_rx(
+        &self,
+    ) -> Option<Receiver<Change<RouterId, Router>>> {
+        let mut router_rx = self.0.router_rx.write().await;
+        router_rx.take()
+    }
+
     pub async fn set_router_rx(&self, rx: Receiver<Change<RouterId, Router>>) {
         let mut router_rx = self.0.router_rx.write().await;
         *router_rx = Some(rx);

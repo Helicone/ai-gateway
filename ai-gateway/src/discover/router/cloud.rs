@@ -5,6 +5,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use compact_str::CompactString;
 use futures::Stream;
 use pin_project_lite::pin_project;
 use tokio::sync::mpsc::Receiver;
@@ -12,8 +13,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tower::discover::Change;
 
 use crate::{
-    app_state::AppState, discover::provider::config::ServiceMap,
-    error::init::InitError, router::service::Router, types::router::RouterId,
+    app_state::AppState, config::router::RouterConfig,
+    discover::provider::config::ServiceMap, error::init::InitError,
+    router::service::Router, types::router::RouterId,
 };
 
 pin_project! {
@@ -49,17 +51,35 @@ impl CloudDiscovery {
     ) -> Result<Self, InitError> {
         if let Some(rx) = rx {
             let mut service_map: HashMap<RouterId, Router> = HashMap::new();
-            for (router_id, router_config) in
-                app_state.0.config.routers.as_ref()
-            {
-                let key = router_id.clone();
+            let database = &app_state.0.database;
+            let routers = database
+                .as_ref()
+                .unwrap()
+                .get_all_routers()
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "failed to get all routers");
+                    InitError::DefaultRouterNotFound
+                })?;
+            for router in routers {
+                let router_id = RouterId::Named(CompactString::from(
+                    router.router_id.to_string(),
+                ));
+                let router_config = serde_json::from_value::<RouterConfig>(
+                router.config.clone(),
+            )
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to parse router config");
+                InitError::DefaultRouterNotFound
+            })?;
+
                 let router = Router::new(
-                    key.clone(),
-                    Arc::new(router_config.clone()),
+                    router_id.clone(),
+                    Arc::new(router_config),
                     app_state.clone(),
                 )
                 .await?;
-                service_map.insert(key, router);
+                service_map.insert(router_id.clone(), router);
             }
 
             tracing::debug!("Created config router discovery");

@@ -72,7 +72,6 @@ where
     discover: D,
 
     services: ReadyCache<D::Key, D::Service, http::Request<ReqBody>>,
-    ready_index: Option<usize>,
 
     _req: PhantomData<ReqBody>,
 }
@@ -104,7 +103,6 @@ where
         Self {
             discover,
             services: ReadyCache::default(),
-            ready_index: None,
 
             _req: PhantomData,
         }

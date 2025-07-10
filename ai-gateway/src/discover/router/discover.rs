@@ -4,7 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{Stream, channel::mpsc::Receiver};
+use futures::Stream;
 use pin_project_lite::pin_project;
 use tokio::sync::mpsc::Receiver;
 use tower::discover::Change;
