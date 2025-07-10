@@ -7,6 +7,7 @@ use futures::future::BoxFuture;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use tracing::{Instrument, info_span};
+use regex::Regex;
 
 use crate::{
     app_state::AppState,
@@ -133,8 +134,8 @@ async fn build_prompt_request(
         .cloned()
         .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
 
-    let version_id = if let Some(version_id) = prompt_ctx.prompt_version_id {
-        version_id
+    let version_id = if let Some(ref version_id) = prompt_ctx.prompt_version_id {
+        version_id.clone()
     } else {
         let version_response = get_prompt_version(
             &app_state,
@@ -182,7 +183,14 @@ async fn build_prompt_request(
         serde_json::to_string_pretty(&merged_body).unwrap_or_default()
     );
 
-    let merged_bytes = serde_json::to_vec(&merged_body)
+    let processed_body = process_prompt_variables(merged_body, &prompt_ctx)?;
+
+    tracing::debug!(
+        "Processed body: {}",
+        serde_json::to_string_pretty(&processed_body).unwrap_or_default()
+    );
+
+    let merged_bytes = serde_json::to_vec(&processed_body)
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
     let req =
@@ -285,4 +293,81 @@ fn merge_prompt_with_request(
     }
 
     Ok(prompt_body)
+}
+
+fn process_prompt_variables(
+    mut body: serde_json::Value,
+    prompt_ctx: &PromptContext,
+) -> Result<serde_json::Value, ApiError> {
+    let Some(inputs) = &prompt_ctx.inputs else {
+        return Ok(body);
+    };
+
+    let Some(body_obj) = body.as_object_mut() else {
+        return Ok(body);
+    };
+
+    let Some(messages_value) = body_obj.get_mut("messages") else {
+        return Ok(body);
+    };
+
+    let Some(messages_array) = messages_value.as_array_mut() else {
+        return Ok(body);
+    };
+
+    let variable_regex = Regex::new(r"\{\{\s*hc\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+        .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+
+    for message_value in messages_array {
+        process_message_variables(message_value, inputs, &variable_regex)?;
+    }
+
+    Ok(body)
+}
+
+fn process_message_variables(
+    message_value: &mut serde_json::Value,
+    inputs: &std::collections::HashMap<String, String>,
+    variable_regex: &Regex,
+) -> Result<(), ApiError> {
+    
+    // We can do this without matching to role type (e.g specific types for User/Assistant...)
+    // since they all follow the same structure.
+    // Unsure whether or not we should match to all the types for very redundant but technically better code.
+    if let Some(content_value) = message_value.get_mut("content") {
+        match content_value {
+            serde_json::Value::String(text) => {
+                let processed_text = replace_variables(text, inputs, variable_regex);
+                *content_value = serde_json::Value::String(processed_text);
+            }
+            serde_json::Value::Array(parts) => {
+                for part in parts {
+                    if let Some(text_value) = part.get_mut("text") {
+                        if let Some(text_str) = text_value.as_str() {
+                            let processed_text = replace_variables(text_str, inputs, variable_regex);
+                            *text_value = serde_json::Value::String(processed_text);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn replace_variables(
+    text: &str,
+    inputs: &std::collections::HashMap<String, String>,
+    variable_regex: &Regex,
+) -> String {
+    variable_regex.replace_all(text, |caps: &regex::Captures| {
+        // 3 capture groups: hc, name, type
+        let variable_name = &caps[1];
+        inputs.get(variable_name).map_or_else(
+            || caps.get(0).unwrap().as_str().to_string(), // Return original if not found
+            |value| value.clone(),
+        )
+    }).to_string()
 }
