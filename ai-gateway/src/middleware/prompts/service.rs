@@ -1,7 +1,7 @@
 use std::{
+    collections::HashSet,
     string::ToString,
     task::{Context, Poll},
-    collections::HashSet,
 };
 
 use futures::future::BoxFuture;
@@ -324,7 +324,12 @@ fn process_prompt_variables(
     let mut validated_variables = HashSet::new();
 
     for message_value in messages_array {
-        process_message_variables(message_value, inputs, &variable_regex, &mut validated_variables)?;
+        process_message_variables(
+            message_value,
+            inputs,
+            &variable_regex,
+            &mut validated_variables,
+        )?;
     }
 
     Ok(body)
@@ -343,8 +348,12 @@ fn process_message_variables(
     if let Some(content_value) = message_value.get_mut("content") {
         match content_value {
             serde_json::Value::String(text) => {
-                let processed_text =
-                    replace_variables(text, inputs, variable_regex, validated_variables)?;
+                let processed_text = replace_variables(
+                    text,
+                    inputs,
+                    variable_regex,
+                    validated_variables,
+                )?;
                 *content_value = serde_json::Value::String(processed_text);
             }
             serde_json::Value::Array(parts) => {
@@ -379,37 +388,49 @@ fn replace_variables(
     for caps in variable_regex.captures_iter(text) {
         let variable_name = &caps[1];
         let variable_type = &caps[2];
-        
+
         if validated_variables.contains(variable_name) {
             continue;
         }
-        
+
         if let Some(value) = inputs.get(variable_name) {
             validate_variable_type(value, variable_type)?;
             validated_variables.insert(variable_name.to_string());
         }
     }
-    
+
     let result = variable_regex.replace_all(text, |caps: &regex::Captures| {
         let variable_name = &caps[1];
         inputs.get(variable_name).map_or_else(
-            || caps.get(0).unwrap().as_str().to_string(), // Return original if not found
+            || caps.get(0).unwrap().as_str().to_string(), /* Return original
+                                                           * if not found */
             |value| value.clone(),
         )
     });
-    
+
     Ok(result.to_string())
 }
 
-fn validate_variable_type(value: &str, expected_type: &str) -> Result<String, ApiError> {
+fn validate_variable_type(
+    value: &str,
+    expected_type: &str,
+) -> Result<String, ApiError> {
     match expected_type {
         "number" => {
-            value.parse::<f64>()
+            value
+                .parse::<f64>()
                 .map(|_| value.to_string())
                 .map_err(|_| {
-                    let error_msg = format!("Variable value '{}' cannot be converted to number", value);
-                    let json_error = serde_json::from_str::<serde_json::Value>(&error_msg).unwrap_err();
-                    ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(json_error))
+                    let error_msg = format!(
+                        "Variable value '{}' cannot be converted to number",
+                        value
+                    );
+                    let json_error =
+                        serde_json::from_str::<serde_json::Value>(&error_msg)
+                            .unwrap_err();
+                    ApiError::InvalidRequest(
+                        InvalidRequestError::InvalidRequestBody(json_error),
+                    )
                 })
         }
         "boolean" => {
@@ -417,12 +438,20 @@ fn validate_variable_type(value: &str, expected_type: &str) -> Result<String, Ap
             match lowercase_value.as_str() {
                 "true" | "false" | "yes" | "no" => Ok(value.to_string()),
                 _ => {
-                    let error_msg = format!("Variable value '{}' is not a valid boolean (expected: true, false, yes, no)", value);
-                    let json_error = serde_json::from_str::<serde_json::Value>(&error_msg).unwrap_err();
-                    Err(ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(json_error)))
+                    let error_msg = format!(
+                        "Variable value '{}' is not a valid boolean \
+                         (expected: true, false, yes, no)",
+                        value
+                    );
+                    let json_error =
+                        serde_json::from_str::<serde_json::Value>(&error_msg)
+                            .unwrap_err();
+                    Err(ApiError::InvalidRequest(
+                        InvalidRequestError::InvalidRequestBody(json_error),
+                    ))
                 }
             }
         }
-        _ => Ok(value.to_string())
+        _ => Ok(value.to_string()),
     }
 }
