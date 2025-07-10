@@ -409,7 +409,7 @@ fn replace_variables(
         let variable_name = &caps[1];
         inputs.get(variable_name).map_or_else(
             || caps.get(0).unwrap().as_str().to_string(),
-            |value| value.as_string(),
+            |value| value.to_string(),
         )
     });
 
@@ -420,7 +420,7 @@ fn validate_variable_type(
     value: &PromptInputValue,
     expected_type: &str,
 ) -> Result<String, ApiError> {
-    let value_string = value.as_string();
+    let value_string = value.to_string();
 
     match expected_type {
         "string" => Ok(value_string),

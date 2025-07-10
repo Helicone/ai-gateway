@@ -46,12 +46,12 @@ pub enum PromptInputValue {
     Boolean(bool),
 }
 
-impl PromptInputValue {
-    pub fn as_string(&self) -> String {
+impl std::fmt::Display for PromptInputValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::String(s) => s.clone(),
-            Self::Number(n) => n.to_string(),
-            Self::Boolean(b) => b.to_string(),
+            Self::String(s) => write!(f, "{}", s),
+            Self::Number(n) => write!(f, "{}", n),
+            Self::Boolean(b) => write!(f, "{}", b),
         }
     }
 }
