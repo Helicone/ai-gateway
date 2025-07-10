@@ -12,7 +12,7 @@ publish = false
 futures = { workspace = true }
 pin-project-lite = { workspace = true }
 rand = { workspace = true }
-tower = { workspace = true, features = ["discover"] }
+tower = { workspace = true, features = ["discover", "ready-cache"] }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

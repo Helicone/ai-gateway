@@ -239,42 +239,81 @@ where
         'static,
         Result<Self::Response, Self::Error>,
     >;
-    // type Future = future::MapErr<
-    //     <D::Service as Service<http::Request<ReqBody>>>::Future,
-    //     fn(
-    //         <D::Service as Service<http::Request<ReqBody>>>::Error,
-    //     ) -> tower::BoxError,
-    // >;
 
     fn poll_ready(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         tracing::trace!("DynamicRouter::poll_ready");
+
         // `ready_index` may have already been set by a prior invocation. These
         // updates cannot disturb the order of existing ready services.
         let _ = self.update_pending_from_discover(cx)?;
         self.promote_pending_to_ready(cx);
 
+        // TODO: REMOVE FOLLOWING LINES OF COMMENTS BEFORE MERGING
+        // const MAX_RETRIES: usize = 10;
+        // let mut retries = 0;
+        // while retries < MAX_RETRIES {
+        //     let mut all_ready = true;
+        //     for (_, svc) in self.services.iter_ready_mut() {
+        //         // ignor
+        //         match svc.poll_ready(cx) {
+        //             Poll::Ready(Ok(())) => {
+        //                 continue;
+        //             }
+        //             Poll::Pending => {
+        //                 all_ready = false;
+        //             }
+        //             Poll::Ready(Err(_e)) => {
+        //                 all_ready = false;
+        //             }
+        //         }
+        //         // match self.services.check_ready(cx, router.0) {
+        //         //     Ok(true) => {
+        //         //         continue;
+        //         //     }
+        //         //     Ok(false) => {
+        //         //         all_ready = false;
+        //         //     }
+        //         //     Err(Failed(_, error)) => {
+        //         //         all_ready = false;
+        //         //     }
+        //         // }
+        //     }
+
+        //     if all_ready {
+        //         return Poll::Ready(Ok(()));
+        //     }
+
+        //     retries += 1;
+        // }
+
+        // Poll::Pending
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
         tracing::trace!("DynamicRouter::call");
         let key = request.extensions().get::<D::Key>().unwrap().clone();
-        let (_, _, service) = match self.services.get_ready_mut(&key) {
-            Some(result) => result,
-            None => {
-                return futures::future::ready(Err(Error::NotFound(
-                    request.uri().path().to_string(),
-                )))
-                .boxed();
-            }
-        };
-
-        service
-            .call(request)
+        self.services
+            .call_ready(&key, request)
             .map_err(|e| Error::InnerService(e.into()))
             .boxed()
+
+        // let (_, _, service) = match self.services.get_ready_mut(&key) {
+        //     Some(result) => result,
+        //     None => {
+        //         return futures::future::ready(Err(Error::NotFound(
+        //             request.uri().path().to_string(),
+        //         )))
+        //         .boxed();
+        //     }
+        // };
+
+        // service
+        //     .call(request)
+        //     .map_err(|e| Error::InnerService(e.into()))
+        //     .boxed()
     }
 }
