@@ -118,10 +118,15 @@ impl MetaRouter {
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
         // let mut inner = HashMap::default();
 
-        let mut discovery_factory = DiscoverFactory::new(app_state.clone());
-        let rx = app_state.get_router_rx().await;
-        let discovery = discovery_factory.call(rx).await?;
-        let dynamic_router = DynamicRouter::new(discovery);
+        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let mut router_factory =
+            dynamic_router::router::make::MakeRouter::new(discovery_factory);
+        // let rx = app_state.get_router_rx().await;
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        app_state.set_router_tx(tx).await;
+        let dynamic_router = router_factory.call(Some(rx)).await?;
+
+        // let dynamic_router = DynamicRouter::new(discovery);
         // let discovery = Discovery::new(&app_state).await?;
 
         let unified_api = ServiceBuilder::new()
@@ -151,9 +156,12 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let mut discovery_factory = DiscoverFactory::new(app_state.clone());
-        let discovery = discovery_factory.call(None).await?;
-        let dynamic_router = DynamicRouter::new(discovery);
+        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let mut router_factory =
+            dynamic_router::router::make::MakeRouter::new(discovery_factory);
+        let dynamic_router = router_factory.call(None).await?;
+        // let discovery = discovery_factory.call(None).await?;
+        // let dynamic_router = DynamicRouter::new(discovery);
         let unified_api = ServiceBuilder::new()
             .layer(rate_limit::Layer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))

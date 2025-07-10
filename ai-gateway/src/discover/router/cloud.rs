@@ -110,7 +110,12 @@ impl Stream for CloudDiscovery {
             return handle_change(change);
         }
 
-        Poll::Ready(None)
+        // 2) live events (removals / re‑inserts)
+        match this.events.as_mut().poll_next(ctx) {
+            Poll::Ready(Some(change)) => handle_change(change),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(None),
+        }
     }
 }
 

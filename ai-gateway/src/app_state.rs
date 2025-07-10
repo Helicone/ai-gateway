@@ -71,7 +71,7 @@ pub struct InnerAppState {
     pub rate_limit_senders: RateLimitEventSenders,
     pub rate_limit_receivers: RateLimitEventReceivers,
 
-    pub router_rx: RwLock<Option<Receiver<Change<RouterId, Router>>>>,
+    pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
 }
 
 impl AppState {
@@ -138,15 +138,15 @@ impl AppState {
         Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
     }
 
-    pub async fn get_router_rx(
+    pub async fn get_router_tx(
         &self,
-    ) -> Option<Receiver<Change<RouterId, Router>>> {
-        let mut router_rx = self.0.router_rx.write().await;
-        router_rx.take()
+    ) -> Option<Sender<Change<RouterId, Router>>> {
+        let router_tx = self.0.router_tx.read().await;
+        router_tx.clone()
     }
 
-    pub async fn set_router_rx(&self, rx: Receiver<Change<RouterId, Router>>) {
-        let mut router_rx = self.0.router_rx.write().await;
-        *router_rx = Some(rx);
+    pub async fn set_router_tx(&self, tx: Sender<Change<RouterId, Router>>) {
+        let mut router_tx = self.0.router_tx.write().await;
+        *router_tx = Some(tx);
     }
 }

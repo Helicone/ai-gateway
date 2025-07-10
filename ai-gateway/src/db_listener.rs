@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures::future::BoxFuture;
 use meltdown::Token;
 use serde::{Deserialize, Serialize};
@@ -5,12 +7,15 @@ use sqlx::{
     PgPool,
     postgres::{PgListener, PgPoolOptions},
 };
+use tokio::sync::mpsc::Sender;
+use tower::discover::Change;
 use tracing::{debug, error, info};
 
 use crate::{
     app_state::AppState,
     config::router::RouterConfig,
     error::{init::InitError, runtime::RuntimeError},
+    router::service::Router,
     types::router::RouterId,
 };
 
@@ -22,7 +27,7 @@ pub struct DatabaseListener {
     app_state: AppState,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 enum Op {
     #[serde(rename = "INSERT")]
     Insert,
@@ -101,8 +106,15 @@ impl DatabaseListener {
             RuntimeError::Internal(crate::error::internal::InternalError::Internal)
         })?;
 
-        let (tx, rx) = tokio::sync::mpsc::channel(MAX_CHANNEL_CAPACITY);
-        self.app_state.set_router_rx(rx).await;
+        // let (tx, rx) = tokio::sync::mpsc::channel(MAX_CHANNEL_CAPACITY);
+        // self.app_state.set_router_rx(rx).await;
+
+        let tx = self.app_state.get_router_tx().await;
+        if tx.is_none() {
+            return Err(RuntimeError::Internal(
+                crate::error::internal::InternalError::Internal,
+            ));
+        }
 
         // Process notifications
         loop {
@@ -115,7 +127,12 @@ impl DatabaseListener {
                     );
 
                     // Handle the notification here
-                    Self::handle_notification(&notification);
+                    Self::handle_notification(
+                        &notification,
+                        tx.as_ref().unwrap().clone(),
+                        self.app_state.clone(),
+                    )
+                    .await;
                 }
                 Err(e) => {
                     error!(error = %e, "error receiving database notification");
@@ -128,7 +145,11 @@ impl DatabaseListener {
     }
 
     /// Handles incoming database notifications.
-    fn handle_notification(notification: &sqlx::postgres::PgNotification) {
+    async fn handle_notification(
+        notification: &sqlx::postgres::PgNotification,
+        tx: Sender<Change<RouterId, Router>>,
+        app_state: AppState,
+    ) {
         // Customize this method to handle different types of notifications
         info!(
             channel = notification.channel(),
@@ -157,6 +178,44 @@ impl DatabaseListener {
                     info!("op: {:?}", op);
                     info!("config: {:?}", config);
                     // TODO: Handle router configuration update
+                    match op {
+                        Op::Insert => {
+                            let router = Router::new(
+                                router_id.clone(),
+                                Arc::new(*config),
+                                app_state.clone(),
+                            )
+                            .await
+                            .unwrap();
+
+                            info!("sending router to tx");
+                            let _ = tx
+                                .send(Change::Insert(router_id, router))
+                                .await;
+                            info!("router inserted");
+                        }
+                        Op::Delete => {
+                            let _ = tx.send(Change::Remove(router_id)).await;
+                            info!("router removed");
+                        }
+                        _ => {
+                            info!("skipping router insert");
+                        }
+                    }
+                    // if op == Op::Insert {
+                    //     let router = Router::new(
+                    //         router_id.clone(),
+                    //         Arc::new(*config),
+                    //         app_state.clone(),
+                    //     )
+                    //     .await
+                    //     .unwrap();
+
+                    //     info!("sending router to tx");
+                    //     let _ =
+                    //         tx.send(Change::Insert(router_id, router)).await;
+                    //     info!("router inserted");
+                    // }
                 }
                 ConnectedCloudGatewaysNotification::RouterKeysUpdated {
                     router_id,

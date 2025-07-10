@@ -253,7 +253,7 @@ impl App {
             rate_limit_senders: RwLock::new(HashMap::default()),
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
-            router_rx: RwLock::new(None),
+            router_tx: RwLock::new(None),
         }));
 
         Ok(app_state)

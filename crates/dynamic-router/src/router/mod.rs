@@ -262,16 +262,16 @@ where
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
         tracing::trace!("DynamicRouter::call");
         let key = request.extensions().get::<D::Key>().unwrap().clone();
-        let (_, _router_service, service) =
-            match self.services.get_ready_mut(&key) {
-                Some(result) => result,
-                None => {
-                    return futures::future::ready(Err(Error::NotFound(
-                        request.uri().path().to_string(),
-                    )))
-                    .boxed();
-                }
-            };
+        let (_, _, service) = match self.services.get_ready_mut(&key) {
+            Some(result) => result,
+            None => {
+                return futures::future::ready(Err(Error::NotFound(
+                    request.uri().path().to_string(),
+                )))
+                .boxed();
+            }
+        };
+
         service
             .call(request)
             .map_err(|e| Error::InnerService(e.into()))
