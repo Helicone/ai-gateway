@@ -5,10 +5,10 @@ use ai_gateway::{
         Config,
         helicone::HeliconeFeatures,
         rate_limit::{
-            GcraConfig, GlobalRateLimitConfig, LimitsConfig, RateLimitStore,
+            GcraConfig, LimitsConfig, RateLimitConfig, RateLimitStore,
         },
         redis::RedisConfig,
-        router::{RouterConfig, RouterConfigs, RouterRateLimitConfig},
+        router::{RouterConfig, RouterConfigs},
     },
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::{router::RouterId, secret::Secret},
@@ -28,7 +28,7 @@ fn create_test_limits(capacity: u32, duration_ms: u64) -> LimitsConfig {
     }
 }
 
-fn create_router_config(rate_limit: RouterRateLimitConfig) -> RouterConfig {
+fn create_router_config(rate_limit: Option<RateLimitConfig>) -> RouterConfig {
     RouterConfig {
         rate_limit,
         load_balance: ai_gateway::config::balance::BalanceConfig::openai_chat(),
@@ -120,10 +120,10 @@ const REDIS_URL: &str = "redis://localhost:6340";
 async fn test_global_rate_limit_with_router_none() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
+    config.global.rate_limit = Some(RateLimitConfig {
         // 3 requests per 5 seconds
-        limits: Some(create_test_limits(3, 1000)),
-        cleanup_interval: Duration::from_secs(60),
+        limits: create_test_limits(3, 1000),
+        store: None,
     });
     config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
@@ -133,7 +133,7 @@ async fn test_global_rate_limit_with_router_none() {
     // Router doesn't override rate limiting
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
-        create_router_config(RouterRateLimitConfig::None),
+        create_router_config(None),
     )]));
 
     let mock_args = MockArgs::builder()
@@ -196,10 +196,6 @@ async fn test_global_rate_limit_with_router_none() {
 async fn test_router_specific_with_custom_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
@@ -209,7 +205,7 @@ async fn test_router_specific_with_custom_limits() {
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
-            rate_limit: RouterRateLimitConfig::Custom {
+            rate_limit: Some(RateLimitConfig {
                 store: Some(RateLimitStore::Redis(RedisConfig {
                     host_url: Secret::from(
                         REDIS_URL.parse::<url::Url>().unwrap(),
@@ -217,7 +213,7 @@ async fn test_router_specific_with_custom_limits() {
                     connection_timeout: Duration::from_secs(1),
                 })),
                 limits: create_test_limits(2, 1000), // 2 requests per second
-            },
+            }),
             load_balance:
                 ai_gateway::config::balance::BalanceConfig::openai_chat(),
             ..Default::default()
@@ -270,10 +266,10 @@ async fn test_router_specific_with_custom_limits() {
 async fn test_global_with_custom_router_override() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
+    config.global.rate_limit = Some(RateLimitConfig {
         // 5 requests per second
-        limits: Some(create_test_limits(5, 1000)),
-        cleanup_interval: Duration::from_secs(60),
+        limits: create_test_limits(5, 1000),
+        store: None,
     });
     config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
@@ -284,7 +280,7 @@ async fn test_global_with_custom_router_override() {
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
-            rate_limit: RouterRateLimitConfig::Custom {
+            rate_limit: Some(RateLimitConfig {
                 store: Some(RateLimitStore::Redis(RedisConfig {
                     host_url: Secret::from(
                         REDIS_URL.parse::<url::Url>().unwrap(),
@@ -293,7 +289,7 @@ async fn test_global_with_custom_router_override() {
                 })),
                 limits: create_test_limits(2, 1000), /* 2 requests per second
                                                       * for this router */
-            },
+            }),
             load_balance:
                 ai_gateway::config::balance::BalanceConfig::openai_chat(),
             ..Default::default()
@@ -345,10 +341,6 @@ async fn test_global_with_custom_router_override() {
 async fn test_router_independence_different_rate_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
@@ -362,7 +354,7 @@ async fn test_router_independence_different_rate_limits() {
         (
             strict_router_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::Redis(RedisConfig {
                         host_url: Secret::from(
                             REDIS_URL.parse::<url::Url>().unwrap(),
@@ -371,7 +363,7 @@ async fn test_router_independence_different_rate_limits() {
                     })),
                     limits: create_test_limits(1, 1000), /* 1 request per
                                                          second - strict */
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -380,7 +372,7 @@ async fn test_router_independence_different_rate_limits() {
         (
             lenient_router_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::Redis(RedisConfig {
                         host_url: Secret::from(
                             REDIS_URL.parse::<url::Url>().unwrap(),
@@ -389,7 +381,7 @@ async fn test_router_independence_different_rate_limits() {
                     })),
                     limits: create_test_limits(5, 1000), /* 5 requests per
                                                          second - lenient */
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -398,7 +390,7 @@ async fn test_router_independence_different_rate_limits() {
         (
             RouterId::Named(CompactString::new("my-router")),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::None, // No rate limiting
+                rate_limit: None, // No rate limiting
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -534,10 +526,6 @@ async fn make_chat_request_to_router(
 async fn test_multi_router_different_rate_limits_in_memory() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
@@ -551,7 +539,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_a_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::Redis(RedisConfig {
                         host_url: Secret::from(
                             REDIS_URL.parse::<url::Url>().unwrap(),
@@ -559,7 +547,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
                         connection_timeout: Duration::from_secs(1),
                     })),
                     limits: create_test_limits(1, 1000),
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -568,7 +556,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_b_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::Redis(RedisConfig {
                         host_url: Secret::from(
                             REDIS_URL.parse::<url::Url>().unwrap(),
@@ -576,7 +564,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
                         connection_timeout: Duration::from_secs(1),
                     })),
                     limits: create_test_limits(3, 1000),
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -585,7 +573,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_c_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::None,
+                rate_limit: None,
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()

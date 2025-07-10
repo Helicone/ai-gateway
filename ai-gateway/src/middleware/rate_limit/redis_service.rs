@@ -101,7 +101,6 @@ where
         self.inner.poll_ready(cx)
     }
 
-    #[tracing::instrument(name = "rate_limit", skip_all)]
     fn call(&mut self, req: Request) -> Self::Future {
         // see: https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
         let mut this = self.clone();

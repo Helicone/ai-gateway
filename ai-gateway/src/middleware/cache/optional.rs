@@ -118,11 +118,15 @@ where
         }
     }
 
+    #[tracing::instrument(name = "opt_cache", skip_all)]
     fn call(&mut self, req: Request) -> Self::Future {
         match self {
-            Service::Enabled { service } => ResponseFuture::Enabled {
-                future: service.call(req),
-            },
+            Service::Enabled { service } => {
+                tracing::trace!("cache middleware enabled");
+                ResponseFuture::Enabled {
+                    future: service.call(req),
+                }
+            }
             Service::Disabled { service } => ResponseFuture::Disabled {
                 future: service.call(req),
             },

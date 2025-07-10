@@ -5,9 +5,9 @@ use ai_gateway::{
         Config,
         helicone::HeliconeFeatures,
         rate_limit::{
-            GcraConfig, GlobalRateLimitConfig, LimitsConfig, RateLimitStore,
+            GcraConfig, LimitsConfig, RateLimitConfig, RateLimitStore,
         },
-        router::{RouterConfig, RouterConfigs, RouterRateLimitConfig},
+        router::{RouterConfig, RouterConfigs},
     },
     tests::{TestDefault, harness::Harness, mock::MockArgs},
     types::router::RouterId,
@@ -27,7 +27,7 @@ fn create_test_limits(capacity: u32, duration_ms: u64) -> LimitsConfig {
     }
 }
 
-fn create_router_config(rate_limit: RouterRateLimitConfig) -> RouterConfig {
+fn create_router_config(rate_limit: Option<RateLimitConfig>) -> RouterConfig {
     RouterConfig {
         rate_limit,
         load_balance: ai_gateway::config::balance::BalanceConfig::openai_chat(),
@@ -117,17 +117,17 @@ async fn make_chat_request_for_router(
 async fn test_global_rate_limit_with_router_none() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
+    config.global.rate_limit = Some(RateLimitConfig {
         // 3 requests per second
-        limits: Some(create_test_limits(3, 1000)),
-        cleanup_interval: Duration::from_secs(60),
+        limits: create_test_limits(3, 1000),
+        store: None,
     });
     config.rate_limit_store = RateLimitStore::InMemory;
 
     // Router doesn't override rate limiting
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
-        create_router_config(RouterRateLimitConfig::None),
+        create_router_config(None),
     )]));
 
     let mock_args = MockArgs::builder()
@@ -190,20 +190,16 @@ async fn test_global_rate_limit_with_router_none() {
 async fn test_router_specific_with_custom_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::InMemory;
 
     // Router provides its own custom rate limits
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
-            rate_limit: RouterRateLimitConfig::Custom {
-                store: Some(RateLimitStore::InMemory),
+            rate_limit: Some(RateLimitConfig {
                 limits: create_test_limits(2, 1000), // 2 requests per second
-            },
+                store: None,
+            }),
             load_balance:
                 ai_gateway::config::balance::BalanceConfig::openai_chat(),
             ..Default::default()
@@ -256,21 +252,21 @@ async fn test_router_specific_with_custom_limits() {
 async fn test_global_with_custom_router_override() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
+    config.global.rate_limit = Some(RateLimitConfig {
         // 5 requests per second
-        limits: Some(create_test_limits(5, 1000)),
-        cleanup_interval: Duration::from_secs(60),
+        limits: create_test_limits(5, 1000),
+        store: None,
     });
     config.rate_limit_store = RateLimitStore::InMemory;
     // Router overrides with stricter custom limits
     config.routers = RouterConfigs::new(HashMap::from([(
         RouterId::Named(CompactString::new("my-router")),
         RouterConfig {
-            rate_limit: RouterRateLimitConfig::Custom {
-                store: Some(RateLimitStore::InMemory),
+            rate_limit: Some(RateLimitConfig {
                 limits: create_test_limits(2, 1000), /* 2 requests per second
                                                       * for this router */
-            },
+                store: None,
+            }),
             load_balance:
                 ai_gateway::config::balance::BalanceConfig::openai_chat(),
             ..Default::default()
@@ -322,10 +318,6 @@ async fn test_global_with_custom_router_override() {
 async fn test_router_independence_different_rate_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::InMemory;
     let strict_router_id = RouterId::Named(CompactString::from("strict"));
     let lenient_router_id = RouterId::Named(CompactString::from("lenient"));
@@ -335,11 +327,11 @@ async fn test_router_independence_different_rate_limits() {
         (
             strict_router_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
-                    store: Some(RateLimitStore::InMemory),
+                rate_limit: Some(RateLimitConfig {
+                    store: None,
                     limits: create_test_limits(1, 1000), /* 1 request per
                                                          second - strict */
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -348,11 +340,11 @@ async fn test_router_independence_different_rate_limits() {
         (
             lenient_router_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
-                    store: Some(RateLimitStore::InMemory),
+                rate_limit: Some(RateLimitConfig {
+                    store: None,
                     limits: create_test_limits(5, 1000), /* 5 requests per
                                                          second - lenient */
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -361,7 +353,7 @@ async fn test_router_independence_different_rate_limits() {
         (
             RouterId::Named(CompactString::new("my-router")),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::None, // No rate limiting
+                rate_limit: None, // No rate limiting
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -497,10 +489,6 @@ async fn make_chat_request_to_router(
 async fn test_multi_router_different_rate_limits_in_memory() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.global.rate_limit = Some(GlobalRateLimitConfig {
-        limits: None,
-        cleanup_interval: Duration::from_secs(60),
-    });
     config.rate_limit_store = RateLimitStore::InMemory;
     let router_a_id = RouterId::Named(CompactString::from("router-a"));
     let router_b_id = RouterId::Named(CompactString::from("router-b"));
@@ -511,10 +499,10 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_a_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::InMemory),
                     limits: create_test_limits(1, 1000),
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -523,10 +511,10 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_b_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::Custom {
+                rate_limit: Some(RateLimitConfig {
                     store: Some(RateLimitStore::InMemory),
                     limits: create_test_limits(3, 1000),
-                },
+                }),
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()
@@ -535,7 +523,7 @@ async fn test_multi_router_different_rate_limits_in_memory() {
         (
             router_c_id.clone(),
             RouterConfig {
-                rate_limit: RouterRateLimitConfig::None,
+                rate_limit: None,
                 load_balance:
                     ai_gateway::config::balance::BalanceConfig::openai_chat(),
                 ..Default::default()

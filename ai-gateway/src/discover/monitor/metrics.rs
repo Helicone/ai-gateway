@@ -29,16 +29,15 @@ impl EndpointMetricsRegistry {
 
     pub fn new(config: &Config) -> Self {
         let mut endpoint_health_metrics = HashMap::default();
-        tracing::info!(
-            "Initializing endpoint metrics for providers: {:?}",
-            config.providers.keys()
+        tracing::debug!(
+            providers = ?config.providers.keys(),
+            "Initializing endpoint metrics for providers"
         );
         for provider in config.providers.keys() {
-            tracing::info!(
-                "Initializing endpoint metrics for provider: {:?} and \
-                 endpoints: {:?}",
-                provider,
-                provider.endpoints()
+            tracing::trace!(
+                provider = ?provider,
+                endpoints = ?provider.endpoints(),
+                "Initializing endpoint metrics for provider"
             );
             for endpoint in provider.endpoints() {
                 endpoint_health_metrics

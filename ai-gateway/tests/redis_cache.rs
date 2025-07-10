@@ -1,7 +1,11 @@
 use std::{collections::HashMap, time::Duration};
 
 use ai_gateway::{
-    config::{Config, cache::CacheStore, helicone::HeliconeFeatures},
+    config::{
+        Config,
+        cache::{CacheConfig, CacheStore},
+        helicone::HeliconeFeatures,
+    },
     tests::{TestDefault, harness::Harness, mock::MockArgs},
 };
 use http::{Method, Request, StatusCode};
@@ -54,6 +58,7 @@ fn make_request(
 #[serial_test::serial(default_mock)]
 async fn cache_enabled_globally() {
     let mut config = Config::test_default();
+    config.global.cache = Some(CacheConfig::test_default());
 
     config.cache_store = CacheStore::Redis {
         host_url: "redis://localhost:6340".parse().unwrap(),

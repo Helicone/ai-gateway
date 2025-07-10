@@ -54,11 +54,11 @@ pub enum DeploymentTarget {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct GlobalConfig {
+pub struct MiddlewareConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache: Option<self::cache::CacheConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rate_limit: Option<self::rate_limit::GlobalRateLimitConfig>,
+    pub rate_limit: Option<self::rate_limit::RateLimitConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retries: Option<self::retry::RetryConfig>,
 }
@@ -85,7 +85,7 @@ pub struct Config {
     pub cache_store: self::cache::CacheStore,
     pub rate_limit_store: self::rate_limit::RateLimitStore,
     /// Global middleware configuration, e.g. rate limiting, caching, etc.
-    pub global: GlobalConfig,
+    pub global: MiddlewareConfig,
     pub routers: self::router::RouterConfigs,
 }
 
@@ -176,12 +176,10 @@ impl crate::tests::TestDefault for Config {
             level: "info,ai_gateway=trace".to_string(),
             ..Default::default()
         };
-        let middleware = GlobalConfig {
-            cache: Some(self::cache::CacheConfig::test_default()),
-            rate_limit: Some(
-                self::rate_limit::GlobalRateLimitConfig::test_default(),
-            ),
-            retries: Some(self::retry::RetryConfig::test_default()),
+        let middleware = MiddlewareConfig {
+            cache: None,
+            rate_limit: None,
+            retries: None,
         };
         Config {
             telemetry,

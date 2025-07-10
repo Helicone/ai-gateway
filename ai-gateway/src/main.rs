@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use ai_gateway::{
     app::App,
@@ -100,6 +100,8 @@ fn init_telemetry(
 }
 
 async fn run_app(config: Config) -> Result<(), RuntimeError> {
+    // 5 mins
+    const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 5);
     let mut shutting_down = false;
     let helicone_config = config.helicone.clone();
     let app = App::new(config).await?;
@@ -109,10 +111,10 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     let control_plane_state = app.state.0.control_plane_state.clone();
 
     let rate_limiting_cleanup_service =
-        config.global.rate_limit.as_ref().map(|rl| {
+        config.global.rate_limit.as_ref().map(|_| {
             rate_limit::cleanup::GarbageCollector::new(
                 app.state.clone(),
-                rl.cleanup_interval(),
+                CLEANUP_INTERVAL,
             )
         });
 

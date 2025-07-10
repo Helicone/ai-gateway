@@ -7,17 +7,16 @@ use std::{
 
 use governor::middleware::StateInformationMiddleware;
 use http::Response;
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tower_governor::GovernorLayer;
 
 use super::extractor::RateLimitKeyExtractor;
 use crate::{
     app_state::AppState,
     config::{
         rate_limit::{
-            LimitsConfig, RateLimitStore, RateLimiterConfig,
-            default_refill_frequency,
+            LimitsConfig, RateLimitConfig, RateLimitStore, RateLimiterConfig,
         },
-        router::{RouterConfig, RouterRateLimitConfig},
+        router::RouterConfig,
     },
     error::init::InitError,
     middleware::rate_limit::redis_service::{
@@ -69,10 +68,8 @@ impl Layer {
     }
 
     #[must_use]
-    fn new_redis_inner(rl: Option<LimitsConfig>, url: url::Url) -> Self {
-        if let Some(rl) = rl
-            && let Ok(layer) = RedisRateLimitLayer::new(Arc::new(rl), url, None)
-        {
+    fn new_redis_inner(rl: LimitsConfig, url: url::Url) -> Self {
+        if let Ok(layer) = RedisRateLimitLayer::new(Arc::new(rl), url, None) {
             Self {
                 inner: InnerLayer::Redis(layer),
             }
@@ -110,10 +107,10 @@ impl Layer {
         router_config: &RouterConfig,
     ) -> Result<Self, InitError> {
         match &router_config.rate_limit {
-            RouterRateLimitConfig::None => Ok(Self {
+            None => Ok(Self {
                 inner: InnerLayer::None,
             }),
-            RouterRateLimitConfig::Custom { store, limits } => {
+            Some(RateLimitConfig { store, limits }) => {
                 let ratelimit_store = store.clone().or_else(|| {
                     Some(app_state.0.config.rate_limit_store.clone())
                 });
@@ -130,28 +127,9 @@ impl Layer {
                         inner: InnerLayer::Redis(layer),
                     });
                 }
-                let gcra = &limits.per_api_key;
-                let per_cell_duration = gcra
-                    .refill_frequency
-                    .checked_div(gcra.capacity.into())
-                    .unwrap_or_else(|| {
-                        tracing::warn!(
-                            "fill_frequency is too small for capacity, using \
-                             default fill frequency"
-                        );
-                        default_refill_frequency()
-                    });
-
-                let rl = GovernorConfigBuilder::default()
-                    .period(per_cell_duration)
-                    .burst_size(gcra.capacity.get())
-                    .use_headers()
-                    .key_extractor(RateLimitKeyExtractor)
-                    .finish()
-                    .ok_or(InitError::InvalidRateLimitConfig(
-                        "Invalid rate limit config",
-                    ))?;
-                let rl = Arc::new(rl);
+                let rl = Arc::new(crate::config::rate_limit::limiter_config(
+                    limits,
+                )?);
                 add_rate_limit_to_app_state(app_state, router_id, rl.clone())
                     .await;
 
@@ -283,20 +261,34 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         match self {
-            Service::InMemory { service } => service.poll_ready(cx),
+            Service::InMemory { service } => match service.poll_ready(cx) {
+                Poll::Ready(Ok(())) => {
+                    tracing::trace!("in memory rate limit ready");
+                    Poll::Ready(Ok(()))
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                Poll::Pending => Poll::Pending,
+            },
             Service::Redis { service } => service.poll_ready(cx),
             Service::Disabled { service } => service.poll_ready(cx),
         }
     }
 
+    #[tracing::instrument(name = "opt_rate_limit", skip_all)]
     fn call(&mut self, request: Request) -> Self::Future {
         match self {
-            Service::InMemory { service } => ResponseFuture::InMemory {
-                future: service.call(request),
-            },
-            Service::Redis { service } => ResponseFuture::Redis {
-                future: service.call(request),
-            },
+            Service::InMemory { service } => {
+                tracing::trace!(kind = "in_memory", "rate limit middleware");
+                ResponseFuture::InMemory {
+                    future: service.call(request),
+                }
+            }
+            Service::Redis { service } => {
+                tracing::trace!(kind = "redis", "rate limit middleware");
+                ResponseFuture::Redis {
+                    future: service.call(request),
+                }
+            }
             Service::Disabled { service } => ResponseFuture::Disabled {
                 future: service.call(request),
             },
@@ -316,16 +308,16 @@ mod tests {
         config::{
             Config,
             rate_limit::{
-                GcraConfig, GlobalRateLimitConfig, LimitsConfig, RateLimitStore,
+                GcraConfig, LimitsConfig, RateLimitConfig, RateLimitStore,
             },
-            router::{RouterConfig, RouterRateLimitConfig},
+            router::RouterConfig,
         },
         tests::TestDefault,
         types::router::RouterId,
     };
 
     async fn create_test_app_state(
-        rate_limit_config: GlobalRateLimitConfig,
+        rate_limit_config: RateLimitConfig,
     ) -> AppState {
         let mut config = Config::test_default();
         config.global.rate_limit = Some(rate_limit_config);
@@ -344,7 +336,9 @@ mod tests {
         }
     }
 
-    fn create_router_config(rate_limit: RouterRateLimitConfig) -> RouterConfig {
+    fn create_router_config(
+        rate_limit: Option<RateLimitConfig>,
+    ) -> RouterConfig {
         RouterConfig {
             rate_limit,
             ..Default::default()
@@ -353,12 +347,12 @@ mod tests {
 
     #[tokio::test]
     async fn global_app_with_none_router() {
-        let app_state = create_test_app_state(GlobalRateLimitConfig {
-            limits: Some(create_test_limits()),
-            cleanup_interval: Duration::from_secs(300),
+        let app_state = create_test_app_state(RateLimitConfig {
+            store: None,
+            limits: create_test_limits(),
         })
         .await;
-        let router_config = create_router_config(RouterRateLimitConfig::None);
+        let router_config = create_router_config(None);
 
         let result = Layer::per_router(
             &app_state,
@@ -372,16 +366,15 @@ mod tests {
 
     #[tokio::test]
     async fn global_app_with_custom_router() {
-        let app_state = create_test_app_state(GlobalRateLimitConfig {
-            limits: Some(create_test_limits()),
-            cleanup_interval: Duration::from_secs(300),
+        let app_state = create_test_app_state(RateLimitConfig {
+            store: Some(RateLimitStore::InMemory),
+            limits: create_test_limits(),
         })
         .await;
-        let router_config =
-            create_router_config(RouterRateLimitConfig::Custom {
-                store: Some(RateLimitStore::InMemory),
-                limits: create_test_limits(),
-            });
+        let router_config = create_router_config(Some(RateLimitConfig {
+            store: Some(RateLimitStore::InMemory),
+            limits: create_test_limits(),
+        }));
 
         let result = Layer::per_router(
             &app_state,
@@ -395,16 +388,15 @@ mod tests {
 
     #[tokio::test]
     async fn router_specific_app_with_custom_router() {
-        let app_state = create_test_app_state(GlobalRateLimitConfig {
-            limits: None,
-            cleanup_interval: Duration::from_secs(300),
+        let app_state = create_test_app_state(RateLimitConfig {
+            store: None,
+            limits: create_test_limits(),
         })
         .await;
-        let router_config =
-            create_router_config(RouterRateLimitConfig::Custom {
-                store: Some(RateLimitStore::InMemory),
-                limits: create_test_limits(),
-            });
+        let router_config = create_router_config(Some(RateLimitConfig {
+            store: Some(RateLimitStore::InMemory),
+            limits: create_test_limits(),
+        }));
 
         let result = Layer::per_router(
             &app_state,

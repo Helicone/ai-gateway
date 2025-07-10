@@ -4,7 +4,7 @@ use ai_gateway::{
     config::{
         Config,
         helicone::HeliconeFeatures,
-        rate_limit::{GlobalRateLimitConfig, RateLimitStore},
+        rate_limit::{RateLimitConfig, RateLimitStore},
     },
     control_plane::types::{Key, hash_key},
     tests::{TestDefault, harness::Harness, mock::MockArgs},
@@ -59,7 +59,7 @@ async fn rate_limit_per_user_isolation_redis() {
 
 async fn rate_limit_capacity_enforced_impl(
     rate_limit_store: RateLimitStore,
-    rate_limit_config: GlobalRateLimitConfig,
+    rate_limit_config: RateLimitConfig,
 ) {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
@@ -133,7 +133,7 @@ async fn rate_limit_capacity_enforced_impl(
 
 async fn rate_limit_per_user_isolation_impl(
     rate_limit_store: RateLimitStore,
-    rate_limit_config: GlobalRateLimitConfig,
+    rate_limit_config: RateLimitConfig,
 ) {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;

@@ -1,11 +1,21 @@
 use std::{num::NonZeroU32, time::Duration};
 
+use axum_core::response::IntoResponse;
+use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder};
 
 use crate::{
     config::redis::RedisConfig,
-    middleware::rate_limit::extractor::RateLimitKeyExtractor,
+    error::{
+        api::{ErrorDetails, ErrorResponse},
+        init::InitError,
+    },
+    middleware::{
+        mapper::openai::SERVER_ERROR_TYPE,
+        rate_limit::extractor::RateLimitKeyExtractor,
+    },
+    types::json::Json,
 };
 
 pub type RateLimiterConfig = GovernorConfig<
@@ -13,59 +23,93 @@ pub type RateLimiterConfig = GovernorConfig<
     governor::middleware::StateInformationMiddleware,
 >;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct GlobalRateLimitConfig {
-    #[serde(default, flatten, skip_serializing_if = "Option::is_none")]
-    pub limits: Option<LimitsConfig>,
-    #[serde(with = "humantime_serde", default = "default_cleanup_interval")]
-    pub cleanup_interval: Duration,
+pub struct RateLimitConfig {
+    /// If not set, the store from the rate-limit-store config will be
+    /// used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store: Option<RateLimitStore>,
+    #[serde(default, flatten)]
+    pub limits: LimitsConfig,
 }
 
-impl GlobalRateLimitConfig {
-    #[must_use]
-    pub fn global_limiter(&self) -> Option<RateLimiterConfig> {
-        limiter_config(self.limits.as_ref())
-    }
+pub(crate) fn limiter_config(
+    limits: &LimitsConfig,
+) -> Result<RateLimiterConfig, InitError> {
+    let gcra = &limits.per_api_key;
+    let per_cell_duration = gcra
+        .refill_frequency
+        .checked_div(gcra.capacity.into())
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                "fill_frequency is too small for capacity, using default fill \
+                 frequency"
+            );
+            default_refill_frequency()
+        });
 
-    #[must_use]
-    pub fn cleanup_interval(&self) -> Duration {
-        self.cleanup_interval
-    }
-}
-
-fn limiter_config(limits: Option<&LimitsConfig>) -> Option<RateLimiterConfig> {
-    if let Some(limits) = limits {
-        let gcra = &limits.per_api_key;
-        let per_cell_duration = gcra
-            .refill_frequency
-            .checked_div(gcra.capacity.into())
-            .unwrap_or_else(|| {
+    GovernorConfigBuilder::default()
+        .period(per_cell_duration)
+        .burst_size(gcra.capacity.get())
+        .use_headers()
+        .key_extractor(RateLimitKeyExtractor)
+        .error_handler(|mut e| match &e {
+            tower_governor::GovernorError::TooManyRequests { .. } => {
+                tracing::debug!("rate limite exceeded");
+                let governor_response: http::Response<String> = e.as_response();
+                let (parts, _) = governor_response.into_parts();
+                let body = ErrorResponse {
+                    error: ErrorDetails {
+                        message: "Too many requests".to_string(),
+                        r#type: Some("rate_limit_exceeded".to_string()),
+                        param: None,
+                        code: None,
+                    },
+                };
+                let json = Json(body);
+                let openai_response = json.into_response();
+                let (_, body) = openai_response.into_parts();
+                http::Response::from_parts(parts, body)
+            }
+            tower_governor::GovernorError::UnableToExtractKey => {
                 tracing::warn!(
-                    "fill_frequency is too small for capacity, using default \
-                     fill frequency"
+                    "unable to extract key, rate limiting enabled without \
+                     enabling authentication!!!"
                 );
-                default_refill_frequency()
-            });
-
-        GovernorConfigBuilder::default()
-            .period(per_cell_duration)
-            .burst_size(gcra.capacity.get())
-            .use_headers()
-            .key_extractor(RateLimitKeyExtractor)
-            .finish()
-    } else {
-        None
-    }
-}
-
-impl Default for GlobalRateLimitConfig {
-    fn default() -> Self {
-        Self {
-            limits: None,
-            cleanup_interval: default_cleanup_interval(),
-        }
-    }
+                let body = ErrorResponse {
+                    error: ErrorDetails {
+                        message: "Internal error, server misconfigured"
+                            .to_string(),
+                        r#type: Some(SERVER_ERROR_TYPE.to_string()),
+                        param: None,
+                        code: None,
+                    },
+                };
+                let json = Json(body);
+                (StatusCode::INTERNAL_SERVER_ERROR, json).into_response()
+            }
+            tower_governor::GovernorError::Other { code, msg, .. } => {
+                tracing::error!(
+                    msg = msg.as_deref().unwrap_or("Unknown error"),
+                    "Other error"
+                );
+                let body = ErrorResponse {
+                    error: ErrorDetails {
+                        message: "Internal error".to_string(),
+                        r#type: Some(SERVER_ERROR_TYPE.to_string()),
+                        param: None,
+                        code: None,
+                    },
+                };
+                let json = Json(body);
+                (*code, json).into_response()
+            }
+        })
+        .finish()
+        .ok_or(InitError::InvalidRateLimitConfig(
+            "either burst size or period interval are zero",
+        ))
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
@@ -85,22 +129,22 @@ pub(crate) fn default_refill_frequency() -> Duration {
 }
 
 #[cfg(feature = "testing")]
-impl crate::tests::TestDefault for GlobalRateLimitConfig {
+impl crate::tests::TestDefault for RateLimitConfig {
     fn test_default() -> Self {
         Self {
-            limits: None,
-            cleanup_interval: Duration::from_secs(60),
+            store: None,
+            limits: LimitsConfig::test_default(),
         }
     }
 }
 
 #[cfg(feature = "testing")]
 #[must_use]
-pub fn config_enabled_for_test() -> GlobalRateLimitConfig {
+pub fn config_enabled_for_test() -> RateLimitConfig {
     use crate::tests::TestDefault;
-    GlobalRateLimitConfig {
-        limits: Some(LimitsConfig::test_default()),
-        cleanup_interval: Duration::from_secs(60),
+    RateLimitConfig {
+        limits: LimitsConfig::test_default(),
+        store: Some(RateLimitStore::InMemory),
     }
 }
 
@@ -165,9 +209,4 @@ impl crate::tests::TestDefault for GcraConfig {
             capacity: NonZeroU32::new(3).unwrap(),
         }
     }
-}
-
-fn default_cleanup_interval() -> Duration {
-    // 5 minutes
-    Duration::from_secs(60 * 5)
 }

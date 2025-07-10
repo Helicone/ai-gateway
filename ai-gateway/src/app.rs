@@ -210,7 +210,11 @@ impl App {
             .global
             .rate_limit
             .as_ref()
-            .and_then(|rl| rl.global_limiter().map(Arc::new));
+            .map(|rl| {
+                crate::config::rate_limit::limiter_config(&rl.limits)
+                    .map(Arc::new)
+            })
+            .transpose()?;
 
         let direct_proxy_api_keys =
             ProviderKeys::from_env_direct_proxy(&config.providers)

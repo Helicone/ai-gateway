@@ -8,11 +8,10 @@ use serde::{Deserialize, Serialize};
 use super::{
     balance::{BalanceConfig, BalanceConfigInner},
     model_mapping::ModelMappingConfig,
-    rate_limit::LimitsConfig,
     retry::RetryConfig,
 };
 use crate::{
-    config::{cache::CacheConfig, rate_limit::RateLimitStore},
+    config::{cache::CacheConfig, rate_limit::RateLimitConfig},
     error::init::InitError,
     types::router::RouterId,
 };
@@ -46,8 +45,8 @@ pub struct RouterConfig {
     pub cache: Option<CacheConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retries: Option<RetryConfig>,
-    #[serde(skip_serializing_if = "RouterRateLimitConfig::is_disabled")]
-    pub rate_limit: RouterRateLimitConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl RouterConfig {
@@ -76,31 +75,6 @@ impl RouterConfig {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields, untagged, rename_all = "kebab-case")]
-pub enum RouterRateLimitConfig {
-    /// Disable rate limiting middleware at the *router* level.
-    /// Note that if the app configuration enables rate limiting globally,
-    /// then rate limiting will still take effect.
-    #[default]
-    None,
-    /// Routers must configure their own rate limit settings.
-    Custom {
-        /// If not specific, the store from the rate-limit-store config will be
-        /// used.
-        store: Option<RateLimitStore>,
-        #[serde(default, flatten)]
-        limits: LimitsConfig,
-    },
-}
-
-impl RouterRateLimitConfig {
-    #[must_use]
-    pub fn is_disabled(&self) -> bool {
-        matches!(self, RouterRateLimitConfig::None)
-    }
-}
-
 #[cfg(feature = "testing")]
 impl crate::tests::TestDefault for RouterConfigs {
     fn test_default() -> Self {
@@ -118,7 +92,7 @@ impl crate::tests::TestDefault for RouterConfigs {
                     },
                 )])),
                 retries: None,
-                rate_limit: RouterRateLimitConfig::default(),
+                rate_limit: None,
             },
         )]))
     }
@@ -151,7 +125,7 @@ mod tests {
             cache: Some(cache),
             load_balance: balance,
             retries: Some(retries),
-            rate_limit: RouterRateLimitConfig::default(),
+            rate_limit: None,
         }
     }
 

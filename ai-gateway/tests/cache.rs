@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use ai_gateway::{
-    config::{Config, helicone::HeliconeFeatures},
+    config::{Config, cache::CacheConfig, helicone::HeliconeFeatures},
     tests::{TestDefault, harness::Harness, mock::MockArgs},
 };
 use http::{Method, Request, StatusCode};
@@ -53,7 +53,8 @@ fn make_request(
 #[tokio::test]
 #[serial_test::serial(default_mock)]
 async fn cache_enabled_globally() {
-    let config = Config::test_default();
+    let mut config = Config::test_default();
+    config.global.cache = Some(CacheConfig::test_default());
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
