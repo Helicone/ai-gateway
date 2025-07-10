@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use derive_more::{AsRef, From, Into};
+use serde::{Deserialize, Serialize};
 
 use super::{
     model_id::ModelId, org::OrgId, provider::ProviderKeys, user::UserId,
@@ -37,9 +38,27 @@ pub struct MapperContext {
     pub model: Option<ModelId>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum PromptInputValue {
+    String(String),
+    Number(f64),
+    Boolean(bool),
+}
+
+impl PromptInputValue {
+    pub fn as_string(&self) -> String {
+        match self {
+            Self::String(s) => s.clone(),
+            Self::Number(n) => n.to_string(),
+            Self::Boolean(b) => b.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PromptContext {
     pub prompt_id: String,
     pub prompt_version_id: Option<String>,
-    pub inputs: Option<HashMap<String, String>>,
+    pub inputs: Option<HashMap<String, PromptInputValue>>,
 }

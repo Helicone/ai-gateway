@@ -19,7 +19,7 @@ use crate::{
     },
     s3::S3Client,
     types::{
-        extensions::{AuthContext, PromptContext},
+        extensions::{AuthContext, PromptContext, PromptInputValue},
         request::Request,
         response::{JawnResponse, Response},
     },
@@ -337,7 +337,7 @@ fn process_prompt_variables(
 
 fn process_message_variables(
     message_value: &mut serde_json::Value,
-    inputs: &std::collections::HashMap<String, String>,
+    inputs: &std::collections::HashMap<String, PromptInputValue>,
     variable_regex: &Regex,
     validated_variables: &mut HashSet<String>,
 ) -> Result<(), ApiError> {
@@ -381,7 +381,7 @@ fn process_message_variables(
 
 fn replace_variables(
     text: &str,
-    inputs: &std::collections::HashMap<String, String>,
+    inputs: &std::collections::HashMap<String, PromptInputValue>,
     variable_regex: &Regex,
     validated_variables: &mut std::collections::HashSet<String>,
 ) -> Result<String, ApiError> {
@@ -408,9 +408,8 @@ fn replace_variables(
     let result = variable_regex.replace_all(text, |caps: &regex::Captures| {
         let variable_name = &caps[1];
         inputs.get(variable_name).map_or_else(
-            || caps.get(0).unwrap().as_str().to_string(), /* Return original
-                                                           * if not found */
-            std::clone::Clone::clone,
+            || caps.get(0).unwrap().as_str().to_string(),
+            |value| value.as_string(),
         )
     });
 
@@ -418,35 +417,44 @@ fn replace_variables(
 }
 
 fn validate_variable_type(
-    value: &str,
+    value: &PromptInputValue,
     expected_type: &str,
 ) -> Result<String, ApiError> {
+    let value_string = value.as_string();
+    
     match expected_type {
+        "string" => Ok(value_string),
         "number" => {
-            value
-                .parse::<f64>()
-                .map(|_| value.to_string())
+            if matches!(value, PromptInputValue::Number(_)) {
+                return Ok(value_string);
+            }
+            
+            value_string.parse::<f64>()
+                .map(|_| value_string.clone())
                 .map_err(|_| {
                     ApiError::InvalidRequest(
                         InvalidRequestError::InvalidPromptInputs(format!(
-                            "Variable value '{value}' cannot be converted to \
-                             number"
+                            "Variable value '{value_string}' cannot be converted to number"
                         )),
                     )
                 })
         }
         "boolean" => {
-            let lowercase_value = value.to_lowercase();
+            if matches!(value, PromptInputValue::Boolean(_)) {
+                return Ok(value_string);
+            }
+            
+            let lowercase_value = value_string.to_lowercase();
             match lowercase_value.as_str() {
-                "true" | "false" | "yes" | "no" => Ok(value.to_string()),
+                "true" | "false" | "yes" | "no" => Ok(value_string),
                 _ => Err(ApiError::InvalidRequest(
                     InvalidRequestError::InvalidPromptInputs(format!(
-                        "Variable value '{value}' is not a valid boolean \
+                        "Variable value '{value_string}' is not a valid boolean \
                          (expected: true, false, yes, no)"
                     )),
                 )),
             }
         }
-        _ => Ok(value.to_string()),
+        _ => Ok(value_string),
     }
 }
