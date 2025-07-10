@@ -82,8 +82,10 @@ pub struct Config {
     /// *ALL* supported providers, independent of router configuration.
     pub providers: self::providers::ProvidersConfig,
 
-    pub cache_store: self::cache::CacheStore,
-    pub rate_limit_store: self::rate_limit::RateLimitStore,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_store: Option<self::cache::CacheStore>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_store: Option<self::rate_limit::RateLimitStore>,
     /// Global middleware configuration, e.g. rate limiting, caching, etc.
     ///
     /// This configuration will be for middleware that is applied to ALL
@@ -199,8 +201,8 @@ impl crate::tests::TestDefault for Config {
             helicone: self::helicone::HeliconeConfig::test_default(),
             deployment_target: DeploymentTarget::Sidecar,
             discover: self::discover::DiscoverConfig::test_default(),
-            cache_store: self::cache::CacheStore::default(),
-            rate_limit_store: self::rate_limit::RateLimitStore::default(),
+            cache_store: Some(self::cache::CacheStore::default()),
+            rate_limit_store: Some(self::rate_limit::RateLimitStore::default()),
             routers: self::router::RouterConfigs::test_default(),
             response_headers:
                 self::response_headers::ResponseHeadersConfig::default(),

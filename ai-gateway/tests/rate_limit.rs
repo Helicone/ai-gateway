@@ -64,7 +64,7 @@ async fn rate_limit_capacity_enforced_impl(
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
     config.global.rate_limit = Some(rate_limit_config);
-    config.rate_limit_store = rate_limit_store;
+    config.rate_limit_store = Some(rate_limit_store);
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([
             ("success:openai:chat_completion", 6.into()),
@@ -138,7 +138,7 @@ async fn rate_limit_per_user_isolation_impl(
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
     config.global.rate_limit = Some(rate_limit_config);
-    config.rate_limit_store = rate_limit_store;
+    config.rate_limit_store = Some(rate_limit_store);
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([

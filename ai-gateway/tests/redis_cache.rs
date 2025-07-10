@@ -60,9 +60,9 @@ async fn cache_enabled_globally() {
     let mut config = Config::test_default();
     config.global.cache = Some(CacheConfig::test_default());
 
-    config.cache_store = CacheStore::Redis {
+    config.cache_store = Some(CacheStore::Redis {
         host_url: "redis://localhost:6340".parse().unwrap(),
-    };
+    });
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([

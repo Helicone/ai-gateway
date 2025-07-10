@@ -301,7 +301,7 @@ impl App {
             .layer(AsyncRequireAuthorizationLayer::new(AuthService::new(
                 app_state.clone(),
             )))
-            .layer(RateLimitLayer::global(&app_state))
+            .layer(RateLimitLayer::global(&app_state)?)
             .layer(CacheLayer::global(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(ResponseHeaderLayer::new(
@@ -494,33 +494,17 @@ fn setup_cache(
     config: &Config,
     metrics: Metrics,
 ) -> std::result::Result<Option<CacheClient>, InitError> {
-    // Check if global caching is enabled
-    let global_cache_config = config.global.cache.as_ref();
-
-    // Check if any router has caching enabled
-    let any_router_has_cache = config
-        .routers
-        .as_ref()
-        .values()
-        .any(|router_config| router_config.cache.is_some());
-
-    // If neither global nor any router config has caching enabled, return None
-    if global_cache_config.is_none() && !any_router_has_cache {
-        return Ok(None);
-    }
-
-    let manager: CacheClient = match &config.cache_store {
-        CacheStore::InMemory { max_size } => {
+    match &config.cache_store {
+        Some(CacheStore::InMemory { max_size }) => {
             tracing::debug!("Using in-memory cache");
             let moka_manager = setup_moka_cache(*max_size, metrics);
-            CacheClient::Moka(moka_manager)
+            Ok(Some(CacheClient::Moka(moka_manager)))
         }
-        CacheStore::Redis { host_url } => {
+        Some(CacheStore::Redis { host_url }) => {
             tracing::debug!("Using redis cache");
             let redis_manager = setup_redis_cache(host_url.clone())?;
-            CacheClient::Redis(redis_manager)
+            Ok(Some(CacheClient::Redis(redis_manager)))
         }
-    };
-
-    Ok(Some(manager))
+        None => Ok(None),
+    }
 }

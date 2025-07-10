@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use compact_str::CompactString;
 use derive_more::{AsMut, AsRef};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -79,7 +78,7 @@ impl RouterConfig {
 impl crate::tests::TestDefault for RouterConfigs {
     fn test_default() -> Self {
         Self(HashMap::from([(
-            RouterId::Named(CompactString::new("my-router")),
+            RouterId::Named(compact_str::CompactString::new("my-router")),
             RouterConfig {
                 model_mappings: None,
                 cache: None,

@@ -125,10 +125,10 @@ async fn test_global_rate_limit_with_router_none() {
         limits: create_test_limits(3, 1000),
         store: None,
     });
-    config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
+    config.rate_limit_store = Some(RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(10),
-    });
+    }));
 
     // Router doesn't override rate limiting
     config.routers = RouterConfigs::new(HashMap::from([(
@@ -196,10 +196,10 @@ async fn test_global_rate_limit_with_router_none() {
 async fn test_router_specific_with_custom_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
+    config.rate_limit_store = Some(RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
-    });
+    }));
 
     // Router provides its own custom rate limits
     config.routers = RouterConfigs::new(HashMap::from([(
@@ -271,10 +271,10 @@ async fn test_global_with_custom_router_override() {
         limits: create_test_limits(5, 1000),
         store: None,
     });
-    config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
+    config.rate_limit_store = Some(RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
-    });
+    }));
 
     // Router overrides with stricter custom limits
     config.routers = RouterConfigs::new(HashMap::from([(
@@ -341,10 +341,10 @@ async fn test_global_with_custom_router_override() {
 async fn test_router_independence_different_rate_limits() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
+    config.rate_limit_store = Some(RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
-    });
+    }));
 
     let strict_router_id = RouterId::Named(CompactString::from("strict"));
     let lenient_router_id = RouterId::Named(CompactString::from("lenient"));
@@ -526,10 +526,10 @@ async fn make_chat_request_to_router(
 async fn test_multi_router_different_rate_limits_in_memory() {
     let mut config = Config::test_default();
     config.helicone.features = HeliconeFeatures::All;
-    config.rate_limit_store = RateLimitStore::Redis(RedisConfig {
+    config.rate_limit_store = Some(RateLimitStore::Redis(RedisConfig {
         host_url: Secret::from(REDIS_URL.parse::<url::Url>().unwrap()),
         connection_timeout: Duration::from_secs(1),
-    });
+    }));
     let router_a_id = RouterId::Named(CompactString::from("router-a"));
     let router_b_id = RouterId::Named(CompactString::from("router-b"));
     let router_c_id = RouterId::Named(CompactString::new("my-router"));

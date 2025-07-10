@@ -120,7 +120,7 @@ impl MetaRouter {
             inner.insert(router_id.clone(), router);
         }
         let unified_api = ServiceBuilder::new()
-            .layer(rate_limit::Layer::unified_api(&app_state))
+            .layer(rate_limit::Layer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);

@@ -47,47 +47,53 @@ pub struct Layer {
 
 impl Layer {
     /// Create a new rate limit layer to be applied globally.
-    #[must_use]
-    pub fn global(app_state: &AppState) -> Self {
-        if let Some(rate_limit_config) = &app_state.0.config.global.rate_limit {
-            if let RateLimitStore::Redis(redis_config) =
-                &app_state.0.config.rate_limit_store
-            {
-                Self::new_redis_inner(
+    pub fn global(app_state: &AppState) -> Result<Self, InitError> {
+        if let Some(rate_limit_config) = &app_state.config().global.rate_limit {
+            let store_config =
+                app_state.config().rate_limit_store.as_ref().ok_or(
+                    InitError::InvalidRateLimitConfig("store not configured"),
+                )?;
+            if let RateLimitStore::Redis(redis_config) = &store_config {
+                Ok(Self::new_redis_inner(
                     rate_limit_config.limits.clone(),
                     redis_config.host_url.expose().clone(),
-                )
+                ))
             } else {
-                Self::new_in_memory_inner(app_state.0.global_rate_limit.clone())
+                Ok(Self::new_in_memory_inner(
+                    app_state.0.global_rate_limit.clone(),
+                ))
             }
         } else {
-            Self {
+            Ok(Self {
                 inner: InnerLayer::None,
-            }
+            })
         }
     }
 
     /// Create a new rate limit layer to be applied to all requests to the
     /// unified api.
-    #[must_use]
-    pub fn unified_api(app_state: &AppState) -> Self {
+    pub fn unified_api(app_state: &AppState) -> Result<Self, InitError> {
         if let Some(rate_limit_config) =
-            &app_state.0.config.unified_api.rate_limit
+            &app_state.config().unified_api.rate_limit
         {
-            if let RateLimitStore::Redis(redis_config) =
-                &app_state.0.config.rate_limit_store
-            {
-                Self::new_redis_inner(
+            let store_config =
+                app_state.config().rate_limit_store.as_ref().ok_or(
+                    InitError::InvalidRateLimitConfig("store not configured"),
+                )?;
+            if let RateLimitStore::Redis(redis_config) = &store_config {
+                Ok(Self::new_redis_inner(
                     rate_limit_config.limits.clone(),
                     redis_config.host_url.expose().clone(),
-                )
+                ))
             } else {
-                Self::new_in_memory_inner(app_state.0.global_rate_limit.clone())
+                Ok(Self::new_in_memory_inner(
+                    app_state.0.global_rate_limit.clone(),
+                ))
             }
         } else {
-            Self {
+            Ok(Self {
                 inner: InnerLayer::None,
-            }
+            })
         }
     }
 
@@ -135,12 +141,14 @@ impl Layer {
                 inner: InnerLayer::None,
             }),
             Some(RateLimitConfig { store, limits }) => {
-                let ratelimit_store = store.clone().or_else(|| {
-                    Some(app_state.0.config.rate_limit_store.clone())
-                });
+                let ratelimit_store = store
+                    .as_ref()
+                    .or_else(|| app_state.config().rate_limit_store.as_ref())
+                    .ok_or(InitError::InvalidRateLimitConfig(
+                        "store not configured",
+                    ))?;
 
-                if let Some(store) = ratelimit_store
-                    && let RateLimitStore::Redis(redis_config) = store
+                if let RateLimitStore::Redis(redis_config) = ratelimit_store
                     && let Ok(layer) = RedisRateLimitLayer::new(
                         Arc::new(limits.clone()),
                         redis_config.host_url.expose().clone(),
