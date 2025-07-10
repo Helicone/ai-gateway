@@ -1,7 +1,6 @@
 use std::{
     future::{Ready, ready},
     str::FromStr,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -10,12 +9,11 @@ use dynamic_router::router::DynamicRouter;
 use http::uri::PathAndQuery;
 use pin_project_lite::pin_project;
 use regex::Regex;
-use rustc_hash::FxHashMap as HashMap;
 use tower::{Service as _, ServiceBuilder};
 
 use crate::{
     app_state::AppState,
-    config::{DeploymentTarget, router::RouterConfig},
+    config::DeploymentTarget,
     discover::router::{discover::Discovery, factory::DiscoverFactory},
     error::{
         api::ApiError, init::InitError, internal::InternalError,
@@ -28,7 +26,6 @@ use crate::{
     router::{
         FORCED_ROUTING_HEADER,
         direct::{DirectProxiesWithoutMapper, DirectProxyServiceWithoutMapper},
-        service::Router,
         unified_api,
     },
     types::{

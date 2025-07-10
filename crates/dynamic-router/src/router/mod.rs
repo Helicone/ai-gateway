@@ -34,13 +34,13 @@ use std::{
 };
 
 use futures::{
-    future::{self, FutureExt, TryFutureExt},
+    future::{FutureExt, TryFutureExt},
     ready,
 };
 use tower::{
     Service,
     discover::{Change, Discover},
-    ready_cache::{ReadyCache, error::Failed},
+    ready_cache::ReadyCache,
 };
 use tracing::{debug, trace};
 
