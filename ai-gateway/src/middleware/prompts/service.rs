@@ -421,20 +421,22 @@ fn validate_variable_type(
     expected_type: &str,
 ) -> Result<String, ApiError> {
     let value_string = value.as_string();
-    
+
     match expected_type {
         "string" => Ok(value_string),
         "number" => {
             if matches!(value, PromptInputValue::Number(_)) {
                 return Ok(value_string);
             }
-            
-            value_string.parse::<f64>()
+
+            value_string
+                .parse::<f64>()
                 .map(|_| value_string.clone())
                 .map_err(|_| {
                     ApiError::InvalidRequest(
                         InvalidRequestError::InvalidPromptInputs(format!(
-                            "Variable value '{value_string}' cannot be converted to number"
+                            "Variable value '{value_string}' cannot be \
+                             converted to number"
                         )),
                     )
                 })
@@ -443,14 +445,14 @@ fn validate_variable_type(
             if matches!(value, PromptInputValue::Boolean(_)) {
                 return Ok(value_string);
             }
-            
+
             let lowercase_value = value_string.to_lowercase();
             match lowercase_value.as_str() {
                 "true" | "false" | "yes" | "no" => Ok(value_string),
                 _ => Err(ApiError::InvalidRequest(
                     InvalidRequestError::InvalidPromptInputs(format!(
-                        "Variable value '{value_string}' is not a valid boolean \
-                         (expected: true, false, yes, no)"
+                        "Variable value '{value_string}' is not a valid \
+                         boolean (expected: true, false, yes, no)"
                     )),
                 )),
             }
