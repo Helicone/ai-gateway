@@ -49,9 +49,9 @@ pub enum PromptInputValue {
 impl std::fmt::Display for PromptInputValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::String(s) => write!(f, "{}", s),
-            Self::Number(n) => write!(f, "{}", n),
-            Self::Boolean(b) => write!(f, "{}", b),
+            Self::String(s) => write!(f, "{s}"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Boolean(b) => write!(f, "{b}"),
         }
     }
 }

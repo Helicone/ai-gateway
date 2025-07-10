@@ -409,7 +409,7 @@ fn replace_variables(
         let variable_name = &caps[1];
         inputs.get(variable_name).map_or_else(
             || caps.get(0).unwrap().as_str().to_string(),
-            |value| value.to_string(),
+            std::string::ToString::to_string,
         )
     });
 
@@ -423,7 +423,6 @@ fn validate_variable_type(
     let value_string = value.to_string();
 
     match expected_type {
-        "string" => Ok(value_string),
         "number" => {
             if matches!(value, PromptInputValue::Number(_)) {
                 return Ok(value_string);
