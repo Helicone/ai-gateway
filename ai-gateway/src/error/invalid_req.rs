@@ -49,6 +49,8 @@ pub enum InvalidRequestError {
     TooManyRequests(TooManyRequestsError),
     /// Invalid request header: {0}
     InvalidRequestHeader(http::header::ToStrError),
+    /// Invalid prompt inputs: {0}
+    InvalidPromptInputs(String),
 }
 
 impl IntoResponse for InvalidRequestError {
@@ -163,7 +165,10 @@ impl From<&InvalidRequestError> for InvalidRequestErrorMetric {
             | InvalidRequestError::InvalidRequestHeader(_) => Self::NotFound,
             InvalidRequestError::InvalidRequest(_)
             | InvalidRequestError::UnsupportedEndpoint(_)
-            | InvalidRequestError::InvalidCacheConfig => Self::InvalidRequest,
+            | InvalidRequestError::InvalidCacheConfig
+            | InvalidRequestError::InvalidPromptInputs(_) => {
+                Self::InvalidRequest
+            }
             InvalidRequestError::InvalidUrl(_) => Self::InvalidUrl,
             InvalidRequestError::InvalidRequestBody(_) => {
                 Self::InvalidRequestBody

@@ -386,16 +386,22 @@ fn replace_variables(
     validated_variables: &mut std::collections::HashSet<String>,
 ) -> Result<String, ApiError> {
     for caps in variable_regex.captures_iter(text) {
-        let variable_name = &caps[1];
-        let variable_type = &caps[2];
+        let variable_name =
+            caps.get(1).ok_or(InvalidRequestError::InvalidPromptInputs(
+                "Invalid variable name".to_string(),
+            ))?;
+        let variable_type =
+            caps.get(2).ok_or(InvalidRequestError::InvalidPromptInputs(
+                "Invalid variable type".to_string(),
+            ))?;
 
-        if validated_variables.contains(variable_name) {
+        if validated_variables.contains(variable_name.as_str()) {
             continue;
         }
 
-        if let Some(value) = inputs.get(variable_name) {
-            validate_variable_type(value, variable_type)?;
-            validated_variables.insert(variable_name.to_string());
+        if let Some(value) = inputs.get(variable_name.as_str()) {
+            validate_variable_type(value, variable_type.as_str())?;
+            validated_variables.insert(variable_name.as_str().to_string());
         }
     }
 
@@ -404,7 +410,7 @@ fn replace_variables(
         inputs.get(variable_name).map_or_else(
             || caps.get(0).unwrap().as_str().to_string(), /* Return original
                                                            * if not found */
-            |value| value.clone(),
+            std::clone::Clone::clone,
         )
     });
 
@@ -421,15 +427,11 @@ fn validate_variable_type(
                 .parse::<f64>()
                 .map(|_| value.to_string())
                 .map_err(|_| {
-                    let error_msg = format!(
-                        "Variable value '{}' cannot be converted to number",
-                        value
-                    );
-                    let json_error =
-                        serde_json::from_str::<serde_json::Value>(&error_msg)
-                            .unwrap_err();
                     ApiError::InvalidRequest(
-                        InvalidRequestError::InvalidRequestBody(json_error),
+                        InvalidRequestError::InvalidPromptInputs(format!(
+                            "Variable value '{value}' cannot be converted to \
+                             number"
+                        )),
                     )
                 })
         }
@@ -437,19 +439,12 @@ fn validate_variable_type(
             let lowercase_value = value.to_lowercase();
             match lowercase_value.as_str() {
                 "true" | "false" | "yes" | "no" => Ok(value.to_string()),
-                _ => {
-                    let error_msg = format!(
-                        "Variable value '{}' is not a valid boolean \
-                         (expected: true, false, yes, no)",
-                        value
-                    );
-                    let json_error =
-                        serde_json::from_str::<serde_json::Value>(&error_msg)
-                            .unwrap_err();
-                    Err(ApiError::InvalidRequest(
-                        InvalidRequestError::InvalidRequestBody(json_error),
-                    ))
-                }
+                _ => Err(ApiError::InvalidRequest(
+                    InvalidRequestError::InvalidPromptInputs(format!(
+                        "Variable value '{value}' is not a valid boolean \
+                         (expected: true, false, yes, no)"
+                    )),
+                )),
             }
         }
         _ => Ok(value.to_string()),
