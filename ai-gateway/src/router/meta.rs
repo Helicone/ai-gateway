@@ -61,7 +61,7 @@ const UNIFIED_URL_REGEX: &str =
 
 /// Legacy regex for router-specific matching (kept for backward compatibility)
 const ROUTER_URL_REGEX: &str =
-    r"^/router/(?P<id>[A-Za-z0-9_-]+)(?P<path>/[^?]*)?(?P<query>\?.*)?$";
+    r"^/router/(?P<id>[A-Za-z0-9_-]{1,36})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
     rate_limit::Service<CacheService<ErrorHandler<unified_api::Service>>>;
@@ -525,7 +525,9 @@ mod tests {
         // --- Negative cases ---
         assert!(!regex.is_match("/router"));
         assert!(!regex.is_match("/router/"));
-        assert!(!regex.is_match("/router/this-id-is-way-too-long"));
+        assert!(!regex.is_match(
+            "/router/this-id-is-way-too-long-to-be-valid-as-a-router-id"
+        ));
         assert!(!regex.is_match("/other/path"));
     }
 
@@ -602,7 +604,8 @@ mod tests {
             Err(ApiError::InvalidRequest(_))
         ));
 
-        let path_id_too_long = "/router/this-id-is-way-too-long";
+        let path_id_too_long =
+            "/router/this-id-is-way-too-long-to-be-valid-as-a-router-id";
         assert!(matches!(
             extract_router_id_and_path(&url_regex, path_id_too_long),
             Err(ApiError::InvalidRequest(_))

@@ -27,7 +27,7 @@ use thiserror::Error;
 
 use crate::{error::init::InitError, types::secret::Secret};
 
-const ROUTER_ID_REGEX: &str = r"^[A-Za-z0-9_-]+$";
+const ROUTER_ID_REGEX: &str = r"^[A-Za-z0-9_-]{1,36}$";
 const DEFAULT_CONFIG_PATH: &str = "/etc/ai-gateway/config.yaml";
 
 #[derive(Debug, Error, Display)]
@@ -248,7 +248,8 @@ mod tests {
             "a_b",
             "abc_def",
             "0123456789",
-            "123456789012", // 12 chars
+            "123456789012",                         // 12 chars
+            "123456789012345678901234567890123456", // 36 chars
             "a-b-c-d",
         ];
         for id in valid_ids {
@@ -266,7 +267,7 @@ mod tests {
             "",
             "with space",
             "special$",
-            "1234567890123", // 13 chars
+            "1234567890123456789012345678901234567", // 37 chars
             "trailingdash-",
             "mixed*chars",
         ];
