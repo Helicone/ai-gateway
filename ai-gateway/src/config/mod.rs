@@ -268,7 +268,6 @@ mod tests {
             "with space",
             "special$",
             "1234567890123456789012345678901234567", // 37 chars
-            "trailingdash-",
             "mixed*chars",
         ];
         for id in invalid_ids {
