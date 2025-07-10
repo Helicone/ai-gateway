@@ -34,7 +34,7 @@ use std::{
 };
 
 use futures::{
-    future::{self, TryFutureExt},
+    future::{self, FutureExt, TryFutureExt},
     ready,
 };
 use tower::{
@@ -46,10 +46,12 @@ use tracing::{debug, trace};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("weighted balancer discovery error: {0}")]
+    #[error("Not found: {0}")]
+    NotFound(String),
+    #[error("Inner service error: {0}")]
+    InnerService(tower::BoxError),
+    #[error("Discover error: {0}")]
     Discover(tower::BoxError),
-    #[error("weighted balancer failed to sample: {0}")]
-    SampleFailed(#[from] rand::distr::weighted::Error),
 }
 
 /// Efficiently distributes requests across an arbitrary number of services.
@@ -224,17 +226,25 @@ where
     D::Key: Hash + Clone + Send + Sync + 'static,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>>,
+    <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
     <D::Service as Service<http::Request<ReqBody>>>::Error:
-        Into<tower::BoxError>,
+        Into<tower::BoxError> + Send + 'static,
+    <<D as tower::discover::Discover>::Service as Service<
+        http::Request<ReqBody>,
+    >>::Response: Send + 'static,
 {
     type Response = <D::Service as Service<http::Request<ReqBody>>>::Response;
-    type Error = tower::BoxError;
-    type Future = future::MapErr<
-        <D::Service as Service<http::Request<ReqBody>>>::Future,
-        fn(
-            <D::Service as Service<http::Request<ReqBody>>>::Error,
-        ) -> tower::BoxError,
+    type Error = Error;
+    type Future = futures::future::BoxFuture<
+        'static,
+        Result<Self::Response, Self::Error>,
     >;
+    // type Future = future::MapErr<
+    //     <D::Service as Service<http::Request<ReqBody>>>::Future,
+    //     fn(
+    //         <D::Service as Service<http::Request<ReqBody>>>::Error,
+    //     ) -> tower::BoxError,
+    // >;
 
     fn poll_ready(
         &mut self,
@@ -247,48 +257,24 @@ where
         self.promote_pending_to_ready(cx);
 
         Poll::Ready(Ok(()))
-        // loop {
-        //     // If a service has already been selected, ensure that it is
-        // ready.     // This ensures that the underlying service is
-        // ready immediately     // before a request is dispatched to it
-        // (i.e. in the same task     // invocation). If, e.g., a
-        // failure detector has changed the state     // of the service,
-        // it may be evicted from the ready set so that     // another
-        // service can be selected.     if let Some(index) =
-        // self.ready_index.take() {         match
-        // self.services.check_ready_index(cx, index) {
-        // Ok(true) => {                 // The service remains ready.
-        //                 self.ready_index = Some(index);
-        //                 return Poll::Ready(Ok(()));
-        //             }
-        //             Ok(false) => {
-        //                 // The service is no longer ready. Try to find a new
-        //                 // one.
-        //                 trace!("ready service became unavailable");
-        //             }
-        //             Err(Failed(_, error)) => {
-        //                 // The ready endpoint failed, so log the error and
-        // try                 // to find a new one.
-        //                 debug!(%error, "endpoint failed");
-        //             }
-        //         }
-        //     }
-
-        //     self.ready_index = self.ready_index()?;
-        //     if self.ready_index.is_none() {
-        //         debug_assert_eq!(self.services.ready_len(), 0);
-        //         // We have previously registered interest in updates from
-        //         // discover and pending services.
-        //         return Poll::Pending;
-        //     }
-        // }
     }
 
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
         tracing::trace!("DynamicRouter::call");
         let key = request.extensions().get::<D::Key>().unwrap().clone();
         let (_, _router_service, service) =
-            self.services.get_ready_mut(&key).unwrap();
-        service.call(request).map_err(Into::into)
+            match self.services.get_ready_mut(&key) {
+                Some(result) => result,
+                None => {
+                    return futures::future::ready(Err(Error::NotFound(
+                        request.uri().path().to_string(),
+                    )))
+                    .boxed();
+                }
+            };
+        service
+            .call(request)
+            .map_err(|e| Error::InnerService(e.into()))
+            .boxed()
     }
 }

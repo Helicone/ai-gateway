@@ -453,7 +453,9 @@ impl std::future::Future for ResponseFuture {
     ) -> Poll<Self::Output> {
         match self.project() {
             ResponseFutureProj::Ready { future } => future.poll(cx),
-            ResponseFutureProj::RouterRequest { future } => future.poll(cx),
+            ResponseFutureProj::RouterRequest { future } => {
+                future.poll(cx).map_err(Into::into)
+            }
             ResponseFutureProj::UnifiedApi { future } => future.poll(cx),
             ResponseFutureProj::DirectProxy { future } => future
                 .poll(cx)

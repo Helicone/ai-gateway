@@ -32,6 +32,24 @@ pub enum ApiError {
     Panic(String),
 }
 
+impl From<dynamic_router::router::Error> for ApiError {
+    fn from(error: dynamic_router::router::Error) -> Self {
+        match error {
+            dynamic_router::router::Error::NotFound(path) => {
+                Self::InvalidRequest(InvalidRequestError::NotFound(path))
+            }
+            dynamic_router::router::Error::InnerService(error) => {
+                Self::Internal(InternalError::DynamicRouterInnerServiceError(
+                    error,
+                ))
+            }
+            dynamic_router::router::Error::Discover(error) => Self::Internal(
+                InternalError::DynamicRouterDiscoveryError(error),
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: ErrorDetails,
