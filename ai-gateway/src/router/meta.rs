@@ -29,8 +29,10 @@ use crate::{
         unified_api,
     },
     types::{
-        extensions::MapperContext, provider::InferenceProvider,
-        request::Request, router::RouterId,
+        extensions::{MapperContext, RequestKind},
+        provider::InferenceProvider,
+        request::Request,
+        router::RouterId,
     },
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
@@ -118,11 +120,8 @@ impl MetaRouter {
             inner.insert(router_id.clone(), router);
         }
         let unified_api = ServiceBuilder::new()
-            // TODO: should we change how global configs work for rate limiting,
-            // caching?       For now, leave these types here to
-            // make it easier to change later on.
-            .layer(rate_limit::Layer::disabled())
-            .layer(CacheLayer::disabled())
+            .layer(rate_limit::Layer::unified_api(&app_state))
+            .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
         let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
@@ -216,6 +215,7 @@ impl MetaRouter {
             };
         if let Some(router) = self.inner.get_mut(router_id) {
             req.extensions_mut().insert(extracted_path_and_query);
+            req.extensions_mut().insert(RequestKind::Router);
             ResponseFuture::RouterRequest {
                 future: router.call(req),
             }
@@ -244,6 +244,7 @@ impl MetaRouter {
                 }
             };
         req.extensions_mut().insert(extracted_path_and_query);
+        req.extensions_mut().insert(RequestKind::UnifiedApi);
         // assumes request is from OpenAI compatible client
         // and uses the model name to determine the provider.
         ResponseFuture::UnifiedApi {
@@ -271,6 +272,7 @@ impl MetaRouter {
                 }
             };
         req.extensions_mut().insert(extracted_path_and_query);
+        req.extensions_mut().insert(RequestKind::DirectProxy);
         // for the passthrough endpoints, we don't want to
         // collect/deserialize the request
         // body, and thus we must assume the request is not a stream

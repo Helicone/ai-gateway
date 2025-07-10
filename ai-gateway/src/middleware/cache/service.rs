@@ -140,6 +140,15 @@ impl CacheLayer {
             None
         }
     }
+
+    pub fn unified_api(app_state: &AppState) -> Option<Self> {
+        let cloned_app_state = app_state.clone();
+        if let Some(config) = &app_state.config().unified_api.cache {
+            Self::new(cloned_app_state, config.clone()).ok()
+        } else {
+            None
+        }
+    }
 }
 
 impl<S> tower::Layer<S> for CacheLayer {

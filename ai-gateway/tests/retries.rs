@@ -24,7 +24,7 @@ async fn unified_api() {
     // Disable auth for this test since we're testing basic passthrough
     // functionality
     config.helicone.features = HeliconeFeatures::All;
-    config.global.retries = Some(RetryConfig::test_default());
+    config.unified_api.retries = Some(RetryConfig::test_default());
 
     let mock_args = MockArgs::builder()
         .stubs(HashMap::from([

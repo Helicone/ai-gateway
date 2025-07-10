@@ -85,7 +85,16 @@ pub struct Config {
     pub cache_store: self::cache::CacheStore,
     pub rate_limit_store: self::rate_limit::RateLimitStore,
     /// Global middleware configuration, e.g. rate limiting, caching, etc.
+    ///
+    /// This configuration will be for middleware that is applied to ALL
+    /// routes on the application, and will run before any other
+    /// router or unified-api-specific middleware.
     pub global: MiddlewareConfig,
+    /// Middleware configuration for the unified API.
+    ///
+    /// This configuration will be for middleware that is applied to ALL
+    /// requests to the unified API (`/ai`)
+    pub unified_api: MiddlewareConfig,
     pub routers: self::router::RouterConfigs,
 }
 
@@ -176,11 +185,6 @@ impl crate::tests::TestDefault for Config {
             level: "info,ai_gateway=trace".to_string(),
             ..Default::default()
         };
-        let middleware = MiddlewareConfig {
-            cache: None,
-            rate_limit: None,
-            retries: None,
-        };
         Config {
             telemetry,
             server: self::server::ServerConfig::test_default(),
@@ -189,7 +193,8 @@ impl crate::tests::TestDefault for Config {
             dispatcher: self::dispatcher::DispatcherConfig::test_default(),
             default_model_mapping:
                 self::model_mapping::ModelMappingConfig::default(),
-            global: middleware,
+            global: MiddlewareConfig::default(),
+            unified_api: MiddlewareConfig::default(),
             providers: self::providers::ProvidersConfig::default(),
             helicone: self::helicone::HeliconeConfig::test_default(),
             deployment_target: DeploymentTarget::Sidecar,

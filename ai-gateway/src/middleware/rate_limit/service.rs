@@ -67,6 +67,30 @@ impl Layer {
         }
     }
 
+    /// Create a new rate limit layer to be applied to all requests to the
+    /// unified api.
+    #[must_use]
+    pub fn unified_api(app_state: &AppState) -> Self {
+        if let Some(rate_limit_config) =
+            &app_state.0.config.unified_api.rate_limit
+        {
+            if let RateLimitStore::Redis(redis_config) =
+                &app_state.0.config.rate_limit_store
+            {
+                Self::new_redis_inner(
+                    rate_limit_config.limits.clone(),
+                    redis_config.host_url.expose().clone(),
+                )
+            } else {
+                Self::new_in_memory_inner(app_state.0.global_rate_limit.clone())
+            }
+        } else {
+            Self {
+                inner: InnerLayer::None,
+            }
+        }
+    }
+
     #[must_use]
     fn new_redis_inner(rl: LimitsConfig, url: url::Url) -> Self {
         if let Ok(layer) = RedisRateLimitLayer::new(Arc::new(rl), url, None) {

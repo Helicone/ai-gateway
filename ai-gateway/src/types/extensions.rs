@@ -62,3 +62,10 @@ pub struct PromptContext {
     pub prompt_version_id: Option<String>,
     pub inputs: Option<HashMap<String, PromptInputValue>>,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum RequestKind {
+    Router,
+    UnifiedApi,
+    DirectProxy,
+}

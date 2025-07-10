@@ -37,6 +37,12 @@ impl Layer {
         Self { inner: layer }
     }
 
+    #[must_use]
+    pub fn unified_api(app_state: &AppState) -> Self {
+        let layer = CacheLayer::unified_api(app_state);
+        Self { inner: layer }
+    }
+
     /// For when we statically know that caching is disabled.
     #[must_use]
     pub fn disabled() -> Self {

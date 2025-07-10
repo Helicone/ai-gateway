@@ -39,7 +39,7 @@ use crate::{
     },
     types::{
         body::BodyReader,
-        extensions::{MapperContext, RequestContext},
+        extensions::{MapperContext, RequestContext, RequestKind},
         provider::InferenceProvider,
         rate_limit::RateLimitEvent,
         request::Request,
@@ -254,6 +254,11 @@ impl Dispatcher {
                 );
                 Utc::now()
             });
+        let request_kind = req
+            .extensions()
+            .get::<RequestKind>()
+            .copied()
+            .ok_or(InternalError::ExtensionNotFound("RequestKind"))?;
 
         let target_url = base_url
             .join(extracted_path_and_query.as_str())
@@ -301,6 +306,7 @@ impl Dispatcher {
                 api_endpoint.clone(),
                 metrics_for_stream,
                 &req_ctx,
+                request_kind,
             )
             .await?
         } else {
@@ -309,6 +315,7 @@ impl Dispatcher {
                 request_builder,
                 req_body_bytes.clone(),
                 &req_ctx,
+                request_kind,
             )
             .instrument(info_span!("dispatch_sync"))
             .await?
@@ -545,6 +552,7 @@ impl Dispatcher {
         request_builder: RequestBuilder,
         req_body_bytes: Bytes,
         req_ctx: &RequestContext,
+        request_kind: RequestKind,
     ) -> Result<
         (
             http::Response<crate::types::body::Body>,
@@ -554,12 +562,7 @@ impl Dispatcher {
         ApiError,
     > {
         let retry_config =
-            if let Some(router_config) = req_ctx.router_config.as_ref() {
-                router_config.retries.as_ref()
-            } else {
-                self.app_state.config().global.retries.as_ref()
-            };
-
+            get_retry_config(&self.app_state, request_kind, req_ctx);
         if let Some(retry_config) = retry_config {
             match retry_config {
                 RetryConfig::Exponential {
@@ -677,6 +680,7 @@ async fn dispatch_stream_with_retry(
     api_endpoint: Option<ApiEndpoint>,
     metrics_registry: EndpointMetricsRegistry,
     request_ctx: &RequestContext,
+    request_kind: RequestKind,
 ) -> Result<
     (
         http::Response<crate::types::body::Body>,
@@ -685,12 +689,7 @@ async fn dispatch_stream_with_retry(
     ),
     ApiError,
 > {
-    let retry_config =
-        if let Some(router_config) = request_ctx.router_config.as_ref() {
-            router_config.retries.as_ref()
-        } else {
-            app_state.config().global.retries.as_ref()
-        };
+    let retry_config = get_retry_config(app_state, request_kind, request_ctx);
 
     if let Some(retry_config) = retry_config {
         match retry_config {
@@ -824,4 +823,24 @@ fn stream_response_headers() -> HeaderMap {
             HeaderValue::from_str("chunked").unwrap(),
         ),
     ])
+}
+
+fn get_retry_config<'a>(
+    app_state: &'a AppState,
+    request_kind: RequestKind,
+    req_ctx: &'a RequestContext,
+) -> Option<&'a RetryConfig> {
+    match request_kind {
+        RequestKind::Router => {
+            if let Some(router_config) = req_ctx.router_config.as_ref() {
+                router_config.retries.as_ref()
+            } else {
+                app_state.config().global.retries.as_ref()
+            }
+        }
+        RequestKind::UnifiedApi => {
+            app_state.config().unified_api.retries.as_ref()
+        }
+        RequestKind::DirectProxy => None,
+    }
 }
