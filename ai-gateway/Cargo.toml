@@ -32,6 +32,7 @@ config = { workspace = true }
 derive_more = { workspace = true, features = ['as_ref', 'constructor', 'debug', 'deref', 'deref_mut', 'display', 'from', 'into', 'from_str'] }
 displaydoc = { workspace = true }
 dotenvy = { workspace = true }
+dynamic-router = { workspace = true }
 eventsource-stream = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }

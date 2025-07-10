@@ -93,7 +93,7 @@ impl<S, Target, ReqBody> Service<Target> for MakeRouter<S, ReqBody>
 where
     S: Service<Target>,
     S::Response: Discover,
-    <S::Response as Discover>::Key: Hash,
+    <S::Response as Discover>::Key: Hash + Send + Sync,
     <S::Response as Discover>::Service: Service<Request<ReqBody>>,
     <<S::Response as Discover>::Service as Service<Request<ReqBody>>>::Error:
         Into<tower::BoxError>,
@@ -131,7 +131,7 @@ impl<F, T, E, ReqBody> Future for MakeFuture<F, ReqBody>
 where
     F: Future<Output = Result<T, E>>,
     T: Discover,
-    <T as Discover>::Key: Hash,
+    <T as Discover>::Key: Hash + Send + Sync,
     <T as Discover>::Service: Service<Request<ReqBody>>,
     <<T as Discover>::Service as Service<Request<ReqBody>>>::Error:
         Into<tower::BoxError>,

@@ -64,6 +64,7 @@ dependencies = [
  "derive_more",
  "displaydoc",
  "dotenvy",
+ "dynamic-router",
  "eventsource-stream",
  "flate2",
  "futures",

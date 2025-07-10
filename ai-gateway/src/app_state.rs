@@ -5,6 +5,7 @@ use tokio::sync::{
     RwLock,
     mpsc::{Receiver, Sender},
 };
+use tower::discover::Change;
 
 use crate::{
     cache::CacheClient,
@@ -22,6 +23,7 @@ use crate::{
     logger::service::JawnClient,
     metrics::Metrics,
     minio::Minio,
+    router::service::Router,
     types::{
         provider::{InferenceProvider, ProviderKey, ProviderKeys},
         rate_limit::{
@@ -68,6 +70,8 @@ pub struct InnerAppState {
     pub rate_limit_monitors: RateLimitMonitorMap,
     pub rate_limit_senders: RateLimitEventSenders,
     pub rate_limit_receivers: RateLimitEventReceivers,
+
+    pub router_rx: RwLock<Option<Receiver<Change<RouterId, Router>>>>,
 }
 
 impl AppState {
@@ -132,5 +136,10 @@ impl AppState {
         provider: &InferenceProvider,
     ) -> Result<Option<ProviderKey>, ProviderError> {
         Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
+    }
+
+    pub async fn set_router_rx(&self, rx: Receiver<Change<RouterId, Router>>) {
+        let mut router_rx = self.0.router_rx.write().await;
+        *router_rx = Some(rx);
     }
 }

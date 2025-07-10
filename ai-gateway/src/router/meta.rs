@@ -6,6 +6,7 @@ use std::{
 };
 
 use compact_str::CompactString;
+use dynamic_router::router::DynamicRouter;
 use http::uri::PathAndQuery;
 use pin_project_lite::pin_project;
 use regex::Regex;
@@ -15,6 +16,7 @@ use tower::{Service as _, ServiceBuilder};
 use crate::{
     app_state::AppState,
     config::{DeploymentTarget, router::RouterConfig},
+    discover::router::{discover::Discovery, factory::DiscoverFactory},
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
@@ -85,7 +87,7 @@ fn extract_path_and_query(
 
 #[derive(Debug)]
 pub struct MetaRouter {
-    inner: HashMap<RouterId, Router>,
+    dynamic_router: DynamicRouter<Discovery, axum_core::body::Body>,
     unified_api: UnifiedApiService,
     direct_proxies: DirectProxiesWithoutMapper,
     unified_url_regex: Regex,
@@ -100,10 +102,10 @@ impl MetaRouter {
             }
             DeploymentTarget::Cloud => Self::cloud_from_config(app_state).await,
         }?;
-        tracing::info!(
-            num_routers = meta_router.inner.len(),
-            "meta router created"
-        );
+        // tracing::info!(
+        //     num_routers = meta_router.inner.len(),
+        //     "meta router created"
+        // );
         Ok(meta_router)
     }
 
@@ -114,7 +116,7 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let mut inner = HashMap::default();
+        // let mut inner = HashMap::default();
 
         let database = &app_state.0.database;
         let routers =
@@ -124,26 +126,32 @@ impl MetaRouter {
                     InitError::DefaultRouterNotFound
                 },
             )?;
-        for router in routers {
-            let router_id = RouterId::Named(CompactString::from(
-                router.router_id.to_string(),
-            ));
-            let router_config = serde_json::from_value::<RouterConfig>(
-                router.config.clone(),
-            )
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to parse router config");
-                InitError::DefaultRouterNotFound
-            })?;
+        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let rx = app_state.0.router_rx.read().await;
+        let discovery = discovery_factory.call(Some(rx)).await?;
+        let dynamic_router = DynamicRouter::new(discovery);
+        // let discovery = Discovery::new(&app_state).await?;
+        // let dynamic_router = DynamicRouter::new(discovery);
+        // for router in routers {
+        //     let router_id = RouterId::Named(CompactString::from(
+        //         router.router_id.to_string(),
+        //     ));
+        //     let router_config = serde_json::from_value::<RouterConfig>(
+        //         router.config.clone(),
+        //     )
+        //     .map_err(|e| {
+        //         tracing::error!(error = %e, "failed to parse router config");
+        //         InitError::DefaultRouterNotFound
+        //     })?;
 
-            let router = Router::new(
-                router_id.clone(),
-                Arc::new(router_config),
-                app_state.clone(),
-            )
-            .await?;
-            inner.insert(router_id.clone(), router);
-        }
+        //     let router = Router::new(
+        //         router_id.clone(),
+        //         Arc::new(router_config),
+        //         app_state.clone(),
+        //     )
+        //     .await?;
+        //     inner.insert(router_id.clone(), router);
+        // }
         let unified_api = ServiceBuilder::new()
             // TODO: should we change how global configs work for rate limiting,
             // caching?       For now, leave these types here to
@@ -155,7 +163,7 @@ impl MetaRouter {
         let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
 
         let meta_router = Self {
-            inner,
+            dynamic_router,
             unified_api,
             direct_proxies,
             unified_url_regex,
@@ -171,24 +179,9 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let mut inner = HashMap::default();
-        for router_id in app_state.0.config.routers.as_ref().keys() {
-            let router_config = app_state
-                .0
-                .config
-                .routers
-                .as_ref()
-                .get(router_id)
-                .ok_or(InitError::DefaultRouterNotFound)?
-                .clone();
-            let router = Router::new(
-                router_id.clone(),
-                Arc::new(router_config),
-                app_state.clone(),
-            )
-            .await?;
-            inner.insert(router_id.clone(), router);
-        }
+        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let discovery = discovery_factory.call(None).await?;
+        let dynamic_router = DynamicRouter::new(discovery);
         let unified_api = ServiceBuilder::new()
             .layer(rate_limit::Layer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
@@ -196,7 +189,7 @@ impl MetaRouter {
             .service(unified_api::Service::new(&app_state)?);
         let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
         let meta_router = Self {
-            inner,
+            dynamic_router,
             unified_api,
             direct_proxies,
             unified_url_regex,

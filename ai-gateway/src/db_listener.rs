@@ -8,7 +8,8 @@ use sqlx::{
 use tracing::{debug, error, info};
 
 use crate::{
-    config::{database::DatabaseConfig, router::RouterConfig},
+    app_state::AppState,
+    config::router::RouterConfig,
     error::{init::InitError, runtime::RuntimeError},
     types::router::RouterId,
 };
@@ -18,6 +19,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct DatabaseListener {
     pool: PgPool,
+    app_state: AppState,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -58,8 +60,11 @@ enum ConnectedCloudGatewaysNotification {
     },
 }
 
+const MAX_CHANNEL_CAPACITY: usize = 100;
+
 impl DatabaseListener {
-    pub async fn new(config: DatabaseConfig) -> Result<Self, InitError> {
+    pub async fn new(app_state: AppState) -> Result<Self, InitError> {
+        let config = app_state.0.config.database.clone();
         let pool = PgPoolOptions::new()
             .max_connections(config.max_connections)
             .min_connections(config.min_connections)
@@ -72,7 +77,7 @@ impl DatabaseListener {
                 error!(error = %e, "failed to create database pool");
                 InitError::DatabaseConnection(e)
             })?;
-        Ok(Self { pool })
+        Ok(Self { pool, app_state })
     }
 
     /// Runs the database listener service.
@@ -95,6 +100,9 @@ impl DatabaseListener {
             error!(error = %e, "failed to listen on database notification channel");
             RuntimeError::Internal(crate::error::internal::InternalError::Internal)
         })?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(MAX_CHANNEL_CAPACITY);
+        self.app_state.set_router_rx(rx).await;
 
         // Process notifications
         loop {

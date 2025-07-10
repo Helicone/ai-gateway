@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    hash::Hash,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -8,18 +7,11 @@ use std::{
 
 use futures::Stream;
 use pin_project_lite::pin_project;
-use rust_decimal::prelude::ToPrimitive;
-use tokio::sync::mpsc::Receiver;
-use tokio_stream::wrappers::ReceiverStream;
 use tower::discover::Change;
-use weighted_balance::weight::Weight;
 
 use crate::{
-    app_state::AppState,
-    config::{balance::BalanceConfigInner, router::RouterConfig},
-    dispatcher::{Dispatcher, DispatcherService},
-    error::init::InitError,
-    types::router::RouterId,
+    app_state::AppState, discover::provider::config::ServiceMap,
+    error::init::InitError, router::service::Router, types::router::RouterId,
 };
 
 pin_project! {
@@ -40,43 +32,35 @@ pin_project! {
     ///
     /// the layer would then send `Change::Remove` events to this discovery struct
     #[derive(Debug)]
-    pub struct ConfigDiscovery<K> {
+    pub struct ConfigDiscovery {
         #[pin]
-        initial: ServiceMap<K, DispatcherService>,
-        #[pin]
-        events: ReceiverStream<Change<K, DispatcherService>>,
+        initial: ServiceMap<RouterId, Router>,
     }
 }
 
 impl ConfigDiscovery {
-    pub async fn new(
-        app_state: &AppState,
-        router_id: &RouterId,
-        router_config: &Arc<RouterConfig>,
-        rx: Receiver<Change<RouterId, DispatcherService>>,
-    ) -> Result<Self, InitError> {
-        let events = ReceiverStream::new(rx);
-        let mut service_map: HashMap<RouterId, DispatcherService> =
-            HashMap::new();
-        for router in router_config.routers.as_ref() {
-            let key = router.id.clone();
-            let router = Router::new(router_id, app_state.clone()).await?;
+    pub async fn new(app_state: &AppState) -> Result<Self, InitError> {
+        let mut service_map: HashMap<RouterId, Router> = HashMap::new();
+        for (router_id, router_config) in app_state.0.config.routers.as_ref() {
+            let key = router_id.clone();
+            let router = Router::new(
+                key.clone(),
+                Arc::new(router_config.clone()),
+                app_state.clone(),
+            )
+            .await?;
             service_map.insert(key, router);
         }
 
         tracing::debug!("Created config router discovery");
         Ok(Self {
             initial: ServiceMap::new(service_map),
-            events,
         })
     }
 }
 
-impl<K> Stream for ConfigDiscovery<K>
-where
-    K: Hash + Eq + Clone + std::fmt::Debug,
-{
-    type Item = Change<K, DispatcherService>;
+impl Stream for ConfigDiscovery {
+    type Item = Change<RouterId, Router>;
 
     fn poll_next(
         self: Pin<&mut Self>,
@@ -91,73 +75,21 @@ where
             return handle_change(change);
         }
 
-        // 2) live events (removals / re‑inserts)
-        match this.events.as_mut().poll_next(ctx) {
-            Poll::Ready(Some(change)) => handle_change(change),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => Poll::Ready(None),
-        }
+        Poll::Ready(None)
     }
 }
 
-fn handle_change<K>(
-    change: Change<K, DispatcherService>,
-) -> Poll<Option<Change<K, DispatcherService>>>
-where
-    K: std::fmt::Debug,
-{
+fn handle_change(
+    change: Change<RouterId, Router>,
+) -> Poll<Option<Change<RouterId, Router>>> {
     match change {
         Change::Insert(key, service) => {
-            tracing::debug!(key = ?key, "Discovered new provider");
+            tracing::debug!(key = ?key, "Discovered new router");
             Poll::Ready(Some(Change::Insert(key, service)))
         }
         Change::Remove(key) => {
-            tracing::debug!(key = ?key, "Removed provider");
+            tracing::debug!(key = ?key, "Removed router");
             Poll::Ready(Some(Change::Remove(key)))
-        }
-    }
-}
-
-pin_project! {
-    /// Static service discovery based on a predetermined map of services.
-    ///
-    /// [`ServiceMap`] is created with an initial map of services. The discovery
-    /// process will yield this map once and do nothing after.
-    #[derive(Debug)]
-    pub(crate) struct ServiceMap<K, V> {
-        inner: std::collections::hash_map::IntoIter<K, V>,
-    }
-}
-
-impl<K, V> ServiceMap<K, V>
-where
-    K: std::hash::Hash + Eq,
-{
-    pub fn new<Request>(services: HashMap<K, V>) -> ServiceMap<K, V>
-    where
-        V: tower::Service<Request>,
-    {
-        ServiceMap {
-            inner: services.into_iter(),
-        }
-    }
-}
-
-impl<K, V> Stream for ServiceMap<K, V>
-where
-    K: std::hash::Hash + Eq + Clone,
-{
-    type Item = Change<K, V>;
-
-    fn poll_next(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        match self.project().inner.next() {
-            Some((key, service)) => {
-                Poll::Ready(Some(Change::Insert(key, service)))
-            }
-            None => Poll::Ready(None),
         }
     }
 }

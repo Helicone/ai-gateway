@@ -223,7 +223,7 @@ where
 impl<D, ReqBody> Service<http::Request<ReqBody>> for DynamicRouter<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone + Send + Sync,
+    D::Key: Hash + Clone + Send + Sync + 'static,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>>,
     <D::Service as Service<http::Request<ReqBody>>>::Error:
@@ -288,10 +288,9 @@ where
 
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
         tracing::trace!("DynamicRouter::call");
-        let key = request.extensions().get::<D::Key>().unwrap();
-        let (_, router_service, mut service) =
-            self.services.get_ready_mut(key).unwrap();
-        let response = service.call(request).map_err(|e| e.into());
-        response
+        let key = request.extensions().get::<D::Key>().unwrap().clone();
+        let (_, _router_service, service) =
+            self.services.get_ready_mut(&key).unwrap();
+        service.call(request).map_err(Into::into)
     }
 }
