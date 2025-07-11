@@ -5,6 +5,7 @@ members = [
     "crates/telemetry",
     "crates/weighted-balance",
     "crates/dynamic-router",
+    "crates/latency-router",
     "ai-gateway",
     "scripts/test",
     "scripts/trace-test-client",

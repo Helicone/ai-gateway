@@ -1,6 +1,5 @@
 pub mod app;
 pub mod app_state;
-pub(crate) mod balancer;
 pub mod cache;
 pub mod cli;
 pub mod config;

@@ -15,7 +15,6 @@ use tower::{ServiceBuilder, buffer, util::BoxCloneService};
 use crate::{
     app::BUFFER_SIZE,
     app_state::AppState,
-    balancer::provider::ProviderBalancer,
     config::router::RouterConfig,
     endpoints::{ApiEndpoint, EndpointType},
     error::{
@@ -25,19 +24,22 @@ use crate::{
     middleware::{
         cache::CacheLayer, prompts::PromptLayer, rate_limit, request_context,
     },
+    router::strategy::RoutingStrategyService,
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
 };
 
-pub type RouterService = BoxCloneService<
+type InnerRouterService = BoxCloneService<
     crate::types::request::Request,
     crate::types::response::Response,
     Infallible,
 >;
 
+/// The top-level service we use to compose both
+/// middleware along with the routing strategy service.
 #[derive(Debug)]
 pub struct Router {
-    inner: HashMap<EndpointType, RouterService>,
+    inner: HashMap<EndpointType, InnerRouterService>,
 }
 
 impl Router {
@@ -68,7 +70,7 @@ impl Router {
         for (endpoint_type, balance_config) in
             router_config.load_balance.as_ref()
         {
-            let balancer = ProviderBalancer::new(
+            let routing_strategy = RoutingStrategyService::new(
                 app_state.clone(),
                 id.clone(),
                 router_config.clone(),
@@ -84,7 +86,7 @@ impl Router {
                 .map_err(|e| ApiError::from(InternalError::BufferError(e)))
                 .layer(buffer::BufferLayer::new(BUFFER_SIZE))
                 .layer(request_context_layer.clone())
-                .service(balancer);
+                .service(routing_strategy);
 
             inner.insert(*endpoint_type, BoxCloneService::new(service_stack));
         }
@@ -176,7 +178,7 @@ pin_project! {
         },
         Inner {
             #[pin]
-            future: <RouterService as tower::Service<crate::types::request::Request>>::Future,
+            future: <InnerRouterService as tower::Service<crate::types::request::Request>>::Future,
         },
     }
 }

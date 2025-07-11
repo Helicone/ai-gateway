@@ -31,6 +31,8 @@ jobs:
         with:
           cache-targets: "false"
           shared-key: "deps"
+          # To only cache runs from `main`:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: print rust version for educational purposes
         run: cargo --version
       - name: Clippy
@@ -50,6 +52,8 @@ jobs:
         with:
           cache-targets: "false"
           shared-key: "deps"
+          # To only cache runs from `main`:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: print rust version for educational purposes
         run: cargo --version
       - name: Test
