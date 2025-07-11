@@ -126,9 +126,9 @@ where
                 .as_str();
             let router_id = RouterId::Named(id_str.into());
 
-            // let Some(router_id) = request.extensions().get::<RouterId>() else {
-            //     return Err(AuthError::MissingRouterId.into_response());
-            // };
+            // let Some(router_id) = request.extensions().get::<RouterId>() else
+            // {     return
+            // Err(AuthError::MissingRouterId.into_response()); };
             match Self::authenticate_request_inner(
                 app_state.clone(),
                 api_key,
