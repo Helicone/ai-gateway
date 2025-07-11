@@ -162,3 +162,9 @@ impl ErrorMetric for ApiError {
         ApiErrorMetric::from(self).error_metric()
     }
 }
+
+impl ErrorMetric for std::convert::Infallible {
+    fn error_metric(&self) -> String {
+        "infallible".to_string()
+    }
+}

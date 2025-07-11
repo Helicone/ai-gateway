@@ -9,10 +9,10 @@ use dynamic_router::router::DynamicRouter;
 use http::uri::PathAndQuery;
 use pin_project_lite::pin_project;
 use regex::Regex;
-use tower::{Service as _, ServiceBuilder};
-use tower_http::auth::{
-    AsyncRequireAuthorization, AsyncRequireAuthorizationLayer,
+use tower::{
+    Service as _, ServiceBuilder, buffer::BufferLayer, util::BoxCloneService,
 };
+use tower_http::auth::AsyncRequireAuthorizationLayer;
 
 use crate::{
     app_state::AppState,
@@ -41,6 +41,8 @@ use crate::{
     },
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
+
+const BUFFER_SIZE: usize = 256;
 
 #[derive(Debug, Clone)]
 enum RouteType {
@@ -96,10 +98,11 @@ pub struct MetaRouter {
     router_url_regex: Regex,
 }
 
-pub type AuthService<S> =
-    AsyncRequireAuthorization<S, crate::middleware::auth::AuthService>;
-pub type MetaRouterService =
-    AuthService<RateLimitService<CacheService<ErrorHandler<MetaRouter>>>>;
+pub type MetaRouterService = BoxCloneService<
+    crate::types::request::Request,
+    crate::types::response::Response,
+    std::convert::Infallible,
+>;
 
 impl MetaRouter {
     pub async fn new(
@@ -116,14 +119,17 @@ impl MetaRouter {
         let service_stack = ServiceBuilder::new()
             // NOTE: not sure if there is perf impact from Auth layer coming
             // before buffer layer, but required due to Clone bound.
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(AsyncRequireAuthorizationLayer::new(
                 crate::middleware::auth::AuthService::new(app_state.clone()),
             ))
             .layer(RateLimitLayer::global(&app_state)?)
             .layer(CacheLayer::global(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .map_err(crate::error::internal::InternalError::BufferError)
+            .layer(BufferLayer::new(BUFFER_SIZE))
             .service(meta_router);
-        Ok(service_stack)
+        Ok(BoxCloneService::new(service_stack))
     }
 
     pub async fn cloud_from_config(

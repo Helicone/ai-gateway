@@ -18,8 +18,8 @@ use tokio::sync::RwLock;
 use tower::{ServiceBuilder, buffer::BufferLayer, util::BoxCloneService};
 use tower_http::{
     ServiceBuilderExt, add_extension::AddExtension,
-    auth::AsyncRequireAuthorizationLayer, catch_panic::CatchPanicLayer,
-    compression::CompressionLayer, normalize_path::NormalizePathLayer,
+    catch_panic::CatchPanicLayer, compression::CompressionLayer,
+    normalize_path::NormalizePathLayer,
     sensitive_headers::SetSensitiveHeadersLayer, trace::TraceLayer,
 };
 use tracing::{Level, info};
@@ -37,11 +37,7 @@ use crate::{
     error::{init::InitError, runtime::RuntimeError},
     logger::service::JawnClient,
     metrics::{self, Metrics, attribute_extractor::AttributeExtractor},
-    middleware::{
-        auth::AuthService, cache::CacheLayer,
-        rate_limit::service::Layer as RateLimitLayer,
-        response_headers::ResponseHeaderLayer,
-    },
+    middleware::response_headers::ResponseHeaderLayer,
     minio::Minio,
     router::meta::MetaRouter,
     store::{connect, router_store::RouterStore},
@@ -330,7 +326,6 @@ impl App {
                 app_state.response_headers_config(),
             ))
             .map_err(crate::error::internal::InternalError::BufferError)
-            // TODO: move this up before the auth layer
             .layer(BufferLayer::new(BUFFER_SIZE))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(router);
