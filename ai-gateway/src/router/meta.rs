@@ -61,7 +61,7 @@ const UNIFIED_URL_REGEX: &str =
 
 /// Legacy regex for router-specific matching (kept for backward compatibility)
 const ROUTER_URL_REGEX: &str =
-    r"^/router/(?P<id>[A-Za-z0-9_-]{1,36})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
+    r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
     rate_limit::Service<CacheService<ErrorHandler<unified_api::Service>>>;
