@@ -27,9 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update rust version
-        run: rustup update
-      - name: print version
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+          shared-key: "deps"
+      - name: print rust version for educational purposes
         run: cargo --version
       - name: Clippy
         run: cargo +stable ci-clippy
@@ -44,7 +46,11 @@ jobs:
           - 6340:6379
     steps:
       - uses: actions/checkout@v4
-      - name: Update rust version
-        run: rustup update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+          shared-key: "deps"
+      - name: print rust version for educational purposes
+        run: cargo --version
       - name: Test
         run: cargo +stable test --tests --all-features

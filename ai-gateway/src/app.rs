@@ -345,6 +345,7 @@ impl meltdown::Service for App {
                     tokio::select! {
                         biased;
                         server_output = axum_server::bind_rustls(addr, tls_config)
+                            // Why `NoDelayAcceptor`? See:
                             // https://brooker.co.za/blog/2024/05/09/nagle.html
                             .acceptor(NoDelayAcceptor)
                             .handle(handle.clone())
