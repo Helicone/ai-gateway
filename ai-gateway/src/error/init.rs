@@ -66,4 +66,6 @@ pub enum InitError {
     ProviderNotSupported(InferenceProvider),
     /// Router rx not configured
     RouterRxNotConfigured,
+    /// Router store not configured
+    RouterStoreNotConfigured,
 }

@@ -36,16 +36,12 @@ impl CloudDiscovery {
     ) -> Result<Self, InitError> {
         if let Some(rx) = rx {
             let mut service_map: HashMap<RouterId, Router> = HashMap::new();
-            let router_store = &app_state.0.router_store;
-            let routers = router_store
+            let router_store = app_state
+                .0
+                .router_store
                 .as_ref()
-                .unwrap()
-                .get_all_routers()
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, "failed to get all routers");
-                    InitError::DefaultRouterNotFound
-                })?;
+                .ok_or(InitError::RouterStoreNotConfigured)?;
+            let routers = router_store.get_all_routers().await?;
             for router in routers {
                 let router_id = RouterId::Named(CompactString::from(
                     router.router_id.to_string(),

@@ -111,7 +111,7 @@ impl DatabaseListener {
                         tx.as_ref().unwrap().clone(),
                         self.app_state.clone(),
                     )
-                    .await;
+                    .await?;
                 }
                 Err(e) => {
                     error!(error = %e, "error receiving database notification");
@@ -128,7 +128,7 @@ impl DatabaseListener {
         notification: &sqlx::postgres::PgNotification,
         tx: Sender<Change<RouterId, Router>>,
         app_state: AppState,
-    ) {
+    ) -> Result<(), RuntimeError> {
         // Customize this method to handle different types of notifications
         info!(
             channel = notification.channel(),
@@ -164,21 +164,23 @@ impl DatabaseListener {
                                 Arc::new(*config),
                                 app_state.clone(),
                             )
-                            .await
-                            .unwrap();
+                            .await?;
 
                             info!("sending router to tx");
                             let _ = tx
                                 .send(Change::Insert(router_id, router))
                                 .await;
                             info!("router inserted");
+                            Ok(())
                         }
                         Op::Delete => {
                             let _ = tx.send(Change::Remove(router_id)).await;
                             info!("router removed");
+                            Ok(())
                         }
                         _ => {
                             info!("skipping router insert");
+                            Ok(())
                         }
                     }
                 }
@@ -194,15 +196,19 @@ impl DatabaseListener {
                     info!("api_key_hash: {}", api_key_hash);
                     info!("op: {:?}", op);
                     // TODO: Handle router configuration deletion
+
+                    Ok(())
                 }
                 ConnectedCloudGatewaysNotification::Unknown { data } => {
                     info!("Unknown notification event");
                     info!("data: {:?}", data);
                     // TODO: Handle unknown event
+                    Ok(())
                 }
             }
         } else {
             info!("received unknown notification");
+            Ok(())
         }
 
         // Example: You could dispatch to different handlers based on the
