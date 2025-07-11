@@ -167,7 +167,9 @@ impl DatabaseListener {
                                 .send(Change::Insert(router_hash, router))
                                 .await;
                             info!("router inserted");
-                            // as a sanity, we want to query the api keys of the organization over here and insert them into the app state
+                            // as a sanity, we want to query the api keys of the
+                            // organization over here and insert them into the
+                            // app state
                             let router_store =
                                 app_state.0.router_store.as_ref().ok_or(
                                     InitError::RouterStoreNotConfigured,
