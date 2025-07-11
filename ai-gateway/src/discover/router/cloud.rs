@@ -43,9 +43,8 @@ impl CloudDiscovery {
                 .ok_or(InitError::RouterStoreNotConfigured)?;
             let routers = router_store.get_all_routers().await?;
             for router in routers {
-                let router_id = RouterId::Named(CompactString::from(
-                    router.router_id.to_string(),
-                ));
+                let router_id =
+                    RouterId::Named(CompactString::from(router.router_hash));
                 let router_config = serde_json::from_value::<RouterConfig>(
                 router.config.clone(),
             )

@@ -40,7 +40,8 @@ enum Op {
 #[serde(tag = "event", rename_all = "snake_case")]
 enum ConnectedCloudGatewaysNotification {
     RouterConfigUpdated {
-        router_id: RouterId,
+        router_id: String,
+        router_hash: RouterId,
         router_config_id: String,
         organization_id: String,
         version: String,
@@ -48,7 +49,8 @@ enum ConnectedCloudGatewaysNotification {
         config: Box<RouterConfig>,
     },
     RouterKeysUpdated {
-        router_id: RouterId,
+        router_id: String,
+        router_hash: RouterId,
         organization_id: String,
         api_key_hash: String,
         op: Op,
@@ -142,25 +144,19 @@ impl DatabaseListener {
 
             match payload {
                 ConnectedCloudGatewaysNotification::RouterConfigUpdated {
-                    router_id,
-                    router_config_id,
-                    organization_id,
-                    version,
+                    router_id: _,
+                    router_hash,
+                    router_config_id: _,
+                    organization_id: _,
+                    version: _,
                     op,
                     config,
                 } => {
                     info!("Router configuration updated");
-                    info!("router_id: {}", router_id);
-                    info!("router_config_id: {}", router_config_id);
-                    info!("organization_id: {}", organization_id);
-                    info!("version: {}", version);
-                    info!("op: {:?}", op);
-                    info!("config: {:?}", config);
-                    // TODO: Handle router configuration update
                     match op {
                         Op::Insert => {
                             let router = Router::new(
-                                router_id.clone(),
+                                router_hash.clone(),
                                 Arc::new(*config),
                                 app_state.clone(),
                             )
@@ -168,13 +164,13 @@ impl DatabaseListener {
 
                             info!("sending router to tx");
                             let _ = tx
-                                .send(Change::Insert(router_id, router))
+                                .send(Change::Insert(router_hash, router))
                                 .await;
                             info!("router inserted");
                             Ok(())
                         }
                         Op::Delete => {
-                            let _ = tx.send(Change::Remove(router_id)).await;
+                            let _ = tx.send(Change::Remove(router_hash)).await;
                             info!("router removed");
                             Ok(())
                         }
@@ -185,13 +181,14 @@ impl DatabaseListener {
                     }
                 }
                 ConnectedCloudGatewaysNotification::RouterKeysUpdated {
-                    router_id,
+                    router_id: _,
+                    router_hash,
                     organization_id,
                     api_key_hash,
                     op,
                 } => {
                     info!("Router keys updated");
-                    info!("router_id: {}", router_id);
+                    info!("router_hash: {}", router_hash);
                     info!("organization_id: {}", organization_id);
                     info!("api_key_hash: {}", api_key_hash);
                     info!("op: {:?}", op);

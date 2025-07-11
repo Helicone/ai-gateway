@@ -1,6 +1,5 @@
 use sqlx::PgPool;
 use tracing::error;
-use uuid::Uuid;
 
 use crate::error::init::InitError;
 
@@ -11,7 +10,7 @@ pub struct RouterStore {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct DBRouterConfig {
-    pub router_id: Uuid,
+    pub router_hash: String,
     pub config: serde_json::Value,
 }
 
@@ -24,8 +23,8 @@ impl RouterStore {
         &self,
     ) -> Result<Vec<DBRouterConfig>, InitError> {
         let res = sqlx::query_as::<_, DBRouterConfig>(
-            "SELECT DISTINCT ON (router_id) router_id, config FROM \
-             router_config_versions ORDER BY router_id, created_at DESC",
+            "SELECT DISTINCT ON (router_hash) router_hash, config FROM \
+             router_config_versions ORDER BY router_hash, created_at DESC",
         )
         .fetch_all(&self.pool)
         .await
