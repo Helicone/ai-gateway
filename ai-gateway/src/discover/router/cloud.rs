@@ -43,7 +43,7 @@ impl CloudDiscovery {
         let routers = router_store.get_all_routers().await?;
         for router in routers {
             let router_id = RouterId::Named(CompactString::from(
-                router.router_id.to_string(),
+                router.router_hash.to_string(),
             ));
             let router_config = serde_json::from_value::<RouterConfig>(
                 router.config.clone(),
