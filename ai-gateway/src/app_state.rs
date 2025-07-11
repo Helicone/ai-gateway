@@ -14,7 +14,7 @@ use crate::{
         Config, rate_limit::RateLimiterConfig,
         response_headers::ResponseHeadersConfig, router::RouterConfig,
     },
-    control_plane::control_plane_state::ControlPlaneState,
+    control_plane::{control_plane_state::ControlPlaneState, types::Key},
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -74,6 +74,7 @@ pub struct InnerAppState {
     pub rate_limit_receivers: RateLimitEventReceivers,
 
     pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
+    pub router_api_keys: RwLock<Option<HashMap<RouterId, Vec<Key>>>>,
 }
 
 impl AppState {
@@ -150,5 +151,51 @@ impl AppState {
     pub async fn set_router_tx(&self, tx: Sender<Change<RouterId, Router>>) {
         let mut router_tx = self.0.router_tx.write().await;
         *router_tx = Some(tx);
+    }
+
+    pub async fn get_router_api_keys(
+        &self,
+    ) -> Option<HashMap<RouterId, Vec<Key>>> {
+        let router_api_keys = self.0.router_api_keys.read().await;
+        router_api_keys.clone()
+    }
+
+    pub async fn set_initial_router_api_keys(
+        &self,
+        keys: Option<HashMap<RouterId, Vec<Key>>>,
+    ) {
+        let mut router_api_keys = self.0.router_api_keys.write().await;
+        *router_api_keys = keys.clone();
+    }
+
+    pub async fn set_router_api_key(
+        &self,
+        router_id: RouterId,
+        api_key: Key,
+    ) -> Result<Option<HashMap<RouterId, Vec<Key>>>, InitError> {
+        let mut router_api_keys = self.0.router_api_keys.write().await;
+        router_api_keys
+            .as_mut()
+            .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
+            .entry(router_id)
+            .or_insert(vec![])
+            .push(api_key.clone());
+        Ok(router_api_keys.clone())
+    }
+
+    pub async fn remove_router_api_key(
+        &self,
+        router_id: RouterId,
+        api_key: Key,
+    ) -> Result<Option<HashMap<RouterId, Vec<Key>>>, InitError> {
+        let mut router_api_keys = self.0.router_api_keys.write().await;
+        router_api_keys
+            .as_mut()
+            .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
+            .entry(router_id)
+            .and_modify(|keys| {
+                keys.retain(|k| k.key_hash != api_key.key_hash);
+            });
+        Ok(router_api_keys.clone())
     }
 }

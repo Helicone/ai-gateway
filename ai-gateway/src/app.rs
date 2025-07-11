@@ -236,6 +236,23 @@ impl App {
 
         let cache_manager = setup_cache(&config, metrics.clone())?;
 
+        let router_api_keys = if config.deployment_target
+            == DeploymentTarget::Cloud
+            && let Some(router_store_ref) = router_store.as_ref()
+        {
+            let router_api_keys =
+                router_store_ref.get_all_router_keys().await?;
+
+            Some(router_api_keys.into_iter().collect())
+        } else {
+            None
+        };
+
+        // if config.deployment_target == DeploymentTarget::Cloud {
+        //     let router_api_keys = router_store.get_all_router_keys().await?;
+        //     app_state.set_initial_router_api_keys(router_api_keys).await?;
+        // }
+
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
@@ -257,6 +274,7 @@ impl App {
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
             router_tx: RwLock::new(None),
+            router_api_keys: RwLock::new(router_api_keys),
         }));
 
         Ok(app_state)

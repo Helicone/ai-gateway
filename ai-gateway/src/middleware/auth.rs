@@ -1,13 +1,15 @@
 use axum_core::response::IntoResponse;
 use futures::future::BoxFuture;
 use http::Request;
+use regex::Regex;
 use tower_http::auth::AsyncAuthorizeRequest;
 
 use crate::{
     app_state::AppState,
+    config::DeploymentTarget,
     control_plane::types::hash_key,
     error::auth::AuthError,
-    types::{extensions::AuthContext, secret::Secret},
+    types::{extensions::AuthContext, router::RouterId, secret::Secret},
 };
 
 #[derive(Clone)]
@@ -24,22 +26,61 @@ impl AuthService {
     async fn authenticate_request_inner(
         app_state: AppState,
         api_key: &str,
+        router_id: RouterId,
     ) -> Result<AuthContext, AuthError> {
         let config = &app_state.0.control_plane_state.read().await.config;
         let api_key_without_bearer = api_key.replace("Bearer ", "");
         let computed_hash = hash_key(&api_key_without_bearer);
-        let key = config.get_key_from_hash(&computed_hash);
-        if let Some(key) = key {
-            Ok(AuthContext {
-                api_key: Secret::from(api_key_without_bearer),
-                user_id: key.owner_id.as_str().try_into()?,
-                org_id: config.auth.organization_id.as_str().try_into()?,
-            })
-        } else {
-            Err(AuthError::InvalidCredentials)
+
+        match app_state.0.config.deployment_target {
+            DeploymentTarget::Cloud => {
+                if let Some(router_api_keys) =
+                    app_state.get_router_api_keys().await
+                    && router_api_keys.contains_key(&router_id)
+                {
+                    let allowed_keys = router_api_keys.get(&router_id).unwrap();
+                    let key = allowed_keys
+                        .iter()
+                        .find(|k| k.key_hash == computed_hash);
+                    if let Some(key) = key {
+                        return Ok(AuthContext {
+                            api_key: Secret::from(api_key_without_bearer),
+                            user_id: key.owner_id.as_str().try_into()?,
+                            org_id: config
+                                .auth
+                                .organization_id
+                                .as_str()
+                                .try_into()?,
+                        });
+                    } else {
+                        Err(AuthError::InvalidCredentials)
+                    }
+                } else {
+                    Err(AuthError::InvalidCredentials)
+                }
+            }
+            DeploymentTarget::Sidecar => {
+                let key = config.get_key_from_hash(&computed_hash);
+                if let Some(key) = key {
+                    Ok(AuthContext {
+                        api_key: Secret::from(api_key_without_bearer),
+                        user_id: key.owner_id.as_str().try_into()?,
+                        org_id: config
+                            .auth
+                            .organization_id
+                            .as_str()
+                            .try_into()?,
+                    })
+                } else {
+                    Err(AuthError::InvalidCredentials)
+                }
+            }
         }
     }
 }
+
+const ROUTER_URL_REGEX: &str =
+    r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 impl<B> AsyncAuthorizeRequest<B> for AuthService
 where
@@ -71,8 +112,29 @@ where
                 );
             };
             app_state.0.metrics.auth_attempts.add(1, &[]);
-            match Self::authenticate_request_inner(app_state.clone(), api_key)
-                .await
+            let path = request.uri().path();
+            let regex = Regex::new(ROUTER_URL_REGEX).unwrap();
+            let captures = regex.captures(path);
+            if captures.is_none() {
+                return Err(AuthError::MissingRouterId.into_response());
+            }
+            let id_str = captures
+                .unwrap()
+                .name("id")
+                .ok_or_else(|| AuthError::MissingRouterId)
+                .map_err(|e| e.into_response())?
+                .as_str();
+            let router_id = RouterId::Named(id_str.into());
+
+            // let Some(router_id) = request.extensions().get::<RouterId>() else {
+            //     return Err(AuthError::MissingRouterId.into_response());
+            // };
+            match Self::authenticate_request_inner(
+                app_state.clone(),
+                api_key,
+                router_id.clone(),
+            )
+            .await
             {
                 Ok(auth_ctx) => {
                     request.extensions_mut().insert(auth_ctx);
@@ -81,7 +143,8 @@ where
                 Err(e) => {
                     match &e {
                         AuthError::MissingAuthorizationHeader
-                        | AuthError::InvalidCredentials => {
+                        | AuthError::InvalidCredentials
+                        | AuthError::MissingRouterId => {
                             app_state.0.metrics.auth_rejections.add(1, &[]);
                         }
                     }
