@@ -30,7 +30,6 @@ use crate::{
     cli,
     config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
     control_plane::control_plane_state::ControlPlaneState,
-    database::Database,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -45,6 +44,7 @@ use crate::{
     },
     minio::Minio,
     router::meta::MetaRouter,
+    store::{connect, router_store::RouterStore},
     types::provider::ProviderKeys,
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
@@ -199,11 +199,14 @@ impl App {
     /// metrics, monitoring, caching, and API keys.
     async fn build_app_state(config: Config) -> Result<AppState, InitError> {
         let minio = Minio::new(config.minio.clone())?;
-        let database = if config.deployment_target == DeploymentTarget::Cloud {
-            Some(Database::new(config.database.clone()).await?)
-        } else {
-            None
-        };
+        let (pg_pool, router_store) =
+            if config.deployment_target == DeploymentTarget::Cloud {
+                let pg_pool = connect(&config.database).await?;
+                let router_store = RouterStore::new(pg_pool.clone()).await?;
+                (Some(pg_pool), Some(router_store))
+            } else {
+                (None, None)
+            };
         let jawn_http_client = JawnClient::new()?;
 
         let meter = global::meter(SERVICE_NAME);
@@ -236,7 +239,8 @@ impl App {
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
-            database,
+            router_store,
+            pg_pool,
             jawn_http_client,
             control_plane_state: Arc::new(RwLock::new(
                 ControlPlaneState::default(),

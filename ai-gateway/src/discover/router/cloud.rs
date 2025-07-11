@@ -19,22 +19,7 @@ use crate::{
 };
 
 pin_project! {
-  /// Reads available models and providers from the config file.
-  ///
-  /// We can additionally dynamically remove providers from the balancer
-  /// if they hit certain failure thresholds by using a layer like:
-  ///
-  /// ```rust,ignore
-  /// #[derive(Clone)]
-  /// pub struct FailureWatcherLayer {
-  ///     key: usize,
-  ///     registry: tokio::sync::watch::Sender<HashMap<usize, DispatcherService>>,
-  ///     failure_limit: u32,
-  ///     window: Duration,
-  /// }
-  /// ```
-  ///
-  /// the layer would then send `Change::Remove` events to this discovery struct
+  /// Reads available routers from the database or config file based on the deployment target.
   #[derive(Debug)]
   pub struct CloudDiscovery {
       #[pin]
@@ -51,8 +36,8 @@ impl CloudDiscovery {
     ) -> Result<Self, InitError> {
         if let Some(rx) = rx {
             let mut service_map: HashMap<RouterId, Router> = HashMap::new();
-            let database = &app_state.0.database;
-            let routers = database
+            let router_store = &app_state.0.router_store;
+            let routers = router_store
                 .as_ref()
                 .unwrap()
                 .get_all_routers()

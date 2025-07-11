@@ -1,11 +1,11 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::PgPool;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::{config::database::DatabaseConfig, error::init::InitError};
+use crate::error::init::InitError;
 
 #[derive(Debug)]
-pub struct Database {
+pub struct RouterStore {
     pub pool: PgPool,
 }
 
@@ -15,20 +15,8 @@ pub struct DBRouterConfig {
     pub config: serde_json::Value,
 }
 
-impl Database {
-    pub async fn new(config: DatabaseConfig) -> Result<Self, InitError> {
-        let pool = PgPoolOptions::new()
-            .max_connections(config.max_connections)
-            .min_connections(config.min_connections)
-            .acquire_timeout(config.acquire_timeout)
-            .idle_timeout(config.idle_timeout)
-            .max_lifetime(config.max_lifetime)
-            .connect(&config.url)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "failed to create database pool");
-                InitError::DatabaseConnection(e)
-            })?;
+impl RouterStore {
+    pub async fn new(pool: PgPool) -> Result<Self, InitError> {
         Ok(Self { pool })
     }
 
@@ -45,6 +33,10 @@ impl Database {
             error!(error = %e, "failed to get all routers");
             InitError::DatabaseConnection(e)
         })?;
+        tracing::info!("found {} routers", res.len());
+        for router in &res {
+            tracing::info!("router: {:?}", router.router_id);
+        }
         Ok(res)
     }
 }

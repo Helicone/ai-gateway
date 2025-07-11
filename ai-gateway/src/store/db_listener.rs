@@ -23,7 +23,7 @@ use crate::{
 /// This service runs in the background and can be registered with meltdown.
 #[derive(Debug, Clone)]
 pub struct DatabaseListener {
-    pool: PgPool,
+    pg_pool: PgPool,
     app_state: AppState,
 }
 
@@ -63,21 +63,11 @@ enum ConnectedCloudGatewaysNotification {
 }
 
 impl DatabaseListener {
-    pub async fn new(app_state: AppState) -> Result<Self, InitError> {
-        let config = app_state.0.config.database.clone();
-        let pool = PgPoolOptions::new()
-            .max_connections(config.max_connections)
-            .min_connections(config.min_connections)
-            .acquire_timeout(config.acquire_timeout)
-            .idle_timeout(config.idle_timeout)
-            .max_lifetime(config.max_lifetime)
-            .connect(&config.url)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "failed to create database pool");
-                InitError::DatabaseConnection(e)
-            })?;
-        Ok(Self { pool, app_state })
+    pub async fn new(
+        pg_pool: PgPool,
+        app_state: AppState,
+    ) -> Result<Self, InitError> {
+        Ok(Self { pg_pool, app_state })
     }
 
     /// Runs the database listener service.
@@ -88,7 +78,7 @@ impl DatabaseListener {
 
         // Create listener for LISTEN/NOTIFY
         let mut listener =
-            PgListener::connect_with(&self.pool).await.map_err(|e| {
+            PgListener::connect_with(&self.pg_pool).await.map_err(|e| {
                 error!(error = %e, "failed to create database listener");
                 RuntimeError::Internal(
                     crate::error::internal::InternalError::Internal,
@@ -100,9 +90,6 @@ impl DatabaseListener {
             error!(error = %e, "failed to listen on database notification channel");
             RuntimeError::Internal(crate::error::internal::InternalError::Internal)
         })?;
-
-        // let (tx, rx) = tokio::sync::mpsc::channel(MAX_CHANNEL_CAPACITY);
-        // self.app_state.set_router_rx(rx).await;
 
         let tx = self.app_state.get_router_tx().await;
         if tx.is_none() {
@@ -197,20 +184,6 @@ impl DatabaseListener {
                             info!("skipping router insert");
                         }
                     }
-                    // if op == Op::Insert {
-                    //     let router = Router::new(
-                    //         router_id.clone(),
-                    //         Arc::new(*config),
-                    //         app_state.clone(),
-                    //     )
-                    //     .await
-                    //     .unwrap();
-
-                    //     info!("sending router to tx");
-                    //     let _ =
-                    //         tx.send(Change::Insert(router_id, router)).await;
-                    //     info!("router inserted");
-                    // }
                 }
                 ConnectedCloudGatewaysNotification::RouterKeysUpdated {
                     router_id,
