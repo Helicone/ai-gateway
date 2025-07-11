@@ -24,6 +24,7 @@
 //! IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 //! DEALINGS IN THE SOFTWARE.
 use std::{
+    convert::Infallible,
     fmt,
     future::Future,
     hash::Hash,
@@ -94,9 +95,8 @@ where
     S: Service<Target>,
     S::Response: Discover,
     <S::Response as Discover>::Key: Hash + Send + Sync,
-    <S::Response as Discover>::Service: Service<Request<ReqBody>>,
-    <<S::Response as Discover>::Service as Service<Request<ReqBody>>>::Error:
-        Into<tower::BoxError>,
+    <S::Response as Discover>::Service:
+        Service<Request<ReqBody>, Error = Infallible>,
 {
     type Response = DynamicRouter<S::Response, ReqBody>;
     type Error = S::Error;
@@ -132,9 +132,7 @@ where
     F: Future<Output = Result<T, E>>,
     T: Discover,
     <T as Discover>::Key: Hash + Send + Sync,
-    <T as Discover>::Service: Service<Request<ReqBody>>,
-    <<T as Discover>::Service as Service<Request<ReqBody>>>::Error:
-        Into<tower::BoxError>,
+    <T as Discover>::Service: Service<Request<ReqBody>, Error = Infallible>,
 {
     type Output = Result<DynamicRouter<T, ReqBody>, E>;
 

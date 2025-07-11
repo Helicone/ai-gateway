@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 futures = { workspace = true }
+pin-project = { workspace = true }
 pin-project-lite = { workspace = true }
 rand = { workspace = true }
 tower = { workspace = true, features = ["discover", "ready-cache"] }
