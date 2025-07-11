@@ -23,8 +23,10 @@ impl RouterStore {
         &self,
     ) -> Result<Vec<DBRouterConfig>, InitError> {
         let res = sqlx::query_as::<_, DBRouterConfig>(
-            "SELECT DISTINCT ON (routers.hash) routers.hash, config FROM\
-            router_config_versions INNER JOIN routers on router_config_versions.router_id = routers.id ORDER BY routers.hash, router_config_versions.created_at DESC",
+            "SELECT DISTINCT ON (routers.hash) routers.hash, config \
+             FROMrouter_config_versions INNER JOIN routers on \
+             router_config_versions.router_id = routers.id ORDER BY \
+             routers.hash, router_config_versions.created_at DESC",
         )
         .fetch_all(&self.pool)
         .await
