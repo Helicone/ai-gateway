@@ -9,7 +9,10 @@ use dynamic_router::router::DynamicRouter;
 use http::uri::PathAndQuery;
 use pin_project_lite::pin_project;
 use regex::Regex;
-use tower::{Service as _, ServiceBuilder};
+use tower::{
+    Service as _, ServiceBuilder, buffer::BufferLayer, util::BoxCloneService,
+};
+use tower_http::auth::AsyncRequireAuthorizationLayer;
 
 use crate::{
     app_state::AppState,
@@ -21,7 +24,9 @@ use crate::{
     },
     middleware::{
         cache::{CacheLayer, CacheService},
-        rate_limit,
+        rate_limit::service::{
+            Layer as RateLimitLayer, Service as RateLimitService,
+        },
     },
     router::{
         FORCED_ROUTING_HEADER,
@@ -36,6 +41,8 @@ use crate::{
     },
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
+
+const BUFFER_SIZE: usize = 256;
 
 #[derive(Debug, Clone)]
 enum RouteType {
@@ -64,7 +71,7 @@ const ROUTER_URL_REGEX: &str =
     r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
-    rate_limit::Service<CacheService<ErrorHandler<unified_api::Service>>>;
+    RateLimitService<CacheService<ErrorHandler<unified_api::Service>>>;
 
 fn extract_path_and_query(
     path: &str,
@@ -91,19 +98,38 @@ pub struct MetaRouter {
     router_url_regex: Regex,
 }
 
+pub type MetaRouterService = BoxCloneService<
+    crate::types::request::Request,
+    crate::types::response::Response,
+    std::convert::Infallible,
+>;
+
 impl MetaRouter {
-    pub async fn new(app_state: AppState) -> Result<Self, InitError> {
+    pub async fn new(
+        app_state: AppState,
+    ) -> Result<MetaRouterService, InitError> {
         let meta_router = match app_state.0.config.deployment_target {
             DeploymentTarget::Sidecar => {
-                Self::sidecar_from_config(app_state).await
+                Self::sidecar_from_config(app_state.clone()).await
             }
-            DeploymentTarget::Cloud => Self::cloud_from_config(app_state).await,
+            DeploymentTarget::Cloud => {
+                Self::cloud_from_config(app_state.clone()).await
+            }
         }?;
-        // tracing::info!(
-        //     num_routers = meta_router.inner.len(),
-        //     "meta router created"
-        // );
-        Ok(meta_router)
+        let service_stack = ServiceBuilder::new()
+            // NOTE: not sure if there is perf impact from Auth layer coming
+            // before buffer layer, but required due to Clone bound.
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .layer(AsyncRequireAuthorizationLayer::new(
+                crate::middleware::auth::AuthService::new(app_state.clone()),
+            ))
+            .layer(RateLimitLayer::global(&app_state)?)
+            .layer(CacheLayer::global(&app_state))
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .map_err(crate::error::internal::InternalError::BufferError)
+            .layer(BufferLayer::new(BUFFER_SIZE))
+            .service(meta_router);
+        Ok(BoxCloneService::new(service_stack))
     }
 
     pub async fn cloud_from_config(
@@ -130,7 +156,7 @@ impl MetaRouter {
             // TODO: should we change how global configs work for rate limiting,
             // caching?       For now, leave these types here to
             // make it easier to change later on.
-            .layer(rate_limit::Layer::disabled())
+            .layer(RateLimitLayer::disabled())
             .layer(CacheLayer::disabled())
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
@@ -160,7 +186,7 @@ impl MetaRouter {
         // let discovery = discovery_factory.call(None).await?;
         // let dynamic_router = DynamicRouter::new(discovery);
         let unified_api = ServiceBuilder::new()
-            .layer(rate_limit::Layer::unified_api(&app_state)?)
+            .layer(RateLimitLayer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
