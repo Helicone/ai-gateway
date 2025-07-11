@@ -1,12 +1,10 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use sqlx::PgPool;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::{
-    control_plane::types::Key, error::init::InitError, types::router::RouterId,
-};
+use crate::{control_plane::types::Key, error::init::InitError};
 
 #[derive(Debug)]
 pub struct RouterStore {
@@ -20,16 +18,9 @@ pub struct DBRouterConfig {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct DBRouterKeys {
-    pub hash: String,
-    pub api_key_hash: String,
-    pub user_id: Uuid,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct DBUnifiedApiKeys {
-    pub api_key_hash: String,
-    pub user_id: Uuid,
+pub struct DBApiKey {
+    pub key_hash: String,
+    pub owner_id: Uuid,
 }
 
 impl RouterStore {
@@ -55,58 +46,61 @@ impl RouterStore {
         Ok(res)
     }
 
-    pub async fn get_all_router_keys(
+    pub async fn get_all_router_keys(&self) -> Result<HashSet<Key>, InitError> {
+        // the inner join is to make sure that we only get keys of the
+        // organizations which have routers
+        let res = sqlx::query_as::<_, DBApiKey>(
+            "SELECT helicone_api_keys.api_key_hash as key_hash, \
+             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             INNER JOIN routers ON helicone_api_keys.organization_id = \
+             routers.organization_id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get all router keys");
+            InitError::DatabaseConnection(e)
+        })?;
+
+        let keys = res
+            .into_iter()
+            .map(|k| Key {
+                key_hash: k.key_hash,
+                owner_id: k.owner_id.to_string(),
+            })
+            .collect();
+
+        Ok(keys)
+    }
+
+    pub async fn get_organization_keys(
         &self,
-    ) -> Result<HashMap<RouterId, Vec<Key>>, InitError> {
-        let res = sqlx::query_as::<_, DBRouterKeys>(
-            "SELECT routers.hash, helicone_api_keys.api_key_hash, \
-             helicone_api_keys.user_id FROM router_keys INNER JOIN \
-             helicone_api_keys ON router_keys.api_key_id = \
-             helicone_api_keys.id INNER JOIN routers ON router_keys.router_id \
-             = routers.id WHERE routers.hash IS NOT NULL",
+        organization_id: &str,
+    ) -> Result<HashSet<Key>, InitError> {
+        let org_id = Uuid::parse_str(organization_id).map_err(|e| {
+            error!(error = %e, "failed to parse organization id");
+            InitError::InvalidOrganizationId(organization_id.to_string())
+        })?;
+        let res = sqlx::query_as::<_, DBApiKey>(
+            "SELECT helicone_api_keys.api_key_hash as key_hash, \
+             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             WHERE helicone_api_keys.organization_id = $1",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
-            error!(error = %e, "failed to get all router keys");
+            error!(error = %e, "failed to get organization keys");
             InitError::DatabaseConnection(e)
         })?;
-        let mut map = HashMap::new();
-        tracing::info!("keys length: {:?}", res.len());
-        for r in res {
-            tracing::info!("router_hash: {:?}", r.hash);
-            map.entry(RouterId::Named(r.hash.into()))
-                .or_insert(vec![])
-                .push(Key {
-                    key_hash: r.api_key_hash,
-                    owner_id: r.user_id.to_string(),
-                });
-        }
+        let keys = res
+            .into_iter()
+            .map(|k| Key {
+                key_hash: k.key_hash,
+                owner_id: k.owner_id.to_string(),
+            })
+            .collect();
 
-        // get /ai keys - router_keys.router_id is NULL
-        let res = sqlx::query_as::<_, DBUnifiedApiKeys>(
-            "SELECT helicone_api_keys.api_key_hash, helicone_api_keys.user_id \
-             FROM router_keys INNER JOIN helicone_api_keys ON \
-             router_keys.api_key_id = helicone_api_keys.id WHERE \
-             router_keys.router_id IS NULL",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "failed to get all router keys");
-            InitError::DatabaseConnection(e)
-        })?;
-
-        for r in res {
-            map.entry(RouterId::Named("hcone_rsv_ai".into()))
-                .or_insert(vec![])
-                .push(Key {
-                    key_hash: r.api_key_hash,
-                    owner_id: r.user_id.to_string(),
-                });
-        }
-
-        tracing::info!("map length: {:?}", map.len());
-        Ok(map)
+        Ok(keys)
     }
 }

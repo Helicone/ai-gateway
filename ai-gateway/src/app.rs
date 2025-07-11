@@ -243,7 +243,7 @@ impl App {
             let router_api_keys =
                 router_store_ref.get_all_router_keys().await?;
 
-            Some(router_api_keys.into_iter().collect())
+            Some(router_api_keys)
         } else {
             None
         };
@@ -325,14 +325,6 @@ impl App {
             .layer(compression_layer)
             .layer(HealthCheckLayer::new())
             .layer(TimerLayer::new())
-            .layer(ErrorHandlerLayer::new(app_state.clone()))
-            // NOTE: not sure if there is perf impact from Auth layer coming
-            // before buffer layer, but required due to Clone bound.
-            .layer(AsyncRequireAuthorizationLayer::new(AuthService::new(
-                app_state.clone(),
-            )))
-            .layer(RateLimitLayer::global(&app_state)?)
-            .layer(CacheLayer::global(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(ResponseHeaderLayer::new(
                 app_state.response_headers_config(),

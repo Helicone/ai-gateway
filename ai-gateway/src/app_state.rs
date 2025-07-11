@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use rustc_hash::FxHashMap as HashMap;
 use sqlx::PgPool;
@@ -74,7 +74,7 @@ pub struct InnerAppState {
     pub rate_limit_receivers: RateLimitEventReceivers,
 
     pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
-    pub router_api_keys: RwLock<Option<HashMap<RouterId, Vec<Key>>>>,
+    pub router_api_keys: RwLock<Option<HashSet<Key>>>,
 }
 
 impl AppState {
@@ -153,51 +153,51 @@ impl AppState {
         *router_tx = Some(tx);
     }
 
-    pub async fn get_router_api_keys(
-        &self,
-    ) -> Option<HashMap<RouterId, Vec<Key>>> {
+    pub async fn get_router_api_keys(&self) -> Option<HashSet<Key>> {
         let router_api_keys = self.0.router_api_keys.read().await;
         router_api_keys.clone()
     }
 
-    pub async fn set_initial_router_api_keys(
+    pub async fn check_router_api_key(
         &self,
-        keys: Option<HashMap<RouterId, Vec<Key>>>,
-    ) {
+        api_key_hash: &str,
+    ) -> Option<Key> {
+        let router_api_keys = self.0.router_api_keys.read().await;
+        router_api_keys
+            .as_ref()
+            .unwrap_or(&HashSet::new())
+            .iter()
+            .find(|k| k.key_hash == api_key_hash)
+            .cloned()
+    }
+
+    pub async fn set_router_api_keys(&self, keys: Option<HashSet<Key>>) {
         let mut router_api_keys = self.0.router_api_keys.write().await;
-        *router_api_keys = keys.clone();
+        (*router_api_keys).clone_from(&keys);
     }
 
     pub async fn set_router_api_key(
         &self,
-        router_id: RouterId,
         api_key: Key,
-    ) -> Result<Option<HashMap<RouterId, Vec<Key>>>, InitError> {
+    ) -> Result<Option<HashSet<Key>>, InitError> {
         tracing::info!("setting router api key");
         let mut router_api_keys = self.0.router_api_keys.write().await;
         router_api_keys
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
-            .entry(router_id)
-            .or_insert(vec![])
-            .push(api_key.clone());
-        tracing::info!("router api keys: {:?}", router_api_keys.clone());
+            .insert(api_key.clone());
         Ok(router_api_keys.clone())
     }
 
     pub async fn remove_router_api_key(
         &self,
-        router_id: RouterId,
-        api_key: Key,
-    ) -> Result<Option<HashMap<RouterId, Vec<Key>>>, InitError> {
+        api_key_hash: String,
+    ) -> Result<Option<HashSet<Key>>, InitError> {
         let mut router_api_keys = self.0.router_api_keys.write().await;
         router_api_keys
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
-            .entry(router_id)
-            .and_modify(|keys| {
-                keys.retain(|k| k.key_hash != api_key.key_hash);
-            });
+            .retain(|k| k.key_hash != api_key_hash);
         Ok(router_api_keys.clone())
     }
 }
