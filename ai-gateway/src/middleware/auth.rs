@@ -26,7 +26,7 @@ impl AuthService {
     async fn authenticate_request_inner(
         app_state: AppState,
         api_key: &str,
-        router_id: RouterId,
+        path: &str,
     ) -> Result<AuthContext, AuthError> {
         let config = &app_state.0.control_plane_state.read().await.config;
         let api_key_without_bearer = api_key.replace("Bearer ", "");
@@ -34,6 +34,17 @@ impl AuthService {
 
         match app_state.0.config.deployment_target {
             DeploymentTarget::Cloud => {
+                let regex = Regex::new(ROUTER_URL_REGEX).unwrap();
+                let captures = regex.captures(path);
+                if captures.is_none() {
+                    return Err(AuthError::MissingRouterId);
+                }
+                let id_str = captures
+                    .unwrap()
+                    .name("id")
+                    .ok_or_else(|| AuthError::MissingRouterId)?
+                    .as_str();
+                let router_id = RouterId::Named(id_str.into());
                 if let Some(router_api_keys) =
                     app_state.get_router_api_keys().await
                     && router_api_keys.contains_key(&router_id)
@@ -112,19 +123,6 @@ where
                 );
             };
             app_state.0.metrics.auth_attempts.add(1, &[]);
-            let path = request.uri().path();
-            let regex = Regex::new(ROUTER_URL_REGEX).unwrap();
-            let captures = regex.captures(path);
-            if captures.is_none() {
-                return Err(AuthError::MissingRouterId.into_response());
-            }
-            let id_str = captures
-                .unwrap()
-                .name("id")
-                .ok_or_else(|| AuthError::MissingRouterId)
-                .map_err(|e| e.into_response())?
-                .as_str();
-            let router_id = RouterId::Named(id_str.into());
 
             // let Some(router_id) = request.extensions().get::<RouterId>() else
             // {     return
@@ -132,7 +130,7 @@ where
             match Self::authenticate_request_inner(
                 app_state.clone(),
                 api_key,
-                router_id.clone(),
+                request.uri().path(),
             )
             .await
             {
