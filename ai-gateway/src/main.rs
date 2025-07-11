@@ -144,7 +144,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     {
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(pg_pool.clone(), app.state.clone()).await?,
+            DatabaseListener::new(pg_pool.clone(), app.state.clone())?,
         ));
         tasks.push("database-listener");
     }

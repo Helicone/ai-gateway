@@ -16,7 +16,7 @@ pub struct DBRouterConfig {
 }
 
 impl RouterStore {
-    pub async fn new(pool: PgPool) -> Result<Self, InitError> {
+    pub fn new(pool: PgPool) -> Result<Self, InitError> {
         Ok(Self { pool })
     }
 
@@ -33,10 +33,6 @@ impl RouterStore {
             error!(error = %e, "failed to get all routers");
             InitError::DatabaseConnection(e)
         })?;
-        tracing::info!("found {} routers", res.len());
-        for router in &res {
-            tracing::info!("router: {:?}", router.router_id);
-        }
         Ok(res)
     }
 }

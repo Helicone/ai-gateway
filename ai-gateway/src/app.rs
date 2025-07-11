@@ -202,7 +202,7 @@ impl App {
         let (pg_pool, router_store) =
             if config.deployment_target == DeploymentTarget::Cloud {
                 let pg_pool = connect(&config.database).await?;
-                let router_store = RouterStore::new(pg_pool.clone()).await?;
+                let router_store = RouterStore::new(pg_pool.clone())?;
                 (Some(pg_pool), Some(router_store))
             } else {
                 (None, None)

@@ -3,10 +3,7 @@ use std::sync::Arc;
 use futures::future::BoxFuture;
 use meltdown::Token;
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    PgPool,
-    postgres::{PgListener, PgPoolOptions},
-};
+use sqlx::{PgPool, postgres::PgListener};
 use tokio::sync::mpsc::Sender;
 use tower::discover::Change;
 use tracing::{debug, error, info};
@@ -63,7 +60,7 @@ enum ConnectedCloudGatewaysNotification {
 }
 
 impl DatabaseListener {
-    pub async fn new(
+    pub fn new(
         pg_pool: PgPool,
         app_state: AppState,
     ) -> Result<Self, InitError> {
