@@ -41,9 +41,12 @@ impl Discovery {
             DeploymentTarget::Sidecar => Ok(Self::Config {
                 inner: ConfigDiscovery::new(app_state).await?,
             }),
-            DeploymentTarget::Cloud => Ok(Self::Cloud {
-                inner: CloudDiscovery::new(app_state, rx).await?,
-            }),
+            DeploymentTarget::Cloud => {
+                let rx = rx.ok_or(InitError::RouterRxNotConfigured)?;
+                Ok(Self::Cloud {
+                    inner: CloudDiscovery::new(app_state, rx).await?,
+                })
+            }
         }
     }
 }

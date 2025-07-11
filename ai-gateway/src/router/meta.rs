@@ -94,44 +94,28 @@ pub struct MetaRouter {
 impl MetaRouter {
     pub async fn new(app_state: AppState) -> Result<Self, InitError> {
         let meta_router = match app_state.0.config.deployment_target {
-            DeploymentTarget::Sidecar => {
-                Self::sidecar_from_config(app_state).await
-            }
-            DeploymentTarget::Cloud => Self::cloud_from_config(app_state).await,
+            DeploymentTarget::Sidecar => Self::sidecar(app_state).await,
+            DeploymentTarget::Cloud => Self::cloud(app_state).await,
         }?;
-        // tracing::info!(
-        //     num_routers = meta_router.inner.len(),
-        //     "meta router created"
-        // );
         Ok(meta_router)
     }
 
-    pub async fn cloud_from_config(
-        app_state: AppState,
-    ) -> Result<Self, InitError> {
+    pub async fn cloud(app_state: AppState) -> Result<Self, InitError> {
         let unified_url_regex =
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        // let mut inner = HashMap::default();
 
         let discovery_factory = DiscoverFactory::new(app_state.clone());
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
-        // let rx = app_state.get_router_rx().await;
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         app_state.set_router_tx(tx).await;
         let dynamic_router = router_factory.call(Some(rx)).await?;
 
-        // let dynamic_router = DynamicRouter::new(discovery);
-        // let discovery = Discovery::new(&app_state).await?;
-
         let unified_api = ServiceBuilder::new()
-            // TODO: should we change how global configs work for rate limiting,
-            // caching?       For now, leave these types here to
-            // make it easier to change later on.
-            .layer(rate_limit::Layer::disabled())
-            .layer(CacheLayer::disabled())
+            .layer(rate_limit::Layer::unified_api(&app_state)?)
+            .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
         let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
@@ -146,9 +130,7 @@ impl MetaRouter {
         Ok(meta_router)
     }
 
-    pub async fn sidecar_from_config(
-        app_state: AppState,
-    ) -> Result<Self, InitError> {
+    pub async fn sidecar(app_state: AppState) -> Result<Self, InitError> {
         let unified_url_regex =
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
@@ -157,8 +139,6 @@ impl MetaRouter {
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
         let dynamic_router = router_factory.call(None).await?;
-        // let discovery = discovery_factory.call(None).await?;
-        // let dynamic_router = DynamicRouter::new(discovery);
         let unified_api = ServiceBuilder::new()
             .layer(rate_limit::Layer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
@@ -260,19 +240,6 @@ impl MetaRouter {
         ResponseFuture::RouterRequest {
             future: self.dynamic_router.call(req),
         }
-
-        // if let Some(router) = self.inner.get_mut(router_id) {
-        //     ResponseFuture::RouterRequest {
-        //         future: router.call(req),
-        //     }
-        // } else {
-        //     ResponseFuture::Ready {
-        //         future: ready(Err(ApiError::InvalidRequest(
-        //
-        // InvalidRequestError::NotFound(req.uri().path().to_string()),
-        //         ))),
-        //     }
-        // }
     }
 
     fn handle_unified_api_request(

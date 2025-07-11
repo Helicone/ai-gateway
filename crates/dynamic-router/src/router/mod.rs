@@ -26,6 +26,7 @@
 pub mod make;
 
 use std::{
+    convert::Infallible,
     fmt,
     hash::Hash,
     marker::PhantomData,
@@ -33,10 +34,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{
-    future::{FutureExt, TryFutureExt},
-    ready,
-};
+use futures::ready;
+use pin_project::pin_project;
 use tower::{
     Service,
     discover::{Change, Discover},
@@ -46,26 +45,12 @@ use tracing::{debug, trace};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Inner service error: {0}")]
-    InnerService(tower::BoxError),
+    #[error("Service Key extension not found")]
+    ExtensionNotFound,
     #[error("Discover error: {0}")]
     Discover(tower::BoxError),
 }
 
-/// Efficiently distributes requests across an arbitrary number of services.
-///
-/// See the [module-level documentation](..) for details.
-///
-/// Note that [`WeightedBalance`] requires that the [`Discover`] you use is
-/// [`Unpin`] in order to implement [`Service`]. This is because it needs to be
-/// accessed from [`Service::poll_ready`], which takes `&mut self`. You can
-/// achieve this easily by wrapping your [`Discover`] in [`Box::pin`] before you
-/// construct the [`WeightedBalance`] instance. For more details, see [#319].
-///
-/// [`Box::pin`]: std::boxed::Box::pin()
-/// [#319]: https://github.com/tower-rs/tower/issues/319
 pub struct DynamicRouter<D, ReqBody>
 where
     D: Discover,
@@ -96,9 +81,7 @@ impl<D, ReqBody> DynamicRouter<D, ReqBody>
 where
     D: Discover,
     D::Key: Hash + Send + Sync,
-    D::Service: Service<http::Request<ReqBody>>,
-    <D::Service as Service<http::Request<ReqBody>>>::Error:
-        Into<tower::BoxError>,
+    D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
 {
     pub fn new(discover: D) -> Self {
         tracing::trace!("DynamicRouter::new");
@@ -126,9 +109,7 @@ where
     D: Discover + Unpin,
     D::Key: Hash + Clone + Send + Sync,
     D::Error: Into<tower::BoxError>,
-    D::Service: Service<http::Request<ReqBody>>,
-    <D::Service as Service<http::Request<ReqBody>>>::Error:
-        Into<tower::BoxError>,
+    D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
 {
     /// Polls `discover` for updates, adding new items to `not_ready`.
     ///
@@ -184,40 +165,6 @@ where
             "poll_unready"
         );
     }
-
-    // fn ready_index(&mut self) -> Result<Option<usize>, Error> {
-    //     match self.services.ready_len() {
-    //         0 => Ok(None),
-    //         _ => {
-    //             let request = self.services.get_ready(key);
-    //         } // 1 => Ok(Some(0)),
-    //           // len => {
-    //           //     // let sample_fn = |idx| {
-    //           //     //     let (key, _service) = self
-    //           //     //         .services
-    //           //     //         .get_ready_index(idx)
-    //           //     //         .expect("invalid index");
-
-    //           //     //     key.weight()
-    //           //     // };
-    //           //     // // NOTE: This is O(n) over number of services, but it
-    // can           //     // // be made to O(1) using precomputed
-    // probability tables as           //     // // described here: https://www.keithschwarz.com/darts-dice-coins/
-    //           //     // let sample = rand::seq::index::sample_weighted(
-    //           //     //     &mut self.rng,
-    //           //     //     len,
-    //           //     //     sample_fn,
-    //           //     //     1,
-    //           //     // )?;
-    //           //     // let chosen = sample.index(0);
-    //           //     // trace!(chosen = chosen, "p2c");
-
-    //           //     // TODO: Implement dynamic router
-
-    //           //     Ok(None)
-    //           // }
-    //     }
-    // }
 }
 
 impl<D, ReqBody> Service<http::Request<ReqBody>> for DynamicRouter<D, ReqBody>
@@ -225,95 +172,86 @@ where
     D: Discover + Unpin,
     D::Key: Hash + Clone + Send + Sync + 'static,
     D::Error: Into<tower::BoxError>,
-    D::Service: Service<http::Request<ReqBody>>,
+    D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
     <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
-    <D::Service as Service<http::Request<ReqBody>>>::Error:
-        Into<tower::BoxError> + Send + 'static,
     <<D as tower::discover::Discover>::Service as Service<
         http::Request<ReqBody>,
     >>::Response: Send + 'static,
 {
     type Response = <D::Service as Service<http::Request<ReqBody>>>::Response;
     type Error = Error;
-    type Future = futures::future::BoxFuture<
-        'static,
-        Result<Self::Response, Self::Error>,
-    >;
+    type Future = ResponseFuture<D, ReqBody>;
 
     fn poll_ready(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        tracing::trace!("DynamicRouter::poll_ready");
-
-        // `ready_index` may have already been set by a prior invocation. These
-        // updates cannot disturb the order of existing ready services.
         let _ = self.update_pending_from_discover(cx)?;
         self.promote_pending_to_ready(cx);
-
-        // TODO: REMOVE FOLLOWING LINES OF COMMENTS BEFORE MERGING
-        // const MAX_RETRIES: usize = 10;
-        // let mut retries = 0;
-        // while retries < MAX_RETRIES {
-        //     let mut all_ready = true;
-        //     for (_, svc) in self.services.iter_ready_mut() {
-        //         // ignor
-        //         match svc.poll_ready(cx) {
-        //             Poll::Ready(Ok(())) => {
-        //                 continue;
-        //             }
-        //             Poll::Pending => {
-        //                 all_ready = false;
-        //             }
-        //             Poll::Ready(Err(_e)) => {
-        //                 all_ready = false;
-        //             }
-        //         }
-        //         // match self.services.check_ready(cx, router.0) {
-        //         //     Ok(true) => {
-        //         //         continue;
-        //         //     }
-        //         //     Ok(false) => {
-        //         //         all_ready = false;
-        //         //     }
-        //         //     Err(Failed(_, error)) => {
-        //         //         all_ready = false;
-        //         //     }
-        //         // }
-        //     }
-
-        //     if all_ready {
-        //         return Poll::Ready(Ok(()));
-        //     }
-
-        //     retries += 1;
-        // }
-
-        // Poll::Pending
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
-        tracing::trace!("DynamicRouter::call");
-        let key = request.extensions().get::<D::Key>().unwrap().clone();
-        self.services
-            .call_ready(&key, request)
-            .map_err(|e| Error::InnerService(e.into()))
-            .boxed()
+        let Some(key) = request.extensions().get::<D::Key>().cloned() else {
+            return ResponseFuture::Ready {
+                error: Some(Error::ExtensionNotFound),
+            };
+        };
 
-        // let (_, _, service) = match self.services.get_ready_mut(&key) {
-        //     Some(result) => result,
-        //     None => {
-        //         return futures::future::ready(Err(Error::NotFound(
-        //             request.uri().path().to_string(),
-        //         )))
-        //         .boxed();
-        //     }
-        // };
+        let future = self.services.call_ready(&key, request);
+        ResponseFuture::Inner { future }
+    }
+}
 
-        // service
-        //     .call(request)
-        //     .map_err(|e| Error::InnerService(e.into()))
-        //     .boxed()
+#[pin_project(project = ResponseFutureProj)]
+pub enum ResponseFuture<D, ReqBody>
+where
+    D: Discover + Unpin,
+    D::Key: Hash + Clone + Send + Sync + 'static,
+    D::Error: Into<tower::BoxError>,
+    D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
+    <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
+    <<D as tower::discover::Discover>::Service as Service<
+        http::Request<ReqBody>,
+    >>::Response: Send + 'static,
+{
+    Ready {
+        error: Option<Error>,
+    },
+    Inner {
+        #[pin]
+        future: <D::Service as Service<http::Request<ReqBody>>>::Future,
+    },
+}
+
+impl<D, ReqBody> Future for ResponseFuture<D, ReqBody>
+where
+    D: Discover + Unpin,
+    D::Key: Hash + Clone + Send + Sync + 'static,
+    D::Error: Into<tower::BoxError>,
+    D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
+    <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
+    <<D as tower::discover::Discover>::Service as Service<
+        http::Request<ReqBody>,
+    >>::Response: Send + 'static,
+{
+    type Output = Result<
+        <D::Service as Service<http::Request<ReqBody>>>::Response,
+        Error,
+    >;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.project() {
+            ResponseFutureProj::Ready { error } => Poll::Ready(Err(error
+                .take()
+                .expect("future polled after completion"))),
+            ResponseFutureProj::Inner { future } => {
+                match ready!(future.poll(cx)) {
+                    Ok(res) => Poll::Ready(Ok(res)),
+                    // never happens due to `Infallible` bound
+                    Err(e) => match e {},
+                }
+            }
+        }
     }
 }

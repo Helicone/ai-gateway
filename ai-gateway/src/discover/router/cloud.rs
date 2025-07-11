@@ -19,7 +19,7 @@ use crate::{
 };
 
 pin_project! {
-  /// Reads available routers from the database or config file based on the deployment target.
+  /// Reads available routers from the database
   #[derive(Debug)]
   pub struct CloudDiscovery {
       #[pin]
@@ -32,21 +32,20 @@ pin_project! {
 impl CloudDiscovery {
     pub async fn new(
         app_state: &AppState,
-        rx: Option<Receiver<Change<RouterId, Router>>>,
+        rx: Receiver<Change<RouterId, Router>>,
     ) -> Result<Self, InitError> {
-        if let Some(rx) = rx {
-            let mut service_map: HashMap<RouterId, Router> = HashMap::new();
-            let router_store = app_state
-                .0
-                .router_store
-                .as_ref()
-                .ok_or(InitError::RouterStoreNotConfigured)?;
-            let routers = router_store.get_all_routers().await?;
-            for router in routers {
-                let router_id = RouterId::Named(CompactString::from(
-                    router.router_id.to_string(),
-                ));
-                let router_config = serde_json::from_value::<RouterConfig>(
+        let mut service_map: HashMap<RouterId, Router> = HashMap::new();
+        let router_store = app_state
+            .0
+            .router_store
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("router_store"))?;
+        let routers = router_store.get_all_routers().await?;
+        for router in routers {
+            let router_id = RouterId::Named(CompactString::from(
+                router.router_id.to_string(),
+            ));
+            let router_config = serde_json::from_value::<RouterConfig>(
                 router.config.clone(),
             )
             .map_err(|e| {
@@ -54,24 +53,20 @@ impl CloudDiscovery {
                 InitError::DefaultRouterNotFound
             })?;
 
-                let router = Router::new(
-                    router_id.clone(),
-                    Arc::new(router_config),
-                    app_state.clone(),
-                )
-                .await?;
-                service_map.insert(router_id.clone(), router);
-            }
-
-            tracing::debug!("Created config router discovery");
-            Ok(Self {
-                initial: ServiceMap::new(service_map),
-                events: ReceiverStream::new(rx),
-            })
-        } else {
-            //  BETTER ERROR LATER
-            Err(InitError::RouterRxNotConfigured)
+            let router = Router::new(
+                router_id.clone(),
+                Arc::new(router_config),
+                app_state.clone(),
+            )
+            .await?;
+            service_map.insert(router_id.clone(), router);
         }
+
+        tracing::debug!("Created config router discovery");
+        Ok(Self {
+            initial: ServiceMap::new(service_map),
+            events: ReceiverStream::new(rx),
+        })
     }
 }
 
@@ -83,15 +78,10 @@ impl Stream for CloudDiscovery {
         ctx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
-
-        // 1) one‑time inserts, once the ServiceMap returns `Poll::Ready(None)`,
-        //    then the service map is empty
         if let Poll::Ready(Some(change)) = this.initial.as_mut().poll_next(ctx)
         {
             return handle_change(change);
         }
-
-        // 2) live events (removals / re‑inserts)
         match this.events.as_mut().poll_next(ctx) {
             Poll::Ready(Some(change)) => handle_change(change),
             Poll::Pending => Poll::Pending,

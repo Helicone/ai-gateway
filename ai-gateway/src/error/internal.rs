@@ -69,9 +69,6 @@ pub enum InternalError {
     AwsRequestSigningError(String),
     /// Dynamic router discovery error: {0}
     DynamicRouterDiscoveryError(BoxError),
-    /// Dynamic router inner service error: {0}
-    DynamicRouterInnerServiceError(BoxError), /* TODO: figure out better
-                                               * error type */
     /// Cache error: {0}
     CacheError(http_cache::BoxError),
     /// Redis error: {0}
@@ -155,8 +152,6 @@ pub enum InternalErrorMetric {
     CacheError,
     /// Dynamic router discovery error
     DynamicRouterDiscoveryError,
-    /// Dynamic router inner service error
-    DynamicRouterInnerServiceError, // TODO: figure out better error type
     /// Redis error
     RedisError,
     /// Pool error
@@ -204,9 +199,6 @@ impl From<&InternalError> for InternalErrorMetric {
             InternalError::PromptError(_) => Self::PromptError,
             InternalError::DynamicRouterDiscoveryError(_) => {
                 Self::DynamicRouterDiscoveryError
-            }
-            InternalError::DynamicRouterInnerServiceError(_) => {
-                Self::DynamicRouterInnerServiceError
             }
         }
     }

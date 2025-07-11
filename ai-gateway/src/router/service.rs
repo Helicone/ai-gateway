@@ -1,11 +1,14 @@
 use std::{
-    future::{Ready, ready},
+    convert::Infallible,
+    future::Future,
+    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use futures::future::Either;
+use axum_core::response::IntoResponse;
 use http::uri::PathAndQuery;
+use pin_project_lite::pin_project;
 use rustc_hash::FxHashMap as HashMap;
 use tower::{ServiceBuilder, buffer, util::BoxCloneService};
 
@@ -29,7 +32,7 @@ use crate::{
 pub type RouterService = BoxCloneService<
     crate::types::request::Request,
     crate::types::response::Response,
-    ApiError,
+    Infallible,
 >;
 
 #[derive(Debug)]
@@ -73,6 +76,7 @@ impl Router {
             )
             .await?;
             let service_stack = ServiceBuilder::new()
+                .layer(ErrorHandlerLayer::new(app_state.clone()))
                 .layer(prompt_layer.clone())
                 .layer(cache_layer.clone())
                 .layer(ErrorHandlerLayer::new(app_state.clone()))
@@ -93,11 +97,8 @@ impl Router {
 
 impl tower::Service<crate::types::request::Request> for Router {
     type Response = crate::types::response::Response;
-    type Error = ApiError;
-    type Future = Either<
-        Ready<Result<crate::types::response::Response, ApiError>>,
-        <RouterService as tower::Service<crate::types::request::Request>>::Future,
-    >;
+    type Error = Infallible;
+    type Future = ResponseFuture;
 
     #[inline]
     fn poll_ready(
@@ -126,30 +127,75 @@ impl tower::Service<crate::types::request::Request> for Router {
         let Some(extracted_path_and_query) =
             req.extensions().get::<PathAndQuery>()
         else {
-            return Either::Left(ready(Err(InternalError::ExtensionNotFound(
-                "PathAndQuery",
-            )
-            .into())));
+            let api_error = ApiError::Internal(
+                InternalError::ExtensionNotFound("PathAndQuery"),
+            );
+            let response = api_error.into_response();
+            return ResponseFuture::Ready {
+                response: Some(response),
+            };
         };
 
         let api_endpoint = ApiEndpoint::new(extracted_path_and_query.path());
-        match api_endpoint {
-            Some(api_endpoint) => {
-                let endpoint_type = api_endpoint.endpoint_type();
-                if let Some(balancer) = self.inner.get_mut(&endpoint_type) {
-                    req.extensions_mut().insert(api_endpoint);
-                    Either::Right(balancer.call(req))
-                } else {
-                    Either::Left(ready(Err(InvalidRequestError::NotFound(
+        if let Some(api_endpoint) = api_endpoint {
+            let endpoint_type = api_endpoint.endpoint_type();
+            if let Some(balancer) = self.inner.get_mut(&endpoint_type) {
+                req.extensions_mut().insert(api_endpoint);
+                ResponseFuture::Inner {
+                    future: balancer.call(req),
+                }
+            } else {
+                let api_error =
+                    ApiError::InvalidRequest(InvalidRequestError::NotFound(
                         extracted_path_and_query.path().to_string(),
-                    )
-                    .into())))
+                    ));
+                let response = api_error.into_response();
+                ResponseFuture::Ready {
+                    response: Some(response),
                 }
             }
-            None => Either::Left(ready(Err(InvalidRequestError::NotFound(
-                extracted_path_and_query.path().to_string(),
-            )
-            .into()))),
+        } else {
+            let api_error =
+                ApiError::InvalidRequest(InvalidRequestError::NotFound(
+                    extracted_path_and_query.path().to_string(),
+                ));
+            let response = api_error.into_response();
+            ResponseFuture::Ready {
+                response: Some(response),
+            }
+        }
+    }
+}
+
+pin_project! {
+    #[project = ResponseFutureProj]
+    pub enum ResponseFuture
+    {
+        Ready {
+            response: Option<crate::types::response::Response>,
+        },
+        Inner {
+            #[pin]
+            future: <RouterService as tower::Service<crate::types::request::Request>>::Future,
+        },
+    }
+}
+
+impl Future for ResponseFuture {
+    type Output = Result<crate::types::response::Response, Infallible>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.project() {
+            ResponseFutureProj::Ready { response } => Poll::Ready(Ok(response
+                .take()
+                .expect("future polled after completion"))),
+            ResponseFutureProj::Inner { future } => {
+                match futures::ready!(future.poll(cx)) {
+                    Ok(res) => Poll::Ready(Ok(res)),
+                    // never happens due to `Infallible` bound
+                    Err(e) => match e {},
+                }
+            }
         }
     }
 }

@@ -15,22 +15,7 @@ use crate::{
 };
 
 pin_project! {
-    /// Reads available models and providers from the config file.
-    ///
-    /// We can additionally dynamically remove providers from the balancer
-    /// if they hit certain failure thresholds by using a layer like:
-    ///
-    /// ```rust,ignore
-    /// #[derive(Clone)]
-    /// pub struct FailureWatcherLayer {
-    ///     key: usize,
-    ///     registry: tokio::sync::watch::Sender<HashMap<usize, DispatcherService>>,
-    ///     failure_limit: u32,
-    ///     window: Duration,
-    /// }
-    /// ```
-    ///
-    /// the layer would then send `Change::Remove` events to this discovery struct
+    /// Reads available routers from the config file
     #[derive(Debug)]
     pub struct ConfigDiscovery {
         #[pin]
@@ -67,9 +52,6 @@ impl Stream for ConfigDiscovery {
         ctx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
-
-        // 1) one‑time inserts, once the ServiceMap returns `Poll::Ready(None)`,
-        //    then the service map is empty
         if let Poll::Ready(Some(change)) = this.initial.as_mut().poll_next(ctx)
         {
             return handle_change(change);

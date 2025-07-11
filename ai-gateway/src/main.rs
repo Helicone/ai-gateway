@@ -139,9 +139,13 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
         tasks.push("control-plane-client");
     }
 
-    if app.state.0.config.deployment_target == DeploymentTarget::Cloud
-        && let Some(pg_pool) = &app.state.0.pg_pool
-    {
+    if app.state.0.config.deployment_target == DeploymentTarget::Cloud {
+        let pg_pool = app
+            .state
+            .0
+            .pg_pool
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("pg_pool"))?;
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
             DatabaseListener::new(pg_pool.clone(), app.state.clone())?,
