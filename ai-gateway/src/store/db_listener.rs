@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 use crate::{
     app_state::AppState,
     config::router::RouterConfig,
+    control_plane::types::Key,
     error::{init::InitError, runtime::RuntimeError},
     router::service::Router,
     types::router::RouterId,
@@ -51,6 +52,7 @@ enum ConnectedCloudGatewaysNotification {
     RouterKeysUpdated {
         router_id: String,
         router_hash: RouterId,
+        owner_id: String,
         organization_id: String,
         api_key_hash: String,
         op: Op,
@@ -183,6 +185,7 @@ impl DatabaseListener {
                 ConnectedCloudGatewaysNotification::RouterKeysUpdated {
                     router_id: _,
                     router_hash,
+                    owner_id,
                     organization_id,
                     api_key_hash,
                     op,
@@ -193,6 +196,38 @@ impl DatabaseListener {
                     info!("api_key_hash: {}", api_key_hash);
                     info!("op: {:?}", op);
                     // TODO: Handle router configuration deletion
+
+                    match op {
+                        Op::Insert => {
+                            let _ = app_state
+                                .set_router_api_key(
+                                    router_hash,
+                                    Key {
+                                        key_hash: api_key_hash,
+                                        owner_id,
+                                    },
+                                )
+                                .await;
+                            info!("router key inserted");
+                            return Ok(());
+                        }
+                        Op::Delete => {
+                            // let _ = tx.send(Change::Remove(router_hash)).
+                            // await;
+                            info!("router key removed");
+                            return Ok(());
+                        }
+                        Op::Update => {
+                            // let _ = tx.send(Change::Update(router_hash)).
+                            // await;
+                            info!("router key updated");
+                            return Ok(());
+                        }
+                        _ => {
+                            info!("skipping router key insert");
+                            return Ok(());
+                        }
+                    }
 
                     Ok(())
                 }

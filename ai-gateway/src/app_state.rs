@@ -173,6 +173,7 @@ impl AppState {
         router_id: RouterId,
         api_key: Key,
     ) -> Result<Option<HashMap<RouterId, Vec<Key>>>, InitError> {
+        tracing::info!("setting router api key");
         let mut router_api_keys = self.0.router_api_keys.write().await;
         router_api_keys
             .as_mut()
@@ -180,6 +181,7 @@ impl AppState {
             .entry(router_id)
             .or_insert(vec![])
             .push(api_key.clone());
+        tracing::info!("router api keys: {:?}", router_api_keys.clone());
         Ok(router_api_keys.clone())
     }
 
