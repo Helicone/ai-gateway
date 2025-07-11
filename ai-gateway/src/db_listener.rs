@@ -40,9 +40,8 @@ enum Op {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "event")]
+#[serde(tag = "event", rename_all = "snake_case")]
 enum ConnectedCloudGatewaysNotification {
-    #[serde(rename = "router_config_updated")]
     RouterConfigUpdated {
         router_id: RouterId,
         router_config_id: String,
@@ -51,14 +50,12 @@ enum ConnectedCloudGatewaysNotification {
         op: Op,
         config: Box<RouterConfig>,
     },
-    #[serde(rename = "router_keys_updated")]
     RouterKeysUpdated {
         router_id: RouterId,
         organization_id: String,
         api_key_hash: String,
         op: Op,
     },
-    #[serde(rename = "unknown")]
     Unknown {
         #[serde(flatten)]
         data: serde_json::Value,
