@@ -19,7 +19,13 @@ use crate::{
     config::{
         balance::BalanceConfigInner, monitor::GracePeriod, router::RouterConfig,
     },
-    discover::provider::{key::Key, weighted_key::WeightedKey},
+    discover::{
+        model::weighted_key::WeightedKey as ModelWeightedKey,
+        provider::{
+            key::Key as ProviderKey,
+            weighted_key::WeightedKey as ProviderWeightedKey,
+        },
+    },
     dispatcher::{Dispatcher, DispatcherService},
     error::{
         init::InitError,
@@ -34,18 +40,33 @@ pub type HealthMonitorMap =
 
 #[derive(Debug, Clone)]
 pub enum ProviderHealthMonitor {
-    Weighted(ProviderMonitorInner<WeightedKey>),
-    P2C(ProviderMonitorInner<Key>),
+    ProviderWeighted(ProviderMonitorInner<ProviderWeightedKey>),
+    ModelWeighted(ProviderMonitorInner<ModelWeightedKey>),
+    P2C(ProviderMonitorInner<ProviderKey>),
 }
 
 impl ProviderHealthMonitor {
-    fn weighted(
-        tx: Sender<Change<WeightedKey, DispatcherService>>,
+    fn provider_weighted(
+        tx: Sender<Change<ProviderWeightedKey, DispatcherService>>,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
         app_state: AppState,
     ) -> Self {
-        Self::Weighted(ProviderMonitorInner::new(
+        Self::ProviderWeighted(ProviderMonitorInner::new(
+            tx,
+            router_id,
+            router_config,
+            app_state,
+        ))
+    }
+
+    fn model_weighted(
+        tx: Sender<Change<ModelWeightedKey, DispatcherService>>,
+        router_id: RouterId,
+        router_config: Arc<RouterConfig>,
+        app_state: AppState,
+    ) -> Self {
+        Self::ModelWeighted(ProviderMonitorInner::new(
             tx,
             router_id,
             router_config,
@@ -54,7 +75,7 @@ impl ProviderHealthMonitor {
     }
 
     fn p2c(
-        tx: Sender<Change<Key, DispatcherService>>,
+        tx: Sender<Change<ProviderKey, DispatcherService>>,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
         app_state: AppState,
@@ -69,22 +90,25 @@ impl ProviderHealthMonitor {
 
     async fn check_monitor(&mut self) -> Result<(), runtime::RuntimeError> {
         match self {
-            ProviderHealthMonitor::Weighted(inner) => {
-                check_weighted_monitor(inner).await
+            ProviderHealthMonitor::ProviderWeighted(inner) => {
+                check_provider_weighted_monitor(inner).await
             }
             ProviderHealthMonitor::P2C(inner) => check_p2c_monitor(inner).await,
+            ProviderHealthMonitor::ModelWeighted(inner) => {
+                check_model_weighted_monitor(inner).await
+            }
         }
     }
 }
 
-async fn check_weighted_monitor(
-    inner: &mut ProviderMonitorInner<WeightedKey>,
+async fn check_provider_weighted_monitor(
+    inner: &mut ProviderMonitorInner<ProviderWeightedKey>,
 ) -> Result<(), runtime::RuntimeError> {
     for (endpoint_type, balance_config) in
         inner.router_config.load_balance.as_ref()
     {
         match balance_config {
-            BalanceConfigInner::Weighted { providers } => {
+            BalanceConfigInner::ProviderWeighted { providers } => {
                 for target in providers {
                     let provider = &target.provider;
                     let weight = Weight::from(
@@ -93,7 +117,7 @@ async fn check_weighted_monitor(
                         })?,
                     );
 
-                    let key = WeightedKey::new(
+                    let key = ProviderWeightedKey::new(
                         provider.clone(),
                         *endpoint_type,
                         weight,
@@ -147,7 +171,102 @@ async fn check_weighted_monitor(
                     }
                 }
             }
-            BalanceConfigInner::Latency { .. } => {
+            BalanceConfigInner::ModelWeighted { .. } => {
+                tracing::error!(
+                    "Model weighted entries in a provider weighted monitor"
+                );
+                return Err(InternalError::Internal.into());
+            }
+            BalanceConfigInner::BalancedLatency { .. } => {
+                tracing::error!("P2C entries in a weighted monitor");
+                return Err(InternalError::Internal.into());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn check_model_weighted_monitor(
+    inner: &mut ProviderMonitorInner<ModelWeightedKey>,
+) -> Result<(), runtime::RuntimeError> {
+    for (endpoint_type, balance_config) in
+        inner.router_config.load_balance.as_ref()
+    {
+        match balance_config {
+            BalanceConfigInner::ModelWeighted { models } => {
+                for target in models {
+                    let model = &target.model;
+                    let provider =
+                        model.inference_provider().ok_or_else(|| {
+                            InitError::ModelIdNotRecognized(model.clone())
+                        })?;
+                    let weight =
+                        Weight::from(target.weight.to_f64().ok_or_else(
+                            || InitError::InvalidWeight(provider.clone()),
+                        )?);
+
+                    let key = ModelWeightedKey::new(
+                        model.clone(),
+                        *endpoint_type,
+                        weight,
+                    );
+                    let is_healthy = inner.check_health(&provider)?;
+                    let was_unhealthy = inner.unhealthy_keys.contains(&key);
+
+                    if !is_healthy && !was_unhealthy {
+                        trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became unhealthy, removing");
+                        if let Err(e) =
+                            inner.tx.send(Change::Remove(key.clone())).await
+                        {
+                            error!(error = ?e, "Failed to send remove event for unhealthy provider");
+                        }
+                        inner.unhealthy_keys.insert(key);
+                    } else if is_healthy && was_unhealthy {
+                        trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became healthy, adding back");
+                        inner.unhealthy_keys.remove(&key);
+
+                        let service = Dispatcher::new(
+                            inner.app_state.clone(),
+                            &inner.router_id,
+                            &inner.router_config,
+                            provider.clone(),
+                        )
+                        .await?;
+
+                        if let Err(e) =
+                            inner.tx.send(Change::Insert(key, service)).await
+                        {
+                            error!(error = ?e, "Failed to send insert event for healthy provider");
+                        }
+                    }
+
+                    let metric_attributes =
+                        [KeyValue::new("provider", provider.to_string())];
+                    if is_healthy {
+                        inner
+                            .app_state
+                            .0
+                            .metrics
+                            .provider_health
+                            .record(1, &metric_attributes);
+                    } else {
+                        inner
+                            .app_state
+                            .0
+                            .metrics
+                            .provider_health
+                            .record(0, &metric_attributes);
+                    }
+                }
+            }
+            BalanceConfigInner::ProviderWeighted { .. } => {
+                tracing::error!(
+                    "Provider weighted entries in a model weighted monitor"
+                );
+                return Err(InternalError::Internal.into());
+            }
+            BalanceConfigInner::BalancedLatency { .. } => {
                 tracing::error!("P2C entries in a weighted monitor");
                 return Err(InternalError::Internal.into());
             }
@@ -158,15 +277,16 @@ async fn check_weighted_monitor(
 }
 
 async fn check_p2c_monitor(
-    inner: &mut ProviderMonitorInner<Key>,
+    inner: &mut ProviderMonitorInner<ProviderKey>,
 ) -> Result<(), runtime::RuntimeError> {
     for (endpoint_type, balance_config) in
         inner.router_config.load_balance.as_ref()
     {
         match balance_config {
-            BalanceConfigInner::Latency { providers } => {
+            BalanceConfigInner::BalancedLatency { providers } => {
                 for provider in providers {
-                    let key = Key::new(provider.clone(), *endpoint_type);
+                    let key =
+                        ProviderKey::new(provider.clone(), *endpoint_type);
                     let is_healthy = inner.check_health(provider)?;
                     let was_unhealthy = inner.unhealthy_keys.contains(&key);
 
@@ -216,7 +336,11 @@ async fn check_p2c_monitor(
                     }
                 }
             }
-            BalanceConfigInner::Weighted { .. } => {
+            BalanceConfigInner::ModelWeighted { .. } => {
+                tracing::error!("Model weighted entries in a P2C monitor");
+                return Err(InternalError::Internal.into());
+            }
+            BalanceConfigInner::ProviderWeighted { .. } => {
                 tracing::error!("Weighted entries in a P2C monitor");
                 return Err(InternalError::Internal.into());
             }
@@ -352,15 +476,32 @@ impl meltdown::Service for HealthMonitor {
 }
 
 impl AppState {
-    pub async fn add_weighted_router_health_monitor(
+    pub async fn add_provider_weighted_router_health_monitor(
         &self,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
-        tx: Sender<Change<WeightedKey, DispatcherService>>,
+        tx: Sender<Change<ProviderWeightedKey, DispatcherService>>,
     ) {
         self.0.health_monitors.write().await.insert(
             router_id.clone(),
-            ProviderHealthMonitor::weighted(
+            ProviderHealthMonitor::provider_weighted(
+                tx,
+                router_id,
+                router_config,
+                self.clone(),
+            ),
+        );
+    }
+
+    pub async fn add_model_weighted_router_health_monitor(
+        &self,
+        router_id: RouterId,
+        router_config: Arc<RouterConfig>,
+        tx: Sender<Change<ModelWeightedKey, DispatcherService>>,
+    ) {
+        self.0.health_monitors.write().await.insert(
+            router_id.clone(),
+            ProviderHealthMonitor::model_weighted(
                 tx,
                 router_id,
                 router_config,
@@ -373,7 +514,7 @@ impl AppState {
         &self,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
-        tx: Sender<Change<Key, DispatcherService>>,
+        tx: Sender<Change<ProviderKey, DispatcherService>>,
     ) {
         self.0.health_monitors.write().await.insert(
             router_id.clone(),

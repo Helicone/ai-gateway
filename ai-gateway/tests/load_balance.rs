@@ -23,7 +23,7 @@ fn p2c_config_openai_anthropic_google() -> RouterConfigs {
         RouterConfig {
             load_balance: BalanceConfig(HashMap::from([(
                 EndpointType::Chat,
-                BalanceConfigInner::Latency {
+                BalanceConfigInner::BalancedLatency {
                     providers: nes![
                         InferenceProvider::OpenAI,
                         InferenceProvider::Anthropic,

@@ -21,12 +21,12 @@ use crate::{
     dispatcher::{Dispatcher, DispatcherService},
     endpoints::EndpointType,
     error::init::InitError,
-    types::{provider::InferenceProvider, router::RouterId},
+    types::{model_id::ModelId, router::RouterId},
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct WeightedKey {
-    pub provider: InferenceProvider,
+    pub model_id: ModelId,
     pub endpoint_type: EndpointType,
     pub weight: Weight,
 }
@@ -34,12 +34,12 @@ pub struct WeightedKey {
 impl WeightedKey {
     #[must_use]
     pub fn new(
-        provider: InferenceProvider,
+        model_id: ModelId,
         endpoint_type: EndpointType,
         weight: Weight,
     ) -> Self {
         Self {
-            provider,
+            model_id,
             endpoint_type,
             weight,
         }
@@ -47,7 +47,7 @@ impl WeightedKey {
 }
 
 impl DispatcherDiscovery<WeightedKey> {
-    pub async fn new_weighted_provider(
+    pub async fn new_weighted_model(
         app_state: &AppState,
         router_id: &RouterId,
         router_config: &Arc<RouterConfig>,
@@ -58,14 +58,14 @@ impl DispatcherDiscovery<WeightedKey> {
             router_config.load_balance.as_ref()
         {
             let weighted_balance_targets = match balance_config {
-                BalanceConfigInner::ProviderWeighted { providers } => providers,
-                BalanceConfigInner::ModelWeighted { .. } => {
+                BalanceConfigInner::ProviderWeighted { .. } => {
                     return Err(InitError::InvalidBalancer(
-                        "Model weighted balancer not supported for provider \
+                        "Provider weighted balancer not supported for model \
                          weighted discovery"
                             .to_string(),
                     ));
                 }
+                BalanceConfigInner::ModelWeighted { models } => models,
                 BalanceConfigInner::BalancedLatency { .. } => {
                     return Err(InitError::InvalidBalancer(
                         "P2C balancer not supported for weighted discovery"
@@ -73,21 +73,30 @@ impl DispatcherDiscovery<WeightedKey> {
                     ));
                 }
             };
-            for target in weighted_balance_targets {
+            for target_model_id in weighted_balance_targets {
+                let provider = target_model_id
+                    .model
+                    .inference_provider()
+                    .ok_or_else(|| {
+                        InitError::ModelIdNotRecognized(
+                            target_model_id.model.clone(),
+                        )
+                    })?;
                 let weight =
-                    Weight::from(target.weight.to_f64().ok_or_else(|| {
-                        InitError::InvalidWeight(target.provider.clone())
-                    })?);
+                    Weight::from(target_model_id.weight.to_f64().ok_or_else(
+                        || InitError::InvalidWeight(provider.clone()),
+                    )?);
                 let key = WeightedKey::new(
-                    target.provider.clone(),
+                    target_model_id.model.clone(),
                     *endpoint_type,
                     weight,
                 );
-                let dispatcher = Dispatcher::new(
+                let dispatcher = Dispatcher::new_with_model_id(
                     app_state.clone(),
                     router_id,
                     router_config,
-                    target.provider.clone(),
+                    provider,
+                    target_model_id.model.clone(),
                 )
                 .await?;
                 service_map.insert(key, dispatcher);
@@ -131,7 +140,7 @@ impl Service<Receiver<Change<WeightedKey, DispatcherService>>>
         let router_id = self.router_id.clone();
         let router_config = self.router_config.clone();
         Box::pin(async move {
-            let discovery = DispatcherDiscovery::new_weighted_provider(
+            let discovery = DispatcherDiscovery::new_weighted_model(
                 &app_state,
                 &router_id,
                 &router_config,

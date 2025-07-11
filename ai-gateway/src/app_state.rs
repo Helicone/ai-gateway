@@ -22,9 +22,8 @@ use crate::{
     error::{init::InitError, provider::ProviderError},
     logger::service::JawnClient,
     metrics::Metrics,
-    minio::Minio,
     router::service::Router,
-    store::router_store::RouterStore,
+    store::{minio::BaseMinioClient, router::RouterStore},
     types::{
         org::OrgId,
         provider::{InferenceProvider, ProviderKey, ProviderKeys},
@@ -53,7 +52,7 @@ impl AppState {
 #[derive(Debug)]
 pub struct InnerAppState {
     pub config: Config,
-    pub minio: Minio,
+    pub minio: BaseMinioClient,
     pub router_store: Option<RouterStore>,
     pub pg_pool: Option<PgPool>,
     pub jawn_http_client: JawnClient,

@@ -17,7 +17,7 @@ use crate::{
     config::DeploymentTarget,
     error::{init::InitError, logger::LoggerError},
     metrics::tfft::TFFTFuture,
-    s3::S3Client,
+    store::minio::MinioClient,
     types::{
         body::BodyReader,
         extensions::{AuthContext, MapperContext},
@@ -85,9 +85,11 @@ impl LoggerService {
         let resp_body_len = response_body.len();
         let request_id = Uuid::new_v4();
         let s3_client = match self.app_state.config().deployment_target {
-            DeploymentTarget::Cloud => S3Client::cloud(&self.app_state.0.minio),
+            DeploymentTarget::Cloud => {
+                MinioClient::cloud(&self.app_state.0.minio)
+            }
             DeploymentTarget::Sidecar => {
-                S3Client::sidecar(&self.app_state.0.jawn_http_client)
+                MinioClient::sidecar(&self.app_state.0.jawn_http_client)
             }
         };
         s3_client

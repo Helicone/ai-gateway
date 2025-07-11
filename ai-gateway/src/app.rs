@@ -38,9 +38,8 @@ use crate::{
     logger::service::JawnClient,
     metrics::{self, Metrics, attribute_extractor::AttributeExtractor},
     middleware::response_headers::ResponseHeaderLayer,
-    minio::Minio,
     router::meta::MetaRouter,
-    store::{connect, router_store::RouterStore},
+    store::{connect, minio::BaseMinioClient, router::RouterStore},
     types::provider::ProviderKeys,
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
@@ -194,7 +193,7 @@ impl App {
     /// that are shared across the application. This includes setting up
     /// metrics, monitoring, caching, and API keys.
     async fn build_app_state(config: Config) -> Result<AppState, InitError> {
-        let minio = Minio::new(config.minio.clone())?;
+        let minio = BaseMinioClient::new(config.minio.clone())?;
         let (pg_pool, router_store) =
             if config.deployment_target == DeploymentTarget::Cloud {
                 let pg_pool = connect(&config.database).await?;

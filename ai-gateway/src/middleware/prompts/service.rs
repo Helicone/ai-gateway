@@ -17,7 +17,7 @@ use crate::{
         api::ApiError, internal::InternalError,
         invalid_req::InvalidRequestError, prompts::PromptError,
     },
-    s3::S3Client,
+    store::minio::MinioClient,
     types::{
         extensions::{AuthContext, PromptContext, PromptInputValue},
         request::Request,
@@ -156,9 +156,9 @@ async fn build_prompt_request(
     };
 
     let s3_client = match app_state.config().deployment_target {
-        DeploymentTarget::Cloud => S3Client::cloud(&app_state.0.minio),
+        DeploymentTarget::Cloud => MinioClient::cloud(&app_state.0.minio),
         DeploymentTarget::Sidecar => {
-            S3Client::sidecar(&app_state.0.jawn_http_client)
+            MinioClient::sidecar(&app_state.0.jawn_http_client)
         }
     };
 

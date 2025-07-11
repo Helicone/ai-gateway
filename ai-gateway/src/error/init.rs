@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     config::validation::ModelMappingValidationError,
-    types::{provider::InferenceProvider, router::RouterId},
+    types::{model_id::ModelId, provider::InferenceProvider, router::RouterId},
 };
 
 /// Errors that can occur during initialization.
@@ -30,8 +30,8 @@ pub enum InitError {
     ProviderError(#[from] crate::error::provider::ProviderError),
     /// Invalid weight for provider: {0}
     InvalidWeight(InferenceProvider),
-    /// Invalid weighted balancer: {0}
-    InvalidWeightedBalancer(String),
+    /// Invalid balancer: {0}
+    InvalidBalancer(String),
     /// Converter registry endpoints not configured for provider: {0}
     EndpointsNotConfigured(InferenceProvider),
     /// Failed to create redis pool: {0}
@@ -62,6 +62,8 @@ pub enum InitError {
     MinioNotConfigured,
     /// Database connection error: {0}
     DatabaseConnection(sqlx::Error),
+    /// Model ID not recognized: {0}
+    ModelIdNotRecognized(ModelId),
     /// Provider not yet supported: {0}
     ProviderNotSupported(InferenceProvider),
     /// Router rx not configured

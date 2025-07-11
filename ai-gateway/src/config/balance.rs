@@ -6,7 +6,10 @@ use nonempty_collections::{NESet, nes};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoints::EndpointType, types::provider::InferenceProvider};
+use crate::{
+    endpoints::EndpointType,
+    types::{model_id::ModelId, provider::InferenceProvider},
+};
 
 /// A registry of balance configs for each endpoint type,
 /// since a separate load balancer is used for each endpoint type.
@@ -17,7 +20,7 @@ impl Default for BalanceConfig {
     fn default() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Latency {
+            BalanceConfigInner::BalancedLatency {
                 providers: nes![
                     InferenceProvider::OpenAI,
                     InferenceProvider::Anthropic,
@@ -34,8 +37,8 @@ impl BalanceConfig {
     pub fn openai_chat() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::OpenAI,
                     weight: Decimal::from(1),
                 }],
@@ -48,8 +51,8 @@ impl BalanceConfig {
     pub fn anthropic_chat() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::Anthropic,
                     weight: Decimal::from(1),
                 }],
@@ -62,8 +65,8 @@ impl BalanceConfig {
     pub fn google_gemini() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::GoogleGemini,
                     weight: Decimal::from(1),
                 }],
@@ -76,8 +79,8 @@ impl BalanceConfig {
     pub fn ollama_chat() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::Ollama,
                     weight: Decimal::from(1),
                 }],
@@ -90,8 +93,8 @@ impl BalanceConfig {
     pub fn bedrock() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::Bedrock,
                     weight: Decimal::from(1),
                 }],
@@ -104,8 +107,8 @@ impl BalanceConfig {
     pub fn mistral() -> Self {
         Self(HashMap::from([(
             EndpointType::Chat,
-            BalanceConfigInner::Weighted {
-                providers: nes![BalanceTarget {
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
                     provider: InferenceProvider::Named("mistral".into()),
                     weight: Decimal::from(1),
                 }],
@@ -122,28 +125,60 @@ impl BalanceConfig {
     }
 }
 
+/// Configurations which drive the strategy used for the
+/// routing/load balancing done by the
+/// [`RoutingStrategyService`](crate::router::strategy::RoutingStrategyService).
+///
+/// See the rustdocs there for more details.
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case", tag = "strategy")]
 pub enum BalanceConfigInner {
-    Weighted { providers: NESet<BalanceTarget> },
-    Latency { providers: NESet<InferenceProvider> },
+    /// Distributes and load balances requests among a set of providers.
+    #[serde(alias = "weighted")]
+    ProviderWeighted { providers: NESet<WeightedProvider> },
+    /// Distributes and load balances requests among a set of providers.
+    /// This means there is an element of randomness in the selection of the
+    /// provider, so generally requests will go to the provider with lowest
+    /// latency, but not always.
+    #[serde(alias = "latency")]
+    BalancedLatency { providers: NESet<InferenceProvider> },
+    /// Distributes and load balances requests among a set of (providers,model).
+    ModelWeighted { models: NESet<WeightedModel> },
 }
 
 impl BalanceConfigInner {
     #[must_use]
     pub fn providers(&self) -> IndexSet<InferenceProvider> {
         match self {
-            Self::Weighted { providers } => {
+            Self::ProviderWeighted { providers } => {
                 providers.iter().map(|t| t.provider.clone()).collect()
             }
-            Self::Latency { providers } => providers.iter().cloned().collect(),
+            Self::BalancedLatency { providers } => {
+                providers.iter().cloned().collect()
+            }
+            Self::ModelWeighted { models } => models
+                .iter()
+                .filter_map(|model| {
+                    if let Some(provider) = model.model.inference_provider() { Some(provider) } else {
+                        tracing::warn!(model = ?model.model, "Model has no inference provider");
+                        None
+                    }
+                })
+                .collect(),
         }
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct BalanceTarget {
+pub struct WeightedProvider {
     pub provider: InferenceProvider,
+    pub weight: Decimal,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct WeightedModel {
+    pub model: ModelId,
     pub weight: Decimal,
 }

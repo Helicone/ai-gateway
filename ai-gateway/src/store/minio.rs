@@ -1,18 +1,78 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use rusty_s3::S3Action;
+use reqwest::Client;
+use rusty_s3::{
+    Bucket, Credentials, S3Action,
+    actions::{GetObject, PutObject},
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    error::{logger::LoggerError, prompts::PromptError},
+    config::minio::Config,
+    error::{init::InitError, logger::LoggerError, prompts::PromptError},
     logger::service::JawnClient,
-    minio::Minio,
     types::{extensions::AuthContext, logger::S3Log, response::JawnResponse},
 };
+
+const DEFAULT_MINIO_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Debug)]
+pub struct BaseMinioClient {
+    pub bucket: Bucket,
+    pub client: Client,
+    pub credentials: Credentials,
+}
+
+impl BaseMinioClient {
+    pub fn new(config: Config) -> Result<Self, InitError> {
+        let bucket = Bucket::new(
+            config.host,
+            config.url_style.into(),
+            config.bucket_name,
+            config.region,
+        )?;
+        let client = Client::builder()
+            .connect_timeout(DEFAULT_MINIO_TIMEOUT)
+            .tcp_nodelay(true)
+            .build()
+            .map_err(InitError::CreateReqwestClient)?;
+        let credentials = Credentials::new(
+            config.access_key.expose(),
+            config.secret_key.expose(),
+        );
+        Ok(Self {
+            bucket,
+            client,
+            credentials,
+        })
+    }
+
+    #[must_use]
+    pub fn put_object<'obj, 'client>(
+        &'client self,
+        object: &'obj str,
+    ) -> PutObject<'obj>
+    where
+        'client: 'obj,
+    {
+        PutObject::new(&self.bucket, Some(&self.credentials), object)
+    }
+
+    #[must_use]
+    pub fn get_object<'obj, 'client>(
+        &'client self,
+        object: &'obj str,
+    ) -> GetObject<'obj>
+    where
+        'client: 'obj,
+    {
+        GetObject::new(&self.bucket, Some(&self.credentials), object)
+    }
+}
 
 const PUT_OBJECT_SIGN_DURATION: Duration = Duration::from_secs(120);
 const GET_OBJECT_SIGN_DURATION: Duration = Duration::from_secs(120);
@@ -37,14 +97,14 @@ struct SignedUrlResponse {
     url: Url,
 }
 
-pub enum S3Client<'a> {
-    SelfSigned(&'a Minio),
+pub enum MinioClient<'a> {
+    SelfSigned(&'a BaseMinioClient),
     SignedByJawn(&'a JawnClient),
 }
 
-impl<'a> S3Client<'a> {
+impl<'a> MinioClient<'a> {
     #[must_use]
-    pub fn cloud(minio: &'a Minio) -> Self {
+    pub fn cloud(minio: &'a BaseMinioClient) -> Self {
         Self::SelfSigned(minio)
     }
 

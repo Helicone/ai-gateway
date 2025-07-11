@@ -3,7 +3,8 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 use crate::{config::database::DatabaseConfig, error::init::InitError};
 
 pub mod db_listener;
-pub mod router_store;
+pub mod minio;
+pub mod router;
 
 pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, InitError> {
     let pool = PgPoolOptions::new()

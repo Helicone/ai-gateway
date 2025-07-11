@@ -11,9 +11,7 @@ pub mod error;
 pub mod logger;
 pub mod metrics;
 pub mod middleware;
-pub mod minio;
 pub(crate) mod router;
-pub mod s3;
 pub mod store;
 #[cfg(feature = "testing")]
 pub mod tests;

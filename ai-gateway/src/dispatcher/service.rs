@@ -40,6 +40,7 @@ use crate::{
     types::{
         body::BodyReader,
         extensions::{MapperContext, RequestContext, RequestKind},
+        model_id::ModelId,
         provider::InferenceProvider,
         rate_limit::RateLimitEvent,
         request::Request,
@@ -68,11 +69,11 @@ pub struct Dispatcher {
 }
 
 impl Dispatcher {
-    pub async fn new(
+    async fn new_inner(
         app_state: AppState,
         router_id: &RouterId,
-        router_config: &Arc<RouterConfig>,
         provider: InferenceProvider,
+        model_mapper: ModelMapper,
     ) -> Result<DispatcherService, InitError> {
         let client =
             Client::new_for_router(&app_state, provider.clone(), router_id)
@@ -85,10 +86,6 @@ impl Dispatcher {
             provider: provider.clone(),
             rate_limit_tx: Some(rate_limit_tx),
         };
-        let model_mapper = ModelMapper::new_for_router(
-            app_state.clone(),
-            router_config.clone(),
-        );
         let converter_registry = EndpointConverterRegistry::new(&model_mapper);
 
         let extensions_layer = AddExtensionsLayer::builder()
@@ -103,6 +100,34 @@ impl Dispatcher {
             // other middleware: rate limiting, logging, etc, etc
             // will be added here as well
             .service(dispatcher))
+    }
+
+    pub async fn new(
+        app_state: AppState,
+        router_id: &RouterId,
+        router_config: &Arc<RouterConfig>,
+        provider: InferenceProvider,
+    ) -> Result<DispatcherService, InitError> {
+        let model_mapper = ModelMapper::new_for_router(
+            app_state.clone(),
+            router_config.clone(),
+        );
+        Self::new_inner(app_state, router_id, provider, model_mapper).await
+    }
+
+    pub async fn new_with_model_id(
+        app_state: AppState,
+        router_id: &RouterId,
+        router_config: &Arc<RouterConfig>,
+        provider: InferenceProvider,
+        model_id: ModelId,
+    ) -> Result<DispatcherService, InitError> {
+        let model_mapper = ModelMapper::new_with_model_id(
+            app_state.clone(),
+            router_config.clone(),
+            model_id,
+        );
+        Self::new_inner(app_state, router_id, provider, model_mapper).await
     }
 
     pub fn new_direct_proxy(

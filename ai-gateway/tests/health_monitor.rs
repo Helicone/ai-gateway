@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ai_gateway::{
     config::{
         Config,
-        balance::{BalanceConfig, BalanceConfigInner, BalanceTarget},
+        balance::{BalanceConfig, BalanceConfigInner, WeightedProvider},
         helicone::HeliconeFeatures,
         router::{RouterConfig, RouterConfigs},
     },
@@ -28,17 +28,17 @@ async fn errors_remove_provider_from_lb_pool() {
     config.helicone.features = HeliconeFeatures::All;
     let balance_config = BalanceConfig::from(HashMap::from([(
         EndpointType::Chat,
-        BalanceConfigInner::Weighted {
+        BalanceConfigInner::ProviderWeighted {
             providers: nes![
-                BalanceTarget {
+                WeightedProvider {
                     provider: InferenceProvider::OpenAI,
                     weight: Decimal::try_from(0.20).unwrap(),
                 },
-                BalanceTarget {
+                WeightedProvider {
                     provider: InferenceProvider::Anthropic,
                     weight: Decimal::try_from(0.40).unwrap(),
                 },
-                BalanceTarget {
+                WeightedProvider {
                     provider: InferenceProvider::GoogleGemini,
                     weight: Decimal::try_from(0.40).unwrap(),
                 },

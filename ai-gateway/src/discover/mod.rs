@@ -1,4 +1,5 @@
 pub mod dispatcher;
+pub mod model;
 pub mod monitor;
 pub mod provider;
 pub mod router;

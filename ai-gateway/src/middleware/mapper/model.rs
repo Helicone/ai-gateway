@@ -17,6 +17,7 @@ use crate::{
 pub struct ModelMapper {
     app_state: AppState,
     router_config: Option<Arc<RouterConfig>>,
+    model_id: Option<ModelId>,
 }
 
 impl ModelMapper {
@@ -28,6 +29,20 @@ impl ModelMapper {
         Self {
             app_state,
             router_config: Some(router_config),
+            model_id: None,
+        }
+    }
+
+    #[must_use]
+    pub fn new_with_model_id(
+        app_state: AppState,
+        router_config: Arc<RouterConfig>,
+        model_id: ModelId,
+    ) -> Self {
+        Self {
+            app_state,
+            router_config: Some(router_config),
+            model_id: Some(model_id),
         }
     }
 
@@ -36,6 +51,7 @@ impl ModelMapper {
         Self {
             app_state,
             router_config: None,
+            model_id: None,
         }
     }
 
@@ -60,6 +76,11 @@ impl ModelMapper {
         source_model: &ModelId,
         target_provider: &InferenceProvider,
     ) -> Result<ModelId, MapperError> {
+        // this model id comes from the router's configuration, e.g. weighted
+        // model configuration
+        if let Some(model_id) = self.model_id.clone() {
+            return Ok(model_id);
+        }
         let models_offered_by_target_provider = &self
             .providers_config()
             .get(target_provider)
