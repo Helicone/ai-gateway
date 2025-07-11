@@ -85,10 +85,10 @@ impl RouterStore {
 
         // get /ai keys - router_keys.router_id is NULL
         let res = sqlx::query_as::<_, DBUnifiedApiKeys>(
-            "SELECT helicone_api_keys.api_key_hash, \
-             helicone_api_keys.user_id FROM router_keys INNER JOIN \
-             helicone_api_keys ON router_keys.api_key_id = \
-             helicone_api_keys.id WHERE router_keys.router_id IS NULL",
+            "SELECT helicone_api_keys.api_key_hash, helicone_api_keys.user_id \
+             FROM router_keys INNER JOIN helicone_api_keys ON \
+             router_keys.api_key_id = helicone_api_keys.id WHERE \
+             router_keys.router_id IS NULL",
         )
         .fetch_all(&self.pool)
         .await
