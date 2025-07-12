@@ -18,8 +18,8 @@ use tokio::sync::RwLock;
 use tower::{ServiceBuilder, buffer::BufferLayer, util::BoxCloneService};
 use tower_http::{
     ServiceBuilderExt, add_extension::AddExtension,
-    auth::AsyncRequireAuthorizationLayer, catch_panic::CatchPanicLayer,
-    compression::CompressionLayer, normalize_path::NormalizePathLayer,
+    catch_panic::CatchPanicLayer, compression::CompressionLayer,
+    normalize_path::NormalizePathLayer,
     sensitive_headers::SetSensitiveHeadersLayer, trace::TraceLayer,
 };
 use tracing::{Level, info};
@@ -37,11 +37,7 @@ use crate::{
     error::{init::InitError, runtime::RuntimeError},
     logger::service::JawnClient,
     metrics::{self, Metrics, attribute_extractor::AttributeExtractor},
-    middleware::{
-        auth::AuthService, cache::CacheLayer,
-        rate_limit::service::Layer as RateLimitLayer,
-        response_headers::ResponseHeaderLayer,
-    },
+    middleware::response_headers::ResponseHeaderLayer,
     minio::Minio,
     router::meta::MetaRouter,
     store::{connect, router_store::RouterStore},
@@ -236,6 +232,23 @@ impl App {
 
         let cache_manager = setup_cache(&config, metrics.clone())?;
 
+        let router_api_keys = if config.deployment_target
+            == DeploymentTarget::Cloud
+            && let Some(router_store_ref) = router_store.as_ref()
+        {
+            let router_api_keys =
+                router_store_ref.get_all_router_keys().await?;
+
+            Some(router_api_keys)
+        } else {
+            None
+        };
+
+        // if config.deployment_target == DeploymentTarget::Cloud {
+        //     let router_api_keys = router_store.get_all_router_keys().await?;
+        //     app_state.set_initial_router_api_keys(router_api_keys).await?;
+        // }
+
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
@@ -257,6 +270,7 @@ impl App {
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
             router_tx: RwLock::new(None),
+            router_api_keys: RwLock::new(router_api_keys),
         }));
 
         Ok(app_state)
@@ -308,19 +322,10 @@ impl App {
             .layer(HealthCheckLayer::new())
             .layer(TimerLayer::new())
             .layer(ErrorHandlerLayer::new(app_state.clone()))
-            // NOTE: not sure if there is perf impact from Auth layer coming
-            // before buffer layer, but required due to Clone bound.
-            .layer(AsyncRequireAuthorizationLayer::new(AuthService::new(
-                app_state.clone(),
-            )))
-            .layer(RateLimitLayer::global(&app_state)?)
-            .layer(CacheLayer::global(&app_state))
-            .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(ResponseHeaderLayer::new(
                 app_state.response_headers_config(),
             ))
             .map_err(crate::error::internal::InternalError::BufferError)
-            // TODO: move this up before the auth layer
             .layer(BufferLayer::new(BUFFER_SIZE))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(router);

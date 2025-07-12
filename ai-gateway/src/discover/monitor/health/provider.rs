@@ -19,7 +19,7 @@ use crate::{
     config::{
         balance::BalanceConfigInner, monitor::GracePeriod, router::RouterConfig,
     },
-    discover::{provider::Key, weighted::WeightedKey},
+    discover::provider::{key::Key, weighted_key::WeightedKey},
     dispatcher::{Dispatcher, DispatcherService},
     error::{
         init::InitError,

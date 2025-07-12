@@ -9,19 +9,26 @@ use dynamic_router::router::DynamicRouter;
 use http::uri::PathAndQuery;
 use pin_project_lite::pin_project;
 use regex::Regex;
-use tower::{Service as _, ServiceBuilder};
+use tower::{
+    Service as _, ServiceBuilder, buffer::BufferLayer, util::BoxCloneService,
+};
+use tower_http::auth::AsyncRequireAuthorizationLayer;
 
 use crate::{
     app_state::AppState,
     config::DeploymentTarget,
-    discover::router::{discover::Discovery, factory::DiscoverFactory},
+    discover::router::{
+        discover::RouterDiscovery, factory::RouterDiscoverFactory,
+    },
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
     },
     middleware::{
         cache::{CacheLayer, CacheService},
-        rate_limit,
+        rate_limit::service::{
+            Layer as RateLimitLayer, Service as RateLimitService,
+        },
     },
     router::{
         FORCED_ROUTING_HEADER,
@@ -36,6 +43,8 @@ use crate::{
     },
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
+
+const BUFFER_SIZE: usize = 256;
 
 #[derive(Debug, Clone)]
 enum RouteType {
@@ -64,7 +73,7 @@ const ROUTER_URL_REGEX: &str =
     r"^/router/(?P<id>[A-Za-z0-9_-]{1,12})(?P<path>/[^?]*)?(?P<query>\?.*)?$";
 
 pub type UnifiedApiService =
-    rate_limit::Service<CacheService<ErrorHandler<unified_api::Service>>>;
+    RateLimitService<CacheService<ErrorHandler<unified_api::Service>>>;
 
 fn extract_path_and_query(
     path: &str,
@@ -84,20 +93,41 @@ fn extract_path_and_query(
 
 #[derive(Debug)]
 pub struct MetaRouter {
-    dynamic_router: DynamicRouter<Discovery, axum_core::body::Body>,
+    dynamic_router: DynamicRouter<RouterDiscovery, axum_core::body::Body>,
     unified_api: UnifiedApiService,
     direct_proxies: DirectProxiesWithoutMapper,
     unified_url_regex: Regex,
     router_url_regex: Regex,
 }
 
+pub type MetaRouterService = BoxCloneService<
+    crate::types::request::Request,
+    crate::types::response::Response,
+    std::convert::Infallible,
+>;
+
 impl MetaRouter {
-    pub async fn new(app_state: AppState) -> Result<Self, InitError> {
+    pub async fn new(
+        app_state: AppState,
+    ) -> Result<MetaRouterService, InitError> {
         let meta_router = match app_state.0.config.deployment_target {
             DeploymentTarget::Sidecar => Self::sidecar(app_state).await,
             DeploymentTarget::Cloud => Self::cloud(app_state).await,
         }?;
-        Ok(meta_router)
+        let service_stack = ServiceBuilder::new()
+            // NOTE: not sure if there is perf impact from Auth layer coming
+            // before buffer layer, but required due to Clone bound.
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .layer(AsyncRequireAuthorizationLayer::new(
+                crate::middleware::auth::AuthService::new(app_state.clone()),
+            ))
+            .layer(RateLimitLayer::global(&app_state)?)
+            .layer(CacheLayer::global(&app_state))
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
+            .map_err(crate::error::internal::InternalError::BufferError)
+            .layer(BufferLayer::new(BUFFER_SIZE))
+            .service(meta_router);
+        Ok(BoxCloneService::new(service_stack))
     }
 
     pub async fn cloud(app_state: AppState) -> Result<Self, InitError> {
@@ -106,7 +136,7 @@ impl MetaRouter {
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
 
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let discovery_factory = RouterDiscoverFactory::new(app_state.clone());
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
         let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -114,7 +144,7 @@ impl MetaRouter {
         let dynamic_router = router_factory.call(Some(rx)).await?;
 
         let unified_api = ServiceBuilder::new()
-            .layer(rate_limit::Layer::unified_api(&app_state)?)
+            .layer(RateLimitLayer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
@@ -135,12 +165,12 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let discovery_factory = RouterDiscoverFactory::new(app_state.clone());
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
         let dynamic_router = router_factory.call(None).await?;
         let unified_api = ServiceBuilder::new()
-            .layer(rate_limit::Layer::unified_api(&app_state)?)
+            .layer(RateLimitLayer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state)?);
@@ -403,7 +433,7 @@ pin_project! {
         },
         RouterRequest {
             #[pin]
-            future: <DynamicRouter<Discovery, axum_core::body::Body> as tower::Service<crate::types::request::Request>>::Future,
+            future: <DynamicRouter<RouterDiscovery, axum_core::body::Body> as tower::Service<crate::types::request::Request>>::Future,
         },
         UnifiedApi {
             #[pin]

@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 use crate::{
     app_state::AppState,
     config::router::RouterConfig,
+    control_plane::types::Key,
     error::{init::InitError, runtime::RuntimeError},
     router::service::Router,
     types::router::RouterId,
@@ -48,9 +49,8 @@ enum ConnectedCloudGatewaysNotification {
         op: Op,
         config: Box<RouterConfig>,
     },
-    RouterKeysUpdated {
-        router_id: String,
-        router_hash: RouterId,
+    ApiKeyUpdated {
+        owner_id: String,
         organization_id: String,
         api_key_hash: String,
         op: Op,
@@ -147,7 +147,7 @@ impl DatabaseListener {
                     router_id: _,
                     router_hash,
                     router_config_id: _,
-                    organization_id: _,
+                    organization_id,
                     version: _,
                     op,
                     config,
@@ -167,6 +167,28 @@ impl DatabaseListener {
                                 .send(Change::Insert(router_hash, router))
                                 .await;
                             info!("router inserted");
+                            // as a sanity, we want to query the api keys of the
+                            // organization over here and insert them into the
+                            // app state
+                            let router_store =
+                                app_state.0.router_store.as_ref().ok_or(
+                                    InitError::RouterStoreNotConfigured,
+                                )?;
+
+                            let organization_keys = router_store
+                                    .get_organization_keys(&organization_id)
+                                    .await
+                                    .map_err(|e| {
+                                        error!(error = %e, "failed to get organization keys");
+                                        RuntimeError::Internal(
+                                            crate::error::internal::InternalError::Internal,
+                                        )
+                                    })?;
+                            let _ = app_state
+                                .set_router_api_keys(Some(organization_keys))
+                                .await;
+                            info!("organization keys inserted");
+
                             Ok(())
                         }
                         Op::Delete => {
@@ -180,21 +202,41 @@ impl DatabaseListener {
                         }
                     }
                 }
-                ConnectedCloudGatewaysNotification::RouterKeysUpdated {
-                    router_id: _,
-                    router_hash,
+                ConnectedCloudGatewaysNotification::ApiKeyUpdated {
+                    owner_id,
                     organization_id,
                     api_key_hash,
                     op,
                 } => {
                     info!("Router keys updated");
-                    info!("router_hash: {}", router_hash);
                     info!("organization_id: {}", organization_id);
                     info!("api_key_hash: {}", api_key_hash);
                     info!("op: {:?}", op);
                     // TODO: Handle router configuration deletion
 
-                    Ok(())
+                    match op {
+                        Op::Insert => {
+                            let _ = app_state
+                                .set_router_api_key(Key {
+                                    key_hash: api_key_hash,
+                                    owner_id,
+                                })
+                                .await;
+                            info!("router key inserted");
+                            Ok(())
+                        }
+                        Op::Delete => {
+                            let _ = app_state
+                                .remove_router_api_key(api_key_hash)
+                                .await;
+                            info!("router key removed");
+                            Ok(())
+                        }
+                        _ => {
+                            info!("skipping router key insert");
+                            Ok(())
+                        }
+                    }
                 }
                 ConnectedCloudGatewaysNotification::Unknown { data } => {
                     info!("Unknown notification event");
