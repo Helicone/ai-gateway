@@ -98,6 +98,7 @@ fn mock_auth() -> ai_gateway::control_plane::types::Config {
         keys: vec![ai_gateway::control_plane::types::Key {
             key_hash: key_hash,
             owner_id: user_id,
+            organization_id,
         }],
         router_id: "my-router".to_string(),
         router_config: "{}".to_string(),

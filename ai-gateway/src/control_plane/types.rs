@@ -54,6 +54,7 @@ pub struct AuthData {
 pub struct Key {
     pub key_hash: String,
     pub owner_id: String,
+    pub organization_id: String,
 }
 
 #[derive(TS, Serialize, Deserialize, Debug, Clone)]
@@ -92,6 +93,7 @@ impl crate::tests::TestDefault for Config {
             keys: vec![Key {
                 key_hash: key_hash.clone(),
                 owner_id: user_id.to_string(),
+                organization_id: organization_id.to_string(),
             }],
             router_id: "my-router".to_string(),
             router_config: "{}".to_string(),

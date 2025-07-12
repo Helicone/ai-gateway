@@ -153,6 +153,8 @@ async fn rate_limit_per_user_isolation_impl(
     let user2_auth = "sk-helicone-user2-key";
     let user1_id = Uuid::new_v4();
     let user2_id = Uuid::new_v4();
+    let org1_id = Uuid::new_v4();
+    let org2_id = Uuid::new_v4();
 
     let mut harness = Harness::builder()
         .with_config(config)
@@ -161,10 +163,12 @@ async fn rate_limit_per_user_isolation_impl(
             Key {
                 key_hash: hash_key(user1_auth),
                 owner_id: user1_id.to_string(),
+                organization_id: org1_id.to_string(),
             },
             Key {
                 key_hash: hash_key(user2_auth),
                 owner_id: user2_id.to_string(),
+                organization_id: org2_id.to_string(),
             },
         ])
         .build()

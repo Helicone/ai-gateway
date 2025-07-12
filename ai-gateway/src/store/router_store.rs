@@ -21,6 +21,7 @@ pub struct DBRouterConfig {
 pub struct DBApiKey {
     pub key_hash: String,
     pub owner_id: Uuid,
+    pub organization_id: Uuid,
 }
 
 impl RouterStore {
@@ -51,7 +52,8 @@ impl RouterStore {
         // organizations which have routers
         let res = sqlx::query_as::<_, DBApiKey>(
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
-             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             helicone_api_keys.user_id as owner_id, \
+             helicone_api_keys.organization_id as organization_id FROM helicone_api_keys \
              INNER JOIN routers ON helicone_api_keys.organization_id = \
              routers.organization_id",
         )
@@ -67,6 +69,7 @@ impl RouterStore {
             .map(|k| Key {
                 key_hash: k.key_hash,
                 owner_id: k.owner_id.to_string(),
+                organization_id: k.organization_id.to_string(),
             })
             .collect();
 
@@ -83,7 +86,8 @@ impl RouterStore {
         })?;
         let res = sqlx::query_as::<_, DBApiKey>(
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
-             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             helicone_api_keys.user_id as owner_id, \
+             helicone_api_keys.organization_id as organization_id FROM helicone_api_keys \
              WHERE helicone_api_keys.organization_id = $1",
         )
         .bind(org_id)
@@ -98,6 +102,7 @@ impl RouterStore {
             .map(|k| Key {
                 key_hash: k.key_hash,
                 owner_id: k.owner_id.to_string(),
+                organization_id: k.organization_id.to_string(),
             })
             .collect();
 

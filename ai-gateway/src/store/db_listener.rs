@@ -234,6 +234,7 @@ impl DatabaseListener {
                                 .set_router_api_key(Key {
                                     key_hash: api_key_hash,
                                     owner_id,
+                                    organization_id,
                                 })
                                 .await;
                             info!("router key inserted");
