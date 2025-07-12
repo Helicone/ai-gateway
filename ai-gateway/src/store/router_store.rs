@@ -14,6 +14,7 @@ pub struct RouterStore {
 #[derive(Debug, sqlx::FromRow)]
 pub struct DBRouterConfig {
     pub router_hash: String,
+    pub organization_id: Uuid,
     pub config: serde_json::Value,
 }
 
@@ -34,7 +35,8 @@ impl RouterStore {
     ) -> Result<Vec<DBRouterConfig>, InitError> {
         let res = sqlx::query_as::<_, DBRouterConfig>(
             "SELECT DISTINCT ON (routers.hash) routers.hash as router_hash, \
-             config FROM router_config_versions INNER JOIN routers on \
+             routers.organization_id as organization_id, config FROM \
+             router_config_versions INNER JOIN routers on \
              router_config_versions.router_id = routers.id ORDER BY \
              routers.hash, router_config_versions.created_at DESC",
         )
@@ -48,14 +50,11 @@ impl RouterStore {
     }
 
     pub async fn get_all_router_keys(&self) -> Result<HashSet<Key>, InitError> {
-        // the inner join is to make sure that we only get keys of the
-        // organizations which have routers
         let res = sqlx::query_as::<_, DBApiKey>(
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
              helicone_api_keys.user_id as owner_id, \
-             helicone_api_keys.organization_id as organization_id FROM helicone_api_keys \
-             INNER JOIN routers ON helicone_api_keys.organization_id = \
-             routers.organization_id",
+             helicone_api_keys.organization_id as organization_id FROM \
+             helicone_api_keys",
         )
         .fetch_all(&self.pool)
         .await
@@ -87,8 +86,8 @@ impl RouterStore {
         let res = sqlx::query_as::<_, DBApiKey>(
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
              helicone_api_keys.user_id as owner_id, \
-             helicone_api_keys.organization_id as organization_id FROM helicone_api_keys \
-             WHERE helicone_api_keys.organization_id = $1",
+             helicone_api_keys.organization_id as organization_id FROM \
+             helicone_api_keys WHERE helicone_api_keys.organization_id = $1",
         )
         .bind(org_id)
         .fetch_all(&self.pool)

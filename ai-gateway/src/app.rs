@@ -271,6 +271,7 @@ impl App {
             cache_manager,
             router_tx: RwLock::new(None),
             router_api_keys: RwLock::new(router_api_keys),
+            router_organization_map: RwLock::new(HashMap::default()),
         }));
 
         Ok(app_state)

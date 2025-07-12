@@ -140,28 +140,14 @@ impl DatabaseListener {
         .await?;
 
         info!("sending router to tx");
-        let _ = tx.send(Change::Insert(router_hash, router)).await;
+        let _ = tx.send(Change::Insert(router_hash.clone(), router)).await;
         info!("router inserted");
-        // as a sanity, we want to query the api keys of the
-        // organization over here and insert them into the
-        // app state
-        let router_store = app_state
-            .0
-            .router_store
-            .as_ref()
-            .ok_or(InitError::StoreNotConfigured("router_store"))?;
-
-        let organization_keys = router_store
-            .get_organization_keys(&organization_id)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "failed to get organization keys");
-                RuntimeError::Internal(
-                    crate::error::internal::InternalError::Internal,
-                )
-            })?;
-        let () = app_state.set_router_api_keys(Some(organization_keys)).await;
-        info!("organization keys inserted");
+        app_state
+            .set_router_organization(
+                router_hash.clone(),
+                organization_id.clone(),
+            )
+            .await;
 
         Ok(())
     }

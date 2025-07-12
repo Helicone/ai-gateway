@@ -75,6 +75,7 @@ pub struct InnerAppState {
 
     pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
     pub router_api_keys: RwLock<Option<HashSet<Key>>>,
+    pub router_organization_map: RwLock<HashMap<RouterId, String>>,
 }
 
 impl AppState {
@@ -199,5 +200,33 @@ impl AppState {
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
             .retain(|k| k.key_hash != api_key_hash);
         Ok(router_api_keys.clone())
+    }
+
+    pub async fn set_router_organization_map(
+        &self,
+        map: HashMap<RouterId, String>,
+    ) {
+        let mut router_organization_map =
+            self.0.router_organization_map.write().await;
+        router_organization_map.clone_from(&map);
+    }
+
+    pub async fn set_router_organization(
+        &self,
+        router_id: RouterId,
+        organization_id: String,
+    ) {
+        let mut router_organization_map =
+            self.0.router_organization_map.write().await;
+        router_organization_map.insert(router_id, organization_id);
+    }
+
+    pub async fn get_router_organization(
+        &self,
+        router_id: &RouterId,
+    ) -> Option<String> {
+        let router_organization_map =
+            self.0.router_organization_map.read().await;
+        router_organization_map.get(router_id).cloned()
     }
 }
