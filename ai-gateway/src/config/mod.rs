@@ -174,7 +174,10 @@ impl Config {
                 return Err(InitError::InvalidRouterId(router_id.to_string()));
             }
         }
-        self.validate_model_mappings()?;
+        // TODO: re-enable this once we have a way to validate model mappings if
+        // a user overrides       one of the default model mapping or
+        // the model-mapping, but not both
+        // self.validate_model_mappings()?;
         Ok(())
     }
 }
