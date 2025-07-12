@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-beta.28] - 2025-07-11
+
+### 🚀 Features
+
+- Configurable generic oai handler (#210)
+- Mistral support (#211)
+- Prompts (#200)
+- [ENG-2217] specify version id to pull prompt (#214)
+- [ENG-2231] Prompt Templating (#216)
+- [ENG-2237] Support true types of prompt inputs (#217)
+- Allow configuring middleware for unified api (#219)
+- Dynamic router for cloud gateway (#220)
+
+### 🐛 Bug Fixes
+
+- Return 429 errors in OpenAI format (#218)
+- Temporarily disable validation
+
+### 🚜 Refactor
+
+- Remove "default" router keyword (#215)
+- Prep for new latency router (#226)
+
+### ⚙️ Miscellaneous Tasks
+
+- InitError if store not properly configured (#221)
+- Add dependency caching to ci (#222)
+- Use router_hash(cuid) for routers instead of router_id(uuid) (#224)
+
 ## [0.2.0-beta.27] - 2025-07-08
 
 ### 🚀 Features
