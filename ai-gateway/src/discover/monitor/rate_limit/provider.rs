@@ -23,7 +23,7 @@ use weighted_balance::weight::Weight;
 use crate::{
     app_state::AppState,
     config::{balance::BalanceConfigInner, router::RouterConfig},
-    discover::{dispatcher::Key, weighted::WeightedKey},
+    discover::provider::{key::Key, weighted_key::WeightedKey},
     dispatcher::{Dispatcher, DispatcherService},
     endpoints::ApiEndpoint,
     error::{init::InitError, internal::InternalError, runtime::RuntimeError},

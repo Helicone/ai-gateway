@@ -3,19 +3,48 @@ use std::task::{Context, Poll};
 use futures::future::BoxFuture;
 use tokio::sync::mpsc::Receiver;
 use tower::{Service, discover::Change};
-use weighted_balance::weight::WeightedDiscover;
+use weighted_balance::weight::{HasWeight, Weight, WeightedDiscover};
 
 use crate::{
-    discover::{
-        dispatcher::{DispatcherDiscovery, factory::DiscoverFactory},
-        weighted::WeightedKey,
+    discover::dispatcher::{
+        DispatcherDiscovery, factory::DispatcherDiscoverFactory,
     },
     dispatcher::DispatcherService,
+    endpoints::EndpointType,
     error::init::InitError,
+    types::provider::InferenceProvider,
 };
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct WeightedKey {
+    pub provider: InferenceProvider,
+    pub endpoint_type: EndpointType,
+    pub weight: Weight,
+}
+
+impl WeightedKey {
+    #[must_use]
+    pub fn new(
+        provider: InferenceProvider,
+        endpoint_type: EndpointType,
+        weight: Weight,
+    ) -> Self {
+        Self {
+            provider,
+            endpoint_type,
+            weight,
+        }
+    }
+}
+
+impl HasWeight for WeightedKey {
+    fn weight(&self) -> Weight {
+        self.weight
+    }
+}
+
 impl Service<Receiver<Change<WeightedKey, DispatcherService>>>
-    for DiscoverFactory
+    for DispatcherDiscoverFactory
 {
     type Response = WeightedDiscover<DispatcherDiscovery<WeightedKey>>;
     type Error = InitError;

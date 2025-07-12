@@ -1,7 +1,7 @@
 pub mod dispatcher;
 pub mod monitor;
+pub mod provider;
 pub mod router;
-pub mod weighted;
 
 use std::{
     collections::HashMap,

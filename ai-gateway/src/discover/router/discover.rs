@@ -22,17 +22,19 @@ pin_project! {
     /// Discover routers.
     #[derive(Debug)]
     #[project = DiscoveryProj]
-    pub enum Discovery {
+    pub enum RouterDiscovery {
         Config {
-            #[pin] inner: ConfigDiscovery,
+            #[pin]
+            inner: ConfigDiscovery,
         },
         Cloud {
-            #[pin] inner: CloudDiscovery,
+            #[pin]
+            inner: CloudDiscovery,
         },
     }
 }
 
-impl Discovery {
+impl RouterDiscovery {
     pub async fn new(
         app_state: &AppState,
         rx: Option<Receiver<Change<RouterId, Router>>>,
@@ -51,7 +53,7 @@ impl Discovery {
     }
 }
 
-impl Stream for Discovery {
+impl Stream for RouterDiscovery {
     type Item = Result<Change<RouterId, Router>, Infallible>;
 
     fn poll_next(

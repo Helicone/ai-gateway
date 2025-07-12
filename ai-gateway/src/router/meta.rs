@@ -14,7 +14,9 @@ use tower::{Service as _, ServiceBuilder};
 use crate::{
     app_state::AppState,
     config::DeploymentTarget,
-    discover::router::{discover::Discovery, factory::DiscoverFactory},
+    discover::router::{
+        discover::RouterDiscovery, factory::RouterDiscoverFactory,
+    },
     error::{
         api::ApiError, init::InitError, internal::InternalError,
         invalid_req::InvalidRequestError,
@@ -84,7 +86,7 @@ fn extract_path_and_query(
 
 #[derive(Debug)]
 pub struct MetaRouter {
-    dynamic_router: DynamicRouter<Discovery, axum_core::body::Body>,
+    dynamic_router: DynamicRouter<RouterDiscovery, axum_core::body::Body>,
     unified_api: UnifiedApiService,
     direct_proxies: DirectProxiesWithoutMapper,
     unified_url_regex: Regex,
@@ -106,7 +108,7 @@ impl MetaRouter {
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
 
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let discovery_factory = RouterDiscoverFactory::new(app_state.clone());
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
         let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -135,7 +137,7 @@ impl MetaRouter {
             Regex::new(UNIFIED_URL_REGEX).expect("always valid if tests pass");
         let router_url_regex =
             Regex::new(ROUTER_URL_REGEX).expect("always valid if tests pass");
-        let discovery_factory = DiscoverFactory::new(app_state.clone());
+        let discovery_factory = RouterDiscoverFactory::new(app_state.clone());
         let mut router_factory =
             dynamic_router::router::make::MakeRouter::new(discovery_factory);
         let dynamic_router = router_factory.call(None).await?;
@@ -403,7 +405,7 @@ pin_project! {
         },
         RouterRequest {
             #[pin]
-            future: <DynamicRouter<Discovery, axum_core::body::Body> as tower::Service<crate::types::request::Request>>::Future,
+            future: <DynamicRouter<RouterDiscovery, axum_core::body::Body> as tower::Service<crate::types::request::Request>>::Future,
         },
         UnifiedApi {
             #[pin]

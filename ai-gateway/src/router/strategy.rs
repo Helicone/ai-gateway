@@ -13,8 +13,8 @@ use crate::{
     app_state::AppState,
     config::{balance::BalanceConfigInner, router::RouterConfig},
     discover::{
-        dispatcher::{Key, discover, factory::DiscoverFactory},
-        weighted::WeightedKey,
+        dispatcher::{DispatcherDiscovery, factory::DispatcherDiscoverFactory},
+        provider::{key::Key, weighted_key::WeightedKey},
     },
     error::{api::ApiError, init::InitError, internal::InternalError},
     types::{request::Request, response::Response, router::RouterId},
@@ -32,7 +32,7 @@ pub enum RoutingStrategyService {
     ///    to a model offered by the target provider.
     /// 5. send request
     ProviderLatencyPeakEwmaP2C(
-        Balance<PeakEwmaDiscover<discover::DispatcherDiscovery<Key>>, Request>,
+        Balance<PeakEwmaDiscover<DispatcherDiscovery<Key>>, Request>,
     ),
     /// Strategy:
     /// 1. receive request
@@ -43,7 +43,7 @@ pub enum RoutingStrategyService {
     /// 4. send request
     WeightedProvider(
         WeightedBalance<
-            WeightedDiscover<discover::DispatcherDiscovery<WeightedKey>>,
+            WeightedDiscover<DispatcherDiscovery<WeightedKey>>,
             Request,
         >,
     ),
@@ -74,7 +74,7 @@ impl RoutingStrategyService {
         tracing::debug!("Creating weighted balancer");
         let (change_tx, change_rx) = channel(CHANNEL_CAPACITY);
         let (rate_limit_tx, rate_limit_rx) = channel(CHANNEL_CAPACITY);
-        let discover_factory = DiscoverFactory::new(
+        let discover_factory = DispatcherDiscoverFactory::new(
             app_state.clone(),
             router_id.clone(),
             router_config.clone(),
@@ -116,7 +116,7 @@ impl RoutingStrategyService {
         tracing::debug!("Creating peak ewma p2c balancer");
         let (change_tx, change_rx) = channel(CHANNEL_CAPACITY);
         let (rate_limit_tx, rate_limit_rx) = channel(CHANNEL_CAPACITY);
-        let discover_factory = DiscoverFactory::new(
+        let discover_factory = DispatcherDiscoverFactory::new(
             app_state.clone(),
             router_id.clone(),
             router_config.clone(),
@@ -196,7 +196,7 @@ pin_project! {
         PeakEwma {
             #[pin]
             future: <
-                Balance<PeakEwmaDiscover<discover::DispatcherDiscovery<Key>>, Request> as tower::Service<
+                Balance<PeakEwmaDiscover<DispatcherDiscovery<Key>>, Request> as tower::Service<
                     Request,
                 >
             >::Future,
@@ -204,7 +204,7 @@ pin_project! {
         Weighted {
             #[pin]
             future: <
-                WeightedBalance<WeightedDiscover<discover::DispatcherDiscovery<WeightedKey>>, Request> as tower::Service<
+                WeightedBalance<WeightedDiscover<DispatcherDiscovery<WeightedKey>>, Request> as tower::Service<
                     Request,
                 >
             >::Future,

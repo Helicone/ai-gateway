@@ -1,10 +1,12 @@
-pub mod config;
 pub mod factory;
 
-use crate::{endpoints::EndpointType, types::provider::InferenceProvider};
-
 use std::{
-    collections::HashMap, convert::Infallible, hash::Hash, pin::Pin, sync::Arc, task::{Context, Poll}
+    collections::HashMap,
+    convert::Infallible,
+    hash::Hash,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
 };
 
 use futures::Stream;
@@ -18,31 +20,11 @@ use weighted_balance::weight::Weight;
 use crate::{
     app_state::AppState,
     config::{balance::BalanceConfigInner, router::RouterConfig},
-    discover::{ServiceMap, weighted::WeightedKey},
+    discover::{ServiceMap, provider::weighted_key::WeightedKey},
     dispatcher::{Dispatcher, DispatcherService},
     error::init::InitError,
     types::router::RouterId,
 };
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Key {
-    pub provider: InferenceProvider,
-    pub endpoint_type: EndpointType,
-}
-
-impl Key {
-    #[must_use]
-    pub fn new(
-        provider: InferenceProvider,
-        endpoint_type: EndpointType,
-    ) -> Self {
-        Self {
-            provider,
-            endpoint_type,
-        }
-    }
-}
-
 
 pin_project! {
     /// Reads available models and providers from the config file.
@@ -64,43 +46,9 @@ pin_project! {
     #[derive(Debug)]
     pub struct DispatcherDiscovery<K> {
         #[pin]
-        initial: ServiceMap<K, DispatcherService>,
+        pub(super) initial: ServiceMap<K, DispatcherService>,
         #[pin]
-        events: ReceiverStream<Change<K, DispatcherService>>,
-    }
-}
-
-impl DispatcherDiscovery<Key> {
-    pub async fn new(
-        app_state: &AppState,
-        router_id: &RouterId,
-        router_config: &Arc<RouterConfig>,
-        rx: Receiver<Change<Key, DispatcherService>>,
-    ) -> Result<Self, InitError> {
-        let events = ReceiverStream::new(rx);
-        let mut service_map: HashMap<Key, DispatcherService> = HashMap::new();
-        for (endpoint_type, balance_config) in
-            router_config.load_balance.as_ref()
-        {
-            let providers = balance_config.providers();
-            for provider in providers {
-                let key = Key::new(provider.clone(), *endpoint_type);
-                let dispatcher = Dispatcher::new(
-                    app_state.clone(),
-                    router_id,
-                    router_config,
-                    provider,
-                )
-                .await?;
-                service_map.insert(key, dispatcher);
-            }
-        }
-
-        tracing::debug!("Created config provider discovery");
-        Ok(Self {
-            initial: ServiceMap::new(service_map),
-            events,
-        })
+        pub(super) events: ReceiverStream<Change<K, DispatcherService>>,
     }
 }
 
