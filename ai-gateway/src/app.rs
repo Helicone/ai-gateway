@@ -290,7 +290,7 @@ impl App {
                 )
                 .build()?;
 
-        let router = MetaRouter::new(app_state.clone()).await?;
+        let router = MetaRouter::build(app_state.clone()).await?;
 
         let compression_layer = CompressionLayer::new()
             .gzip(true)
