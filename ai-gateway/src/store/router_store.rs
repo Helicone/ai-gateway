@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use sqlx::PgPool;
 use tracing::error;
+use uuid::Uuid;
 
-use crate::error::init::InitError;
+use crate::{control_plane::types::Key, error::init::InitError};
 
 #[derive(Debug)]
 pub struct RouterStore {
@@ -12,6 +15,12 @@ pub struct RouterStore {
 pub struct DBRouterConfig {
     pub router_hash: String,
     pub config: serde_json::Value,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct DBApiKey {
+    pub key_hash: String,
+    pub owner_id: Uuid,
 }
 
 impl RouterStore {
@@ -35,5 +44,63 @@ impl RouterStore {
             InitError::DatabaseConnection(e)
         })?;
         Ok(res)
+    }
+
+    pub async fn get_all_router_keys(&self) -> Result<HashSet<Key>, InitError> {
+        // the inner join is to make sure that we only get keys of the
+        // organizations which have routers
+        let res = sqlx::query_as::<_, DBApiKey>(
+            "SELECT helicone_api_keys.api_key_hash as key_hash, \
+             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             INNER JOIN routers ON helicone_api_keys.organization_id = \
+             routers.organization_id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get all router keys");
+            InitError::DatabaseConnection(e)
+        })?;
+
+        let keys = res
+            .into_iter()
+            .map(|k| Key {
+                key_hash: k.key_hash,
+                owner_id: k.owner_id.to_string(),
+            })
+            .collect();
+
+        Ok(keys)
+    }
+
+    pub async fn get_organization_keys(
+        &self,
+        organization_id: &str,
+    ) -> Result<HashSet<Key>, InitError> {
+        let org_id = Uuid::parse_str(organization_id).map_err(|e| {
+            error!(error = %e, "failed to parse organization id");
+            InitError::InvalidOrganizationId(organization_id.to_string())
+        })?;
+        let res = sqlx::query_as::<_, DBApiKey>(
+            "SELECT helicone_api_keys.api_key_hash as key_hash, \
+             helicone_api_keys.user_id as owner_id FROM helicone_api_keys \
+             WHERE helicone_api_keys.organization_id = $1",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get organization keys");
+            InitError::DatabaseConnection(e)
+        })?;
+        let keys = res
+            .into_iter()
+            .map(|k| Key {
+                key_hash: k.key_hash,
+                owner_id: k.owner_id.to_string(),
+            })
+            .collect();
+
+        Ok(keys)
     }
 }

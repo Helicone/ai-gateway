@@ -15,6 +15,8 @@ pub enum AuthError {
     MissingAuthorizationHeader,
     /// Invalid credentials
     InvalidCredentials,
+    /// Missing router id
+    MissingRouterId,
 }
 
 impl IntoResponse for AuthError {
@@ -44,6 +46,18 @@ impl IntoResponse for AuthError {
                 }),
             )
                 .into_response(),
+            Self::MissingRouterId => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorDetails {
+                        message: Self::MissingRouterId.to_string(),
+                        r#type: Some(INVALID_REQUEST_ERROR_TYPE.to_string()),
+                        param: None,
+                        code: Some("missing_router_id".to_string()),
+                    },
+                }),
+            )
+                .into_response(),
         }
     }
 }
@@ -57,6 +71,8 @@ pub enum AuthErrorMetric {
     MissingAuthorizationHeader,
     /// Invalid credentials
     InvalidCredentials,
+    /// Missing router id
+    MissingRouterId,
 }
 
 impl From<&AuthError> for AuthErrorMetric {
@@ -66,6 +82,7 @@ impl From<&AuthError> for AuthErrorMetric {
                 Self::MissingAuthorizationHeader
             }
             AuthError::InvalidCredentials => Self::InvalidCredentials,
+            AuthError::MissingRouterId => Self::MissingRouterId,
         }
     }
 }

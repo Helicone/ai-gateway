@@ -68,4 +68,8 @@ pub enum InitError {
     RouterRxNotConfigured,
     /// Store not configured: {0}
     StoreNotConfigured(&'static str),
+    /// Router api keys not initialized
+    RouterApiKeysNotInitialized,
+    /// Invalid organization id: {0}
+    InvalidOrganizationId(String),
 }

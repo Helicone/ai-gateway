@@ -44,7 +44,9 @@ pub struct AuthData {
     pub organization_id: String,
 }
 
-#[derive(TS, Serialize, Deserialize, Debug, Clone)]
+#[derive(
+    TS, Serialize, Deserialize, Debug, Clone, sqlx::FromRow, PartialEq, Eq, Hash,
+)]
 #[ts(export)]
 #[ts(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
