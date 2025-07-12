@@ -1,5 +1,6 @@
 pub mod direct;
 pub mod meta;
+pub mod router_details;
 pub mod service;
 pub mod strategy;
 pub mod unified_api;

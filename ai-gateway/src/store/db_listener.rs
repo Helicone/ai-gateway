@@ -125,6 +125,47 @@ impl DatabaseListener {
         Ok(())
     }
 
+    async fn handle_router_config_insert(
+        router_hash: RouterId,
+        router_config: RouterConfig,
+        app_state: AppState,
+        organization_id: String,
+        tx: Sender<Change<RouterId, Router>>,
+    ) -> Result<(), RuntimeError> {
+        let router = Router::new(
+            router_hash.clone(),
+            Arc::new(router_config),
+            app_state.clone(),
+        )
+        .await?;
+
+        info!("sending router to tx");
+        let _ = tx.send(Change::Insert(router_hash, router)).await;
+        info!("router inserted");
+        // as a sanity, we want to query the api keys of the
+        // organization over here and insert them into the
+        // app state
+        let router_store = app_state
+            .0
+            .router_store
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("router_store"))?;
+
+        let organization_keys = router_store
+            .get_organization_keys(&organization_id)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "failed to get organization keys");
+                RuntimeError::Internal(
+                    crate::error::internal::InternalError::Internal,
+                )
+            })?;
+        let () = app_state.set_router_api_keys(Some(organization_keys)).await;
+        info!("organization keys inserted");
+
+        Ok(())
+    }
+
     /// Handles incoming database notifications.
     async fn handle_notification(
         notification: &sqlx::postgres::PgNotification,
@@ -155,41 +196,14 @@ impl DatabaseListener {
                     info!("Router configuration updated");
                     match op {
                         Op::Insert => {
-                            let router = Router::new(
-                                router_hash.clone(),
-                                Arc::new(*config),
-                                app_state.clone(),
+                            Self::handle_router_config_insert(
+                                router_hash,
+                                *config,
+                                app_state,
+                                organization_id,
+                                tx,
                             )
-                            .await?;
-
-                            info!("sending router to tx");
-                            let _ = tx
-                                .send(Change::Insert(router_hash, router))
-                                .await;
-                            info!("router inserted");
-                            // as a sanity, we want to query the api keys of the
-                            // organization over here and insert them into the
-                            // app state
-                            let router_store =
-                                app_state.0.router_store.as_ref().ok_or(
-                                    InitError::RouterStoreNotConfigured,
-                                )?;
-
-                            let organization_keys = router_store
-                                    .get_organization_keys(&organization_id)
-                                    .await
-                                    .map_err(|e| {
-                                        error!(error = %e, "failed to get organization keys");
-                                        RuntimeError::Internal(
-                                            crate::error::internal::InternalError::Internal,
-                                        )
-                                    })?;
-                            let _ = app_state
-                                .set_router_api_keys(Some(organization_keys))
-                                .await;
-                            info!("organization keys inserted");
-
-                            Ok(())
+                            .await
                         }
                         Op::Delete => {
                             let _ = tx.send(Change::Remove(router_hash)).await;
