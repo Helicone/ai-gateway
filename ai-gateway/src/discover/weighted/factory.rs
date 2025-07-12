@@ -7,7 +7,7 @@ use weighted_balance::weight::WeightedDiscover;
 
 use crate::{
     discover::{
-        provider::{discover::Discovery, factory::DiscoverFactory},
+        dispatcher::{DispatcherDiscovery, factory::DiscoverFactory},
         weighted::WeightedKey,
     },
     dispatcher::DispatcherService,
@@ -17,7 +17,7 @@ use crate::{
 impl Service<Receiver<Change<WeightedKey, DispatcherService>>>
     for DiscoverFactory
 {
-    type Response = WeightedDiscover<Discovery<WeightedKey>>;
+    type Response = WeightedDiscover<DispatcherDiscovery<WeightedKey>>;
     type Error = InitError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -36,7 +36,7 @@ impl Service<Receiver<Change<WeightedKey, DispatcherService>>>
         let router_id = self.router_id.clone();
         let router_config = self.router_config.clone();
         Box::pin(async move {
-            let discovery = Discovery::new_weighted(
+            let discovery = DispatcherDiscovery::new_weighted(
                 &app_state,
                 &router_id,
                 &router_config,

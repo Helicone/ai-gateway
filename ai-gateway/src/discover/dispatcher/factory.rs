@@ -14,7 +14,7 @@ use tower::{
 use crate::{
     app_state::AppState,
     config::router::RouterConfig,
-    discover::provider::{Key, discover::Discovery},
+    discover::dispatcher::{Key, DispatcherDiscovery},
     dispatcher::DispatcherService,
     error::init::InitError,
     types::router::RouterId,
@@ -43,7 +43,7 @@ impl DiscoverFactory {
 }
 
 impl Service<Receiver<Change<Key, DispatcherService>>> for DiscoverFactory {
-    type Response = PeakEwmaDiscover<Discovery<Key>>;
+    type Response = PeakEwmaDiscover<DispatcherDiscovery<Key>>;
     type Error = InitError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -63,7 +63,7 @@ impl Service<Receiver<Change<Key, DispatcherService>>> for DiscoverFactory {
         let router_config = self.router_config.clone();
         Box::pin(async move {
             let discovery =
-                Discovery::new(&app_state, &router_id, &router_config, rx)
+                DispatcherDiscovery::new(&app_state, &router_id, &router_config, rx)
                     .await?;
             let discovery = PeakEwmaDiscover::new(
                 discovery,

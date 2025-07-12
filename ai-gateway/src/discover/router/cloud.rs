@@ -13,9 +13,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tower::discover::Change;
 
 use crate::{
-    app_state::AppState, config::router::RouterConfig,
-    discover::provider::config::ServiceMap, error::init::InitError,
-    router::service::Router, types::router::RouterId,
+    app_state::AppState, config::router::RouterConfig, discover::ServiceMap,
+    error::init::InitError, router::service::Router, types::router::RouterId,
 };
 
 pin_project! {

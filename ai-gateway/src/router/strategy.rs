@@ -13,7 +13,7 @@ use crate::{
     app_state::AppState,
     config::{balance::BalanceConfigInner, router::RouterConfig},
     discover::{
-        provider::{Key, discover, factory::DiscoverFactory},
+        dispatcher::{Key, discover, factory::DiscoverFactory},
         weighted::WeightedKey,
     },
     error::{api::ApiError, init::InitError, internal::InternalError},
@@ -32,7 +32,7 @@ pub enum RoutingStrategyService {
     ///    to a model offered by the target provider.
     /// 5. send request
     ProviderLatencyPeakEwmaP2C(
-        Balance<PeakEwmaDiscover<discover::Discovery<Key>>, Request>,
+        Balance<PeakEwmaDiscover<discover::DispatcherDiscovery<Key>>, Request>,
     ),
     /// Strategy:
     /// 1. receive request
@@ -43,7 +43,7 @@ pub enum RoutingStrategyService {
     /// 4. send request
     WeightedProvider(
         WeightedBalance<
-            WeightedDiscover<discover::Discovery<WeightedKey>>,
+            WeightedDiscover<discover::DispatcherDiscovery<WeightedKey>>,
             Request,
         >,
     ),
@@ -196,7 +196,7 @@ pin_project! {
         PeakEwma {
             #[pin]
             future: <
-                Balance<PeakEwmaDiscover<discover::Discovery<Key>>, Request> as tower::Service<
+                Balance<PeakEwmaDiscover<discover::DispatcherDiscovery<Key>>, Request> as tower::Service<
                     Request,
                 >
             >::Future,
@@ -204,7 +204,7 @@ pin_project! {
         Weighted {
             #[pin]
             future: <
-                WeightedBalance<WeightedDiscover<discover::Discovery<WeightedKey>>, Request> as tower::Service<
+                WeightedBalance<WeightedDiscover<discover::DispatcherDiscovery<WeightedKey>>, Request> as tower::Service<
                     Request,
                 >
             >::Future,

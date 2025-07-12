@@ -10,8 +10,8 @@ use pin_project_lite::pin_project;
 use tower::discover::Change;
 
 use crate::{
-    app_state::AppState, discover::provider::config::ServiceMap,
-    error::init::InitError, router::service::Router, types::router::RouterId,
+    app_state::AppState, discover::ServiceMap, error::init::InitError,
+    router::service::Router, types::router::RouterId,
 };
 
 pin_project! {
