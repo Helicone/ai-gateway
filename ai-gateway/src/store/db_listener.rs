@@ -139,9 +139,9 @@ impl DatabaseListener {
         )
         .await?;
 
-        info!("sending router to tx");
+        debug!("sending router to tx");
         let _ = tx.send(Change::Insert(router_hash.clone(), router)).await;
-        info!("router inserted");
+        debug!("router inserted");
         app_state
             .set_router_organization(router_hash.clone(), organization_id)
             .await;
@@ -176,7 +176,7 @@ impl DatabaseListener {
                     op,
                     config,
                 } => {
-                    info!("Router configuration updated");
+                    debug!("Router configuration updated");
                     match op {
                         Op::Insert => {
                             let organization_id = OrgId::try_from(organization_id.as_str()).map_err(|e| {
@@ -194,11 +194,11 @@ impl DatabaseListener {
                         }
                         Op::Delete => {
                             let _ = tx.send(Change::Remove(router_hash)).await;
-                            info!("router removed");
+                            debug!("router removed");
                             Ok(())
                         }
                         _ => {
-                            info!("skipping router insert");
+                            debug!("skipping router insert");
                             Ok(())
                         }
                     }
@@ -221,29 +221,29 @@ impl DatabaseListener {
                                 organization_id,
                             })
                             .await;
-                        info!("router key inserted");
+                        debug!("router key inserted");
                         Ok(())
                     }
                     Op::Delete => {
                         let _ =
                             app_state.remove_router_api_key(api_key_hash).await;
-                        info!("router key removed");
+                        debug!("router key removed");
                         Ok(())
                     }
                     _ => {
-                        info!("skipping router key insert");
+                        debug!("skipping router key insert");
                         Ok(())
                     }
                 },
                 ConnectedCloudGatewaysNotification::Unknown { data } => {
-                    info!("Unknown notification event");
-                    info!("data: {:?}", data);
+                    debug!("Unknown notification event");
+                    debug!("data: {:?}", data);
                     // TODO: Handle unknown event
                     Ok(())
                 }
             }
         } else {
-            info!("received unknown notification");
+            debug!("received unknown notification");
             Ok(())
         }
 
