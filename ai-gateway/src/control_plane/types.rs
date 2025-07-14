@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
+use crate::types::org::OrgId;
+
 /// Computes the hash of an API key for storage and lookup in the control plane.
 /// This function adds a "Bearer " prefix to the key before hashing to match
 /// the format expected by the authentication middleware.
@@ -54,7 +56,8 @@ pub struct AuthData {
 pub struct Key {
     pub key_hash: String,
     pub owner_id: String,
-    pub organization_id: String,
+    #[ts(as = "String")]
+    pub organization_id: OrgId,
 }
 
 #[derive(TS, Serialize, Deserialize, Debug, Clone)]
@@ -93,7 +96,7 @@ impl crate::tests::TestDefault for Config {
             keys: vec![Key {
                 key_hash: key_hash.clone(),
                 owner_id: user_id.to_string(),
-                organization_id: organization_id.to_string(),
+                organization_id: OrgId::new(organization_id),
             }],
             router_id: "my-router".to_string(),
             router_config: "{}".to_string(),

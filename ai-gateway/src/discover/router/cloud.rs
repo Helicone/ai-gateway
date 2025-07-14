@@ -14,8 +14,12 @@ use tokio_stream::wrappers::ReceiverStream;
 use tower::discover::Change;
 
 use crate::{
-    app_state::AppState, config::router::RouterConfig, discover::ServiceMap,
-    error::init::InitError, router::service::Router, types::router::RouterId,
+    app_state::AppState,
+    config::router::RouterConfig,
+    discover::ServiceMap,
+    error::init::InitError,
+    router::service::Router,
+    types::{org::OrgId, router::RouterId},
 };
 
 pin_project! {
@@ -63,7 +67,7 @@ impl CloudDiscovery {
             service_map.insert(router_id.clone(), router);
             router_organisation_map.insert(
                 router_id.clone(),
-                db_router.organization_id.to_string(),
+                OrgId::new(db_router.organization_id),
             );
         }
         app_state

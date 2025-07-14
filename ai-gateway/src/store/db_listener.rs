@@ -14,7 +14,7 @@ use crate::{
     control_plane::types::Key,
     error::{init::InitError, runtime::RuntimeError},
     router::service::Router,
-    types::router::RouterId,
+    types::{org::OrgId, router::RouterId},
 };
 
 /// A database listener service that handles LISTEN/NOTIFY functionality.
@@ -129,7 +129,7 @@ impl DatabaseListener {
         router_hash: RouterId,
         router_config: RouterConfig,
         app_state: AppState,
-        organization_id: String,
+        organization_id: OrgId,
         tx: Sender<Change<RouterId, Router>>,
     ) -> Result<(), RuntimeError> {
         let router = Router::new(
@@ -143,10 +143,7 @@ impl DatabaseListener {
         let _ = tx.send(Change::Insert(router_hash.clone(), router)).await;
         info!("router inserted");
         app_state
-            .set_router_organization(
-                router_hash.clone(),
-                organization_id.clone(),
-            )
+            .set_router_organization(router_hash.clone(), organization_id)
             .await;
 
         Ok(())
@@ -182,6 +179,10 @@ impl DatabaseListener {
                     info!("Router configuration updated");
                     match op {
                         Op::Insert => {
+                            let organization_id = OrgId::try_from(organization_id.as_str()).map_err(|e| {
+                                error!(error = %e, "failed to convert organization id to OrgId");
+                                RuntimeError::Internal(crate::error::internal::InternalError::Internal)
+                            })?;
                             Self::handle_router_config_insert(
                                 router_hash,
                                 *config,
@@ -207,38 +208,33 @@ impl DatabaseListener {
                     organization_id,
                     api_key_hash,
                     op,
-                } => {
-                    info!("Router keys updated");
-                    info!("organization_id: {}", organization_id);
-                    info!("api_key_hash: {}", api_key_hash);
-                    info!("op: {:?}", op);
-                    // TODO: Handle router configuration deletion
-
-                    match op {
-                        Op::Insert => {
-                            let _ = app_state
-                                .set_router_api_key(Key {
-                                    key_hash: api_key_hash,
-                                    owner_id,
-                                    organization_id,
-                                })
-                                .await;
-                            info!("router key inserted");
-                            Ok(())
-                        }
-                        Op::Delete => {
-                            let _ = app_state
-                                .remove_router_api_key(api_key_hash)
-                                .await;
-                            info!("router key removed");
-                            Ok(())
-                        }
-                        _ => {
-                            info!("skipping router key insert");
-                            Ok(())
-                        }
+                } => match op {
+                    Op::Insert => {
+                        let organization_id = OrgId::try_from(organization_id.as_str()).map_err(|e| {
+                                error!(error = %e, "failed to convert organization id to OrgId");
+                                RuntimeError::Internal(crate::error::internal::InternalError::Internal)
+                            })?;
+                        let _ = app_state
+                            .set_router_api_key(Key {
+                                key_hash: api_key_hash,
+                                owner_id,
+                                organization_id,
+                            })
+                            .await;
+                        info!("router key inserted");
+                        Ok(())
                     }
-                }
+                    Op::Delete => {
+                        let _ =
+                            app_state.remove_router_api_key(api_key_hash).await;
+                        info!("router key removed");
+                        Ok(())
+                    }
+                    _ => {
+                        info!("skipping router key insert");
+                        Ok(())
+                    }
+                },
                 ConnectedCloudGatewaysNotification::Unknown { data } => {
                     info!("Unknown notification event");
                     info!("data: {:?}", data);

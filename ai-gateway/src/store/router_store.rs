@@ -4,7 +4,9 @@ use sqlx::PgPool;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::{control_plane::types::Key, error::init::InitError};
+use crate::{
+    control_plane::types::Key, error::init::InitError, types::org::OrgId,
+};
 
 #[derive(Debug)]
 pub struct RouterStore {
@@ -68,7 +70,7 @@ impl RouterStore {
             .map(|k| Key {
                 key_hash: k.key_hash,
                 owner_id: k.owner_id.to_string(),
-                organization_id: k.organization_id.to_string(),
+                organization_id: OrgId::new(k.organization_id),
             })
             .collect();
 
@@ -101,7 +103,7 @@ impl RouterStore {
             .map(|k| Key {
                 key_hash: k.key_hash,
                 owner_id: k.owner_id.to_string(),
-                organization_id: k.organization_id.to_string(),
+                organization_id: OrgId::new(k.organization_id),
             })
             .collect();
 

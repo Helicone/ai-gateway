@@ -26,6 +26,7 @@ use crate::{
     router::service::Router,
     store::router_store::RouterStore,
     types::{
+        org::OrgId,
         provider::{InferenceProvider, ProviderKey, ProviderKeys},
         rate_limit::{
             RateLimitEvent, RateLimitEventReceivers, RateLimitEventSenders,
@@ -76,7 +77,7 @@ pub struct InnerAppState {
     pub direct_proxy_api_keys: ProviderKeys,
     pub provider_keys: RwLock<HashMap<RouterId, ProviderKeys>>,
     pub helicone_api_keys: RwLock<Option<HashSet<Key>>>,
-    pub router_organization_map: RwLock<HashMap<RouterId, String>>,
+    pub router_organization_map: RwLock<HashMap<RouterId, OrgId>>,
 }
 
 impl AppState {
@@ -204,7 +205,7 @@ impl AppState {
 
     pub async fn set_router_organization_map(
         &self,
-        map: HashMap<RouterId, String>,
+        map: HashMap<RouterId, OrgId>,
     ) {
         let mut router_organization_map =
             self.0.router_organization_map.write().await;
@@ -214,7 +215,7 @@ impl AppState {
     pub async fn set_router_organization(
         &self,
         router_id: RouterId,
-        organization_id: String,
+        organization_id: OrgId,
     ) {
         let mut router_organization_map =
             self.0.router_organization_map.write().await;
@@ -224,9 +225,9 @@ impl AppState {
     pub async fn get_router_organization(
         &self,
         router_id: &RouterId,
-    ) -> Option<String> {
+    ) -> Option<OrgId> {
         let router_organization_map =
             self.0.router_organization_map.read().await;
-        router_organization_map.get(router_id).cloned()
+        router_organization_map.get(router_id).copied()
     }
 }

@@ -5,7 +5,16 @@ use uuid::Uuid;
 use crate::error::auth::AuthError;
 
 #[derive(
-    Debug, AsRef, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize,
+    Debug,
+    AsRef,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Default,
 )]
 pub struct OrgId(Uuid);
 

@@ -57,10 +57,7 @@ impl AuthService {
                                         .owner_id
                                         .as_str()
                                         .try_into()?,
-                                    org_id: key
-                                        .organization_id
-                                        .as_str()
-                                        .try_into()?,
+                                    org_id: key.organization_id,
                                 })
                             } else {
                                 Err(AuthError::InvalidCredentials)
@@ -70,10 +67,7 @@ impl AuthService {
                             Ok(AuthContext {
                                 api_key: Secret::from(api_key_without_bearer),
                                 user_id: key.owner_id.as_str().try_into()?,
-                                org_id: key
-                                    .organization_id
-                                    .as_str()
-                                    .try_into()?,
+                                org_id: key.organization_id,
                             })
                         }
                     }
