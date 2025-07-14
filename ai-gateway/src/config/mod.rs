@@ -24,8 +24,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum::IntoStaticStr;
 use thiserror::Error;
+use url::Url;
 
-use crate::{error::init::InitError, types::secret::Secret};
+use crate::{
+    error::init::InitError,
+    types::{provider::InferenceProvider, secret::Secret},
+};
 
 const ROUTER_ID_REGEX: &str = r"^[A-Za-z0-9_-]{1,12}$";
 const DEFAULT_CONFIG_PATH: &str = "/etc/ai-gateway/config.yaml";
@@ -40,6 +44,8 @@ pub enum Error {
     MergedConfigDeserialization(
         #[from] serde_path_to_error::Error<serde_json::Error>,
     ),
+    /// URL parsing error: {0}
+    UrlParse(#[from] url::ParseError),
 }
 
 #[derive(
@@ -162,6 +168,18 @@ impl Config {
             config.helicone.api_key =
                 Secret::from(helicone_control_plane_api_key);
         }
+
+        if let Ok(bedrock_region) = std::env::var("AWS_REGION")
+            && let Some(bedrock_provider) =
+                config.providers.get_mut(&InferenceProvider::Bedrock)
+        {
+            let bedrock_url = format!(
+                "https://bedrock-runtime.{bedrock_region}.amazonaws.com"
+            );
+            bedrock_provider.base_url =
+                Url::parse(&bedrock_url).map_err(Error::UrlParse)?;
+        }
+
         Ok(config)
     }
 

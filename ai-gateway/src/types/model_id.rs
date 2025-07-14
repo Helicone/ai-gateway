@@ -238,7 +238,11 @@ impl Serialize for ModelId {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        if let Some(provider) = self.inference_provider() {
+            serializer.serialize_str(&format!("{provider}/{self}"))
+        } else {
+            serializer.serialize_str(&self.to_string())
+        }
     }
 }
 
