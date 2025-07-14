@@ -244,11 +244,6 @@ impl App {
             None
         };
 
-        // if config.deployment_target == DeploymentTarget::Cloud {
-        //     let router_api_keys = router_store.get_all_router_keys().await?;
-        //     app_state.set_initial_router_api_keys(router_api_keys).await?;
-        // }
-
         let app_state = AppState(Arc::new(InnerAppState {
             config,
             minio,
@@ -270,7 +265,7 @@ impl App {
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
             router_tx: RwLock::new(None),
-            router_api_keys: RwLock::new(router_api_keys),
+            helicone_api_keys: RwLock::new(router_api_keys),
             router_organization_map: RwLock::new(HashMap::default()),
         }));
 

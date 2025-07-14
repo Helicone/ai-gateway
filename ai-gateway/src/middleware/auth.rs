@@ -32,14 +32,13 @@ impl AuthService {
         request_kind: Option<&RequestKind>,
         router_id: Option<&RouterId>,
     ) -> Result<AuthContext, AuthError> {
-        let config = &app_state.0.control_plane_state.read().await.config;
         let api_key_without_bearer = api_key.replace("Bearer ", "");
         let computed_hash = hash_key(&api_key_without_bearer);
 
         match app_state.0.config.deployment_target {
             DeploymentTarget::Cloud => {
                 if let Some(key) =
-                    app_state.check_router_api_key(&computed_hash).await
+                    app_state.check_helicone_api_key(&computed_hash).await
                     && let Some(request_kind) = request_kind
                 {
                     match request_kind {
@@ -83,6 +82,8 @@ impl AuthService {
                 }
             }
             DeploymentTarget::Sidecar => {
+                let config =
+                    &app_state.0.control_plane_state.read().await.config;
                 let key = config.get_key_from_hash(&computed_hash);
                 if let Some(key) = key {
                     Ok(AuthContext {
@@ -151,8 +152,7 @@ where
                 Err(e) => {
                     match &e {
                         AuthError::MissingAuthorizationHeader
-                        | AuthError::InvalidCredentials
-                        | AuthError::MissingRouterId => {
+                        | AuthError::InvalidCredentials => {
                             app_state.0.metrics.auth_rejections.add(1, &[]);
                         }
                     }
