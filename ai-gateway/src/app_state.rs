@@ -182,7 +182,7 @@ impl AppState {
         &self,
         api_key: Key,
     ) -> Result<Option<HashSet<Key>>, InitError> {
-        tracing::info!("setting router api key");
+        tracing::debug!("setting router api key");
         let mut router_api_keys = self.0.helicone_api_keys.write().await;
         router_api_keys
             .as_mut()
