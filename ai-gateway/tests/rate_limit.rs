@@ -8,6 +8,7 @@ use ai_gateway::{
     },
     control_plane::types::{Key, hash_key},
     tests::{TestDefault, harness::Harness, mock::MockArgs},
+    types::org::OrgId,
 };
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
@@ -163,12 +164,12 @@ async fn rate_limit_per_user_isolation_impl(
             Key {
                 key_hash: hash_key(user1_auth),
                 owner_id: user1_id.to_string(),
-                organization_id: org1_id.to_string(),
+                organization_id: OrgId::new(org1_id),
             },
             Key {
                 key_hash: hash_key(user2_auth),
                 owner_id: user2_id.to_string(),
-                organization_id: org2_id.to_string(),
+                organization_id: OrgId::new(org2_id),
             },
         ])
         .build()
