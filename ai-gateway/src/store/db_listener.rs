@@ -53,6 +53,7 @@ enum ConnectedCloudGatewaysNotification {
         owner_id: String,
         organization_id: String,
         api_key_hash: String,
+        soft_delete: bool,
         op: Op,
     },
     Unknown {
@@ -207,6 +208,7 @@ impl DatabaseListener {
                     owner_id,
                     organization_id,
                     api_key_hash,
+                    soft_delete,
                     op,
                 } => match op {
                     Op::Insert => {
@@ -225,13 +227,24 @@ impl DatabaseListener {
                         Ok(())
                     }
                     Op::Delete => {
+                        // This case should never happen, since we update the
+                        // soft delete flag when we delete an api key.
                         let _ =
                             app_state.remove_router_api_key(api_key_hash).await;
                         debug!("router key removed");
                         Ok(())
                     }
-                    _ => {
-                        debug!("skipping router key insert");
+                    Op::Update => {
+                        if soft_delete {
+                            let _ = app_state
+                                .remove_router_api_key(api_key_hash)
+                                .await;
+                            debug!("router key removed");
+                        }
+                        Ok(())
+                    }
+                    Op::Truncate => {
+                        debug!("skipping router key truncate");
                         Ok(())
                     }
                 },

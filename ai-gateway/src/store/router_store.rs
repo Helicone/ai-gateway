@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use sqlx::PgPool;
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::{
@@ -56,7 +56,7 @@ impl RouterStore {
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
              helicone_api_keys.user_id as owner_id, \
              helicone_api_keys.organization_id as organization_id FROM \
-             helicone_api_keys",
+             helicone_api_keys WHERE helicone_api_keys.soft_delete = false",
         )
         .fetch_all(&self.pool)
         .await
@@ -64,6 +64,7 @@ impl RouterStore {
             error!(error = %e, "failed to get all router keys");
             InitError::DatabaseConnection(e)
         })?;
+        info!("found {} router keys", res.len());
 
         let keys = res
             .into_iter()
@@ -89,7 +90,8 @@ impl RouterStore {
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
              helicone_api_keys.user_id as owner_id, \
              helicone_api_keys.organization_id as organization_id FROM \
-             helicone_api_keys WHERE helicone_api_keys.organization_id = $1",
+             helicone_api_keys WHERE helicone_api_keys.organization_id = $1 \
+             AND helicone_api_keys.soft_delete = false",
         )
         .bind(org_id)
         .fetch_all(&self.pool)
