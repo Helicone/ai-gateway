@@ -4,7 +4,9 @@ use thiserror::Error;
 use crate::{
     config::{Config, router::RouterConfig},
     types::{
-        model_id::ModelName, provider::InferenceProvider, router::RouterId,
+        model_id::{ModelId, ModelName},
+        provider::InferenceProvider,
+        router::RouterId,
     },
 };
 
@@ -31,6 +33,9 @@ pub enum ModelMappingValidationError {
 
     #[error("Model {model} in mapping config does not exist in any provider")]
     ModelNotFound { model: String },
+
+    #[error("Model {model} in mapping config cannot be parsed as a model id")]
+    ModelIdParseError { model: String },
 }
 
 impl Config {
@@ -39,9 +44,6 @@ impl Config {
     pub fn validate_model_mappings(
         &self,
     ) -> Result<(), ModelMappingValidationError> {
-        // First, validate that all models in mappings exist
-        self.validate_mapping_models_exist()?;
-
         // Validate each router
         for (router_id, router_config) in self.routers.as_ref() {
             // Get all providers this router might use
@@ -71,12 +73,32 @@ impl Config {
             for target_provider in &router_providers {
                 let target_provider_config = &self.providers[target_provider];
 
+                let target_models =
+                    target_provider_config
+                        .models
+                        .iter()
+                        .map(|m| {
+                            ModelId::from_str_and_provider(
+                                target_provider.clone(),
+                                m.as_ref(),
+                            )
+                            .map_err(|_| {
+                                ModelMappingValidationError::ModelIdParseError {
+                                    model: m.to_string(),
+                                }
+                            })
+                        })
+                        .collect::<Result<
+                            IndexSet<ModelId>,
+                            ModelMappingValidationError,
+                        >>()?;
+
                 for source_model in &all_models_offered_by_configured_providers
                 {
                     self.can_map_model(
                         source_model,
                         target_provider.clone(),
-                        &target_provider_config.models,
+                        &target_models,
                         router_id,
                         router_config,
                     )?;
@@ -92,12 +114,21 @@ impl Config {
         &self,
         source_model: &ModelName,
         target_provider: InferenceProvider,
-        target_models: &IndexSet<ModelName<'static>>,
+        target_models: &IndexSet<ModelId>,
         router_id: &RouterId,
         router_config: &RouterConfig,
     ) -> Result<(), ModelMappingValidationError> {
         // 1. Direct support - target provider offers this model directly
-        if target_models.contains(source_model) {
+        let source_model_id = ModelId::from_str_and_provider(
+            target_provider.clone(),
+            source_model.as_ref(),
+        )
+        .map_err(|_| {
+            ModelMappingValidationError::ModelIdParseError {
+                model: source_model.to_string(),
+            }
+        })?;
+        if target_models.contains(&source_model_id) {
             return Ok(());
         }
 
@@ -127,57 +158,6 @@ impl Config {
             target_provider,
         })
     }
-
-    fn validate_mapping_models_exist(
-        &self,
-    ) -> Result<(), ModelMappingValidationError> {
-        let all_provider_models: IndexSet<&ModelName> =
-            self.providers.values().flat_map(|p| &p.models).collect();
-
-        // Check default mappings
-        for (source_model, target_models) in self.default_model_mapping.as_ref()
-        {
-            if !all_provider_models.contains(source_model) {
-                return Err(ModelMappingValidationError::ModelNotFound {
-                    model: source_model.as_ref().to_string(),
-                });
-            }
-
-            for target_model in target_models {
-                if !all_provider_models.contains(target_model) {
-                    return Err(ModelMappingValidationError::ModelNotFound {
-                        model: target_model.as_ref().to_string(),
-                    });
-                }
-            }
-        }
-
-        for router_config in self.routers.as_ref().values() {
-            if let Some(router_mappings) = &router_config.model_mappings {
-                for (source_model, target_models) in router_mappings.as_ref() {
-                    if !all_provider_models.contains(source_model) {
-                        return Err(
-                            ModelMappingValidationError::ModelNotFound {
-                                model: source_model.as_ref().to_string(),
-                            },
-                        );
-                    }
-
-                    for target_model in target_models {
-                        if !all_provider_models.contains(target_model) {
-                            return Err(
-                                ModelMappingValidationError::ModelNotFound {
-                                    model: target_model.as_ref().to_string(),
-                                },
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -204,8 +184,13 @@ mod tests {
         };
 
         let target_models = indexmap::IndexSet::from([
-            ModelName::owned("gpt-4".to_string()),
-            ModelName::owned("gpt-3.5-turbo".to_string()),
+            ModelId::from_str_and_provider(InferenceProvider::OpenAI, "gpt-4")
+                .unwrap(),
+            ModelId::from_str_and_provider(
+                InferenceProvider::OpenAI,
+                "gpt-3.5-turbo",
+            )
+            .unwrap(),
         ]);
 
         let source_model = ModelName::owned("claude-3-opus".to_string());

@@ -158,12 +158,6 @@ async fn map_request(
     let base_path = target_endpoint
         .path(mapper_ctx.model.as_ref(), mapper_ctx.is_stream)?;
 
-    tracing::trace!(
-        source_endpoint = ?source_endpoint,
-        target_endpoint = ?target_endpoint,
-        base_path = ?base_path,
-        "mapped request base path"
-    );
     let target_path_and_query =
         if let Some(query_params) = target_path_and_query.query() {
             format!("{base_path}?{query_params}")

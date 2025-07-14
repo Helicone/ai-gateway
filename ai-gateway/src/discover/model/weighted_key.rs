@@ -79,7 +79,7 @@ impl DispatcherDiscovery<WeightedKey> {
                     .inference_provider()
                     .ok_or_else(|| {
                         InitError::ModelIdNotRecognized(
-                            target_model_id.model.clone(),
+                            target_model_id.model.to_string(),
                         )
                     })?;
                 let weight =

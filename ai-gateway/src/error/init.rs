@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     config::validation::ModelMappingValidationError,
-    types::{model_id::ModelId, provider::InferenceProvider, router::RouterId},
+    types::{provider::InferenceProvider, router::RouterId},
 };
 
 /// Errors that can occur during initialization.
@@ -63,7 +63,7 @@ pub enum InitError {
     /// Database connection error: {0}
     DatabaseConnection(sqlx::Error),
     /// Model ID not recognized: {0}
-    ModelIdNotRecognized(ModelId),
+    ModelIdNotRecognized(String),
     /// Provider not yet supported: {0}
     ProviderNotSupported(InferenceProvider),
     /// Router rx not configured

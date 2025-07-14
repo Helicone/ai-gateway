@@ -2,14 +2,14 @@ use derive_more::AsRef;
 use nonempty_collections::{NEMap, NESet};
 use serde::{Deserialize, Serialize};
 
-use crate::types::model_id::ModelName;
+use crate::types::model_id::{ModelId, ModelName};
 
 const MODEL_MAPPING_YAML: &str =
     include_str!("../../config/embedded/model-mapping.yaml");
 
 #[derive(Debug, Clone, Deserialize, Serialize, AsRef, PartialEq, Eq)]
 pub struct ModelMappingConfig(
-    pub(crate) NEMap<ModelName<'static>, NESet<ModelName<'static>>>,
+    pub(crate) NEMap<ModelName<'static>, NESet<ModelId>>,
 );
 
 impl Default for ModelMappingConfig {

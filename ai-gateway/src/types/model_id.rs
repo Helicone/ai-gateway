@@ -207,6 +207,20 @@ impl ModelId {
             ModelId::Unknown(_) => None,
         }
     }
+
+    #[must_use]
+    pub fn as_model_name(&self) -> ModelName<'_> {
+        match self {
+            ModelId::ModelIdWithVersion { id, .. } => {
+                ModelName::borrowed(id.model.as_str())
+            }
+            ModelId::Bedrock(model) => {
+                ModelName::borrowed(model.model.as_str())
+            }
+            ModelId::Ollama(model) => ModelName::borrowed(model.model.as_str()),
+            ModelId::Unknown(model) => ModelName::borrowed(model),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for ModelId {
@@ -264,12 +278,10 @@ impl FromStr for ModelId {
 impl Display for ModelId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ModelId::ModelIdWithVersion { id, .. } => {
-                write!(f, "{id}")
-            }
-            ModelId::Bedrock(model) => write!(f, "{model}"),
-            ModelId::Ollama(model) => write!(f, "{model}"),
-            ModelId::Unknown(model) => write!(f, "{model}"),
+            ModelId::ModelIdWithVersion { id, .. } => id.fmt(f),
+            ModelId::Bedrock(model) => model.fmt(f),
+            ModelId::Ollama(model) => model.fmt(f),
+            ModelId::Unknown(model) => model.fmt(f),
         }
     }
 }
@@ -363,10 +375,11 @@ impl Display for OllamaModelId {
 }
 
 /// Has the format of:
-/// `{provider}.{model}(-version)?-{bedrock_internal_version}`
+/// `{geo}?.{provider}.{model}(-version)?-{bedrock_internal_version}`
 /// amazon.nova-pro-v1:0
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BedrockModelId {
+    pub geo: Option<String>,
     pub provider: String,
     pub model: String,
     pub version: Option<Version>,
@@ -377,13 +390,36 @@ impl FromStr for BedrockModelId {
     type Err = MapperError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.splitn(2, '.');
-        let provider_str = split
-            .next()
-            .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
-        let rest = split
-            .next()
-            .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+        // Count the number of dots to determine if geo is present
+        let dot_count = s.chars().filter(|&c| c == '.').count();
+
+        let (geo, provider_str, rest) = if dot_count >= 2 {
+            // Format: {geo}.{provider}.{model}(-version)?
+            // -{bedrock_internal_version}
+            let mut parts = s.splitn(3, '.');
+            let geo = parts
+                .next()
+                .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+            let provider = parts
+                .next()
+                .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+            let rest = parts
+                .next()
+                .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+            (Some(geo.to_string()), provider, rest)
+        } else if dot_count == 1 {
+            // Format: {provider}.{model}(-version)?-{bedrock_internal_version}
+            let mut parts = s.splitn(2, '.');
+            let provider = parts
+                .next()
+                .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+            let rest = parts
+                .next()
+                .ok_or_else(|| MapperError::InvalidModelName(s.to_string()))?;
+            (None, provider, rest)
+        } else {
+            return Err(MapperError::InvalidModelName(s.to_string()));
+        };
 
         // Parse the bedrock internal version
         // eg: claude-3-sonnet-20240229-v1:0 (split on `-v`)
@@ -398,6 +434,7 @@ impl FromStr for BedrockModelId {
         let (model, version) = parse_model_and_version(model_part, '-');
 
         Ok(BedrockModelId {
+            geo,
             provider: provider_str.to_string(),
             model: model.to_string(),
             version,
@@ -408,8 +445,22 @@ impl FromStr for BedrockModelId {
 
 impl Display for BedrockModelId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.version {
-            Some(version) => write!(
+        match (&self.geo, &self.version) {
+            (Some(geo), Some(version)) => write!(
+                f,
+                "{}.{}.{}-{}-{}",
+                geo,
+                self.provider,
+                self.model,
+                version,
+                self.bedrock_internal_version
+            ),
+            (Some(geo), None) => write!(
+                f,
+                "{}.{}.{}-{}",
+                geo, self.provider, self.model, self.bedrock_internal_version
+            ),
+            (None, Some(version)) => write!(
                 f,
                 "{}.{}-{}-{}",
                 self.provider,
@@ -417,7 +468,7 @@ impl Display for BedrockModelId {
                 version,
                 self.bedrock_internal_version
             ),
-            None => write!(
+            (None, None) => write!(
                 f,
                 "{}.{}-{}",
                 self.provider, self.model, self.bedrock_internal_version
@@ -1369,6 +1420,56 @@ mod tests {
     }
 
     #[test]
+    fn test_bedrock_with_geo_field() {
+        let model_id_str = "us.anthropic.claude-3-sonnet-20240229-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.geo, Some("us".to_string()));
+            assert_eq!(
+                bedrock_model.provider,
+                InferenceProvider::Anthropic.to_string()
+            );
+            assert_eq!(bedrock_model.model, "claude-3-sonnet");
+            let Version::Date { date, .. } =
+                bedrock_model.version.as_ref().unwrap()
+            else {
+                panic!("Expected date version");
+            };
+            let expected_dt: chrono::DateTime<chrono::Utc> =
+                "2024-02-29T00:00:00Z".parse().unwrap();
+            assert_eq!(*date, expected_dt);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with geo field");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_with_geo_field_no_version() {
+        let model_id_str = "eu.amazon.titan-embed-text-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.geo, Some("eu".to_string()));
+            assert_eq!(bedrock_model.provider, "amazon");
+            assert_eq!(bedrock_model.model, "titan-embed-text");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with geo field");
+        }
+    }
+
+    #[test]
     fn test_invalid_bedrock_unknown_provider_model() {
         let result = ModelId::from_str_and_provider(
             InferenceProvider::Bedrock,
@@ -1745,5 +1846,318 @@ mod tests {
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: Version = serde_json::from_str(&serialized).unwrap();
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_bedrock_mistral_models() {
+        // Test Mistral 7B model
+        let model_id_str = "mistral.mistral-7b-instruct-v0:2";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "mistral");
+            assert_eq!(bedrock_model.model, "mistral-7b-instruct");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v0:2");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Mistral provider");
+        }
+
+        // Test Mistral Large model
+        let model_id_str = "mistral.mistral-large-2402-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "mistral");
+            assert_eq!(bedrock_model.model, "mistral-large-2402");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId with Mistral provider");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_cohere_models() {
+        // Test Cohere Command model
+        let model_id_str = "cohere.command-text-v14";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "cohere");
+            assert_eq!(bedrock_model.model, "command-text");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v14");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Cohere provider");
+        }
+
+        // Test Cohere Command R model
+        let model_id_str = "cohere.command-r-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "cohere");
+            assert_eq!(bedrock_model.model, "command-r");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Cohere provider");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_stability_models() {
+        // Test Stability AI SDXL model
+        let model_id_str = "stability.stable-diffusion-xl-v1";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "stability");
+            assert_eq!(bedrock_model.model, "stable-diffusion-xl");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Stability provider");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_amazon_nova_models() {
+        // Test Amazon Nova Pro model
+        let model_id_str = "amazon.nova-pro-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "amazon");
+            assert_eq!(bedrock_model.model, "nova-pro");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Amazon provider");
+        }
+
+        // Test Amazon Nova Lite model
+        let model_id_str = "amazon.nova-lite-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "amazon");
+            assert_eq!(bedrock_model.model, "nova-lite");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId with Amazon provider");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_meta_llama3_models() {
+        // Test Llama 3.1 70B model
+        let model_id_str = "meta.llama3-1-70b-instruct-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "meta");
+            assert_eq!(bedrock_model.model, "llama3-1-70b-instruct");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with Meta provider");
+        }
+
+        // Test Llama 3.1 405B model
+        let model_id_str = "meta.llama3-1-405b-instruct-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "meta");
+            assert_eq!(bedrock_model.model, "llama3-1-405b-instruct");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId with Meta provider");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_edge_cases() {
+        // Test model with multiple dots in the name (will be parsed as
+        // geo.provider.model)
+        let model_id_str = "provider.model.name.with.dots-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.geo, Some("provider".to_string()));
+            assert_eq!(bedrock_model.provider, "model");
+            assert_eq!(bedrock_model.model, "name.with.dots");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId");
+        }
+
+        // Test model with numbers in version
+        let model_id_str = "provider.model-v2:1";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "provider");
+            assert_eq!(bedrock_model.model, "model");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v2:1");
+        } else {
+            panic!("Expected Bedrock ModelId");
+        }
+
+        // Test model with hyphenated provider name
+        let model_id_str = "provider-name.model-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "provider-name");
+            assert_eq!(bedrock_model.model, "model");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_invalid_cases() {
+        // Test missing version suffix
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            "provider.model",
+        );
+        assert!(result.is_err());
+        if let Err(MapperError::InvalidModelName(model_name)) = result {
+            assert_eq!(model_name, "provider.model");
+        } else {
+            panic!("Expected InvalidModelName error for missing version");
+        }
+
+        // Test model with version but no colon (actually valid for some
+        // providers)
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            "provider.model-v1",
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "provider");
+            assert_eq!(bedrock_model.model, "model");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1");
+        } else {
+            panic!("Expected Bedrock ModelId");
+        }
+
+        // Test empty provider (will actually parse with empty string provider)
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            ".model-v1:0",
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "");
+            assert_eq!(bedrock_model.model, "model");
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId with empty provider");
+        }
+
+        // Test model starting with dash (will parse dash as part of model name)
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            "provider.-model-v1:0",
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.provider, "provider");
+            assert_eq!(bedrock_model.model, "-model");
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+        } else {
+            panic!("Expected Bedrock ModelId");
+        }
+    }
+
+    #[test]
+    fn test_bedrock_geo_with_various_providers() {
+        // Test geo with Mistral
+        let model_id_str = "eu-west-1.mistral.mistral-large-2402-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.geo, Some("eu-west-1".to_string()));
+            assert_eq!(bedrock_model.provider, "mistral");
+            assert_eq!(bedrock_model.model, "mistral-large-2402");
+            assert_eq!(bedrock_model.version, None);
+            assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
+            assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
+        } else {
+            panic!("Expected Bedrock ModelId with geo field");
+        }
+
+        // Test geo with Cohere
+        let model_id_str = "ap-southeast-1.cohere.command-r-v1:0";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Bedrock,
+            model_id_str,
+        );
+        assert!(result.is_ok());
+        if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
+            assert_eq!(bedrock_model.geo, Some("ap-southeast-1".to_string()));
+            assert_eq!(bedrock_model.provider, "cohere");
+            assert_eq!(bedrock_model.model, "command-r");
+        } else {
+            panic!("Expected Bedrock ModelId with geo field");
+        }
     }
 }

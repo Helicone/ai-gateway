@@ -70,7 +70,7 @@ impl DispatcherDiscovery<Key> {
                     .inference_provider()
                     .ok_or_else(|| {
                         InitError::ModelIdNotRecognized(
-                            weighted_model.model.clone(),
+                            weighted_model.model.to_string(),
                         )
                     })?;
                 let dispatcher = Dispatcher::new(

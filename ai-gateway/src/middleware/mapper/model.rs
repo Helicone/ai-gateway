@@ -93,44 +93,41 @@ impl ModelMapper {
         if models_offered_by_target_provider.contains(&source_model_name) {
             return Ok(source_model.clone());
         }
-        // otherwise, use the model mapping from router config if it exists
-        if let Some(router_model_mapping) = self
-            .router_config
-            .as_ref()
-            .and_then(|c| c.model_mappings())
-            .and_then(|m| m.as_ref().get(&source_model_name))
+
+        let model_mapping_config = if let Some(router_model_mapping) =
+            self.router_config.as_ref().and_then(|c| c.model_mappings())
         {
-            // get the first model from the router model mapping that the target
-            // provider supports
-            let target_model = router_model_mapping
-                .iter()
-                .find(|m| models_offered_by_target_provider.contains(*m));
-            if let Some(target_model) = target_model {
-                // the parsed model id here will use the "latest" version
-                return ModelId::from_str_and_provider(
-                    target_provider.clone(),
-                    target_model.as_ref(),
-                );
-            }
-        }
-        // if that doesn't have a mapping, use the default model mapping
-        let default_mapping = self
-            .default_model_mapping()
+            router_model_mapping
+        } else {
+            self.default_model_mapping()
+        };
+
+        let possible_mappings = model_mapping_config
             .as_ref()
             .get(&source_model_name)
-            .and_then(|m| {
-                m.iter()
-                    .find(|m| models_offered_by_target_provider.contains(*m))
-            })
             .ok_or_else(|| {
                 MapperError::NoModelMapping(
                     target_provider.clone(),
                     source_model_name.as_ref().to_string(),
                 )
             })?;
-        ModelId::from_str_and_provider(
-            target_provider.clone(),
-            default_mapping.as_ref(),
-        )
+
+        // get the first model from the router model mapping that the target
+        // provider supports
+        let target_model = possible_mappings
+            .iter()
+            .find(|m| {
+                models_offered_by_target_provider.contains(&m.as_model_name())
+                    && m.inference_provider() == Some(target_provider.clone())
+            })
+            .ok_or_else(|| {
+                MapperError::NoModelMapping(
+                    target_provider.clone(),
+                    source_model_name.as_ref().to_string(),
+                )
+            })?
+            .clone();
+
+        Ok(target_model)
     }
 }

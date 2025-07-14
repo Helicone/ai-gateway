@@ -199,7 +199,7 @@ async fn check_model_weighted_monitor(
                     let model = &target.model;
                     let provider =
                         model.inference_provider().ok_or_else(|| {
-                            InitError::ModelIdNotRecognized(model.clone())
+                            InitError::ModelIdNotRecognized(model.to_string())
                         })?;
                     let weight =
                         Weight::from(target.weight.to_f64().ok_or_else(
