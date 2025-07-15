@@ -44,6 +44,7 @@ telemetry = { path = "./crates/telemetry" }
 ai-gateway = { path = "./ai-gateway" }
 weighted-balance = { path = "./crates/weighted-balance" }
 dynamic-router = { path = "./crates/dynamic-router" }
+latency-router = { path = "./crates/latency-router" }
 
 anthropic-ai-sdk = { version = "0.2.25" }
 anyhow = "1.0.98"

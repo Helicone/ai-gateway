@@ -47,7 +47,7 @@ fn default_discover_decay() -> Duration {
 }
 
 fn default_rtt() -> Duration {
-    Duration::from_secs(1)
+    Duration::from_millis(250)
 }
 
 #[cfg(feature = "testing")]

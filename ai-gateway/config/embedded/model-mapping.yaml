@@ -21,7 +21,6 @@ gpt-4o-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
   - "ollama/llama3.2"
-  - "ollama/llama3"
   - "mistral/mistral-small"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
 gpt-4.1:
@@ -65,7 +64,6 @@ o1-pro:
   - "gemini/gemini-2.5-pro"
   - "bedrock/us.deepseek.r1-v1:0"
   - "mistral/mistral-saba"
-  - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
 o3:
   - "anthropic/claude-opus-4-0"
   - "gemini/gemini-2.5-pro"
@@ -78,7 +76,6 @@ o3-mini:
   - "gemini/gemini-2.0-flash"
   - "ollama/llama3.3"
   - "mistral/mistral-small"
-  - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
 o4-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
@@ -118,7 +115,6 @@ claude-sonnet-4-0:
   - "ollama/llama4"
   - "mistral/mistral-large"
   - "bedrock/us.deepseek.r1-v1:0"
-  - "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
 claude-3-7-sonnet:
   - "openai/o4-mini"
   - "gemini/gemini-2.0-flash"
@@ -131,14 +127,12 @@ claude-3-5-haiku:
   - "ollama/llama3"
   - "mistral/mistral-small"
   - "bedrock/us.deepseek.r1-v1:0"
-  - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
 claude-3-5-sonnet:
   - "openai/o3-mini"
   - "gemini/gemini-2.0-flash"
   - "ollama/llama4"
   - "mistral/mistral-medium"
   - "bedrock/us.deepseek.r1-v1:0"
-  - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
 claude-3-opus:
   - "openai/gpt-4.5"
   - "gemini/gemini-2.5-pro"
@@ -189,51 +183,6 @@ gemini-1.5-pro:
   - "ollama/llama4"
   - "mistral/mistral-medium"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
-
-# Bedrock models
-"claude-3-5-haiku":
-  - "gemini/gemini-2.0-flash"
-  - "openai/gpt-4o-mini"
-  - "anthropic/claude-3-5-haiku"
-  - "mistral/mistral-small"
-  - "bedrock/us.deepseek.r1-v1:0"
-"claude-3-5-sonnet":
-  - "openai/o3-mini"
-  - "gemini/gemini-2.0-flash"
-  - "anthropic/claude-3-5-sonnet"
-  - "mistral/mistral-medium"
-  - "bedrock/us.deepseek.r1-v1:0"
-"claude-3-opus":
-  - "openai/gpt-4.5"
-  - "gemini/gemini-2.5-pro"
-  - "anthropic/claude-3-opus"
-  - "anthropic/claude-3-7-sonnet"
-  - "mistral/mistral-saba"
-  - "bedrock/us.deepseek.r1-v1:0"
-"claude-3-7-sonnet":
-  - "openai/o4-mini"
-  - "gemini/gemini-2.0-flash"
-  - "bedrock/us.deepseek.r1-v1:0"
-  - "anthropic/claude-3-7-sonnet"
-  - "mistral/mistral-large"
-"claude-opus-4":
-  - "openai/o3"
-  - "gemini/gemini-2.5-pro"
-  - "bedrock/us.deepseek.r1-v1:0"
-  - "anthropic/claude-opus-4-0"
-  - "mistral/mistral-saba"
-"claude-sonnet-4":
-  - "openai/o4-mini"
-  - "gemini/gemini-2.0-flash"
-  - "bedrock/us.deepseek.r1-v1:0"
-  - "anthropic/claude-sonnet-4-0"
-  - "mistral/mistral-large"
-"r1":
-  - "openai/gpt-4o"
-  - "anthropic/claude-3-5-sonnet"
-  - "gemini/gemini-2.0-flash"
-  - "anthropic/claude-3-7-sonnet"
-  - "mistral/mistral-large"
 
 # mistral models
 ministral-8b:

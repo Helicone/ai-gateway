@@ -13,7 +13,6 @@ use rustc_hash::FxHashMap as HashMap;
 use tower::{ServiceBuilder, buffer, util::BoxCloneService};
 
 use crate::{
-    app::BUFFER_SIZE,
     app_state::AppState,
     config::router::RouterConfig,
     endpoints::{ApiEndpoint, EndpointType},
@@ -24,7 +23,7 @@ use crate::{
     middleware::{
         cache::CacheLayer, prompts::PromptLayer, rate_limit, request_context,
     },
-    router::strategy::RoutingStrategyService,
+    router::{meta::MIDDLEWARE_BUFFER_SIZE, strategy::RoutingStrategyService},
     types::router::RouterId,
     utils::handle_error::ErrorHandlerLayer,
 };
@@ -78,7 +77,7 @@ impl Router {
                 .layer(ErrorHandlerLayer::new(app_state.clone()))
                 .layer(rl_layer.clone())
                 .map_err(|e| ApiError::from(InternalError::BufferError(e)))
-                .layer(buffer::BufferLayer::new(BUFFER_SIZE))
+                .layer(buffer::BufferLayer::new(MIDDLEWARE_BUFFER_SIZE))
                 .layer(request_context_layer.clone())
                 .service(routing_strategy);
 

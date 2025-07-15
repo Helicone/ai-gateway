@@ -1,4 +1,5 @@
 pub mod direct;
+pub mod latency;
 pub mod meta;
 pub mod router_details;
 pub mod service;

@@ -47,7 +47,7 @@ use crate::{
     },
 };
 
-pub(crate) const BUFFER_SIZE: usize = 1024;
+const APP_BUFFER_SIZE: usize = 1024;
 const SERVICE_NAME: &str = "ai-gateway";
 
 pub type AppResponseBody = tower_http::body::UnsyncBoxBody<
@@ -312,7 +312,7 @@ impl App {
                 app_state.response_headers_config(),
             ))
             .map_err(crate::error::internal::InternalError::BufferError)
-            .layer(BufferLayer::new(BUFFER_SIZE))
+            .layer(BufferLayer::new(APP_BUFFER_SIZE))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(router);
 

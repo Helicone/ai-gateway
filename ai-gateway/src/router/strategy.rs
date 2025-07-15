@@ -17,6 +17,7 @@ use crate::{
         model, provider,
     },
     error::{api::ApiError, init::InitError, internal::InternalError},
+    router::latency::LatencyRouter,
     types::{request::Request, response::Response, router::RouterId},
 };
 
@@ -65,6 +66,12 @@ pub enum RoutingStrategyService {
             Request,
         >,
     ),
+    /// Strategy:
+    /// 1. receive request + deserialize body
+    /// 2. extract model id param
+    /// 3. pick the lowest latency provider that serves the requested model
+    /// 4. send request
+    ModelLatency(LatencyRouter),
 }
 
 impl RoutingStrategyService {
@@ -80,10 +87,16 @@ impl RoutingStrategyService {
                     .await
             }
             BalanceConfigInner::BalancedLatency { .. } => {
-                Self::peak_ewma(app_state, router_id, router_config).await
+                Self::provider_latency(app_state, router_id, router_config)
+                    .await
             }
             BalanceConfigInner::ModelWeighted { .. } => {
                 Self::model_weighted(app_state, router_id, router_config).await
+            }
+            BalanceConfigInner::ModelLatency { .. } => {
+                LatencyRouter::new(app_state, router_id, router_config)
+                    .await
+                    .map(Self::ModelLatency)
             }
         }
     }
@@ -93,7 +106,7 @@ impl RoutingStrategyService {
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
     ) -> Result<RoutingStrategyService, InitError> {
-        tracing::debug!("Creating provider weighted balancer");
+        tracing::debug!("creating provider weighted routing strategy");
         let (change_tx, change_rx) = channel(CHANNEL_CAPACITY);
         let (rate_limit_tx, rate_limit_rx) = channel(CHANNEL_CAPACITY);
         let discover_factory = DispatcherDiscoverFactory::new(
@@ -135,7 +148,7 @@ impl RoutingStrategyService {
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
     ) -> Result<RoutingStrategyService, InitError> {
-        tracing::debug!("Creating model weighted balancer");
+        tracing::debug!("creating model weighted routing strategy");
         let (change_tx, change_rx) = channel(CHANNEL_CAPACITY);
         let (rate_limit_tx, rate_limit_rx) = channel(CHANNEL_CAPACITY);
         let discover_factory = DispatcherDiscoverFactory::new(
@@ -171,12 +184,12 @@ impl RoutingStrategyService {
         Ok(provider_balancer)
     }
 
-    async fn peak_ewma(
+    async fn provider_latency(
         app_state: AppState,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
     ) -> Result<RoutingStrategyService, InitError> {
-        tracing::debug!("Creating peak ewma p2c balancer");
+        tracing::debug!("creating provider latency routing strategy");
         let (change_tx, change_rx) = channel(CHANNEL_CAPACITY);
         let (rate_limit_tx, rate_limit_rx) = channel(CHANNEL_CAPACITY);
         let discover_factory = DispatcherDiscoverFactory::new(
@@ -185,7 +198,7 @@ impl RoutingStrategyService {
             router_config.clone(),
         );
         app_state
-            .add_p2c_router_health_monitor(
+            .add_provider_latency_router_health_monitor(
                 router_id.clone(),
                 router_config.clone(),
                 change_tx.clone(),
@@ -198,7 +211,7 @@ impl RoutingStrategyService {
             .add_rate_limit_rx(router_id.clone(), rate_limit_rx)
             .await;
         app_state
-            .add_p2c_router_rate_limit_monitor(
+            .add_provider_latency_router_rate_limit_monitor(
                 router_id.clone(),
                 router_config,
                 change_tx,
@@ -234,13 +247,15 @@ impl tower::Service<Request> for RoutingStrategyService {
             RoutingStrategyService::WeightedModel(inner) => {
                 inner.poll_ready(cx)
             }
+            RoutingStrategyService::ModelLatency(inner) => {
+                return inner.poll_ready(cx);
+            }
         }
         .map_err(InternalError::PollReadyError)
         .map_err(Into::into)
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        tracing::trace!("ProviderBalancer");
         match self {
             RoutingStrategyService::ProviderLatencyPeakEwmaP2C(inner) => {
                 ResponseFuture::PeakEwma {
@@ -254,6 +269,11 @@ impl tower::Service<Request> for RoutingStrategyService {
             }
             RoutingStrategyService::WeightedModel(inner) => {
                 ResponseFuture::ModelWeighted {
+                    future: inner.call(req),
+                }
+            }
+            RoutingStrategyService::ModelLatency(inner) => {
+                ResponseFuture::ModelLatency {
                     future: inner.call(req),
                 }
             }
@@ -288,6 +308,10 @@ pin_project! {
                 >
             >::Future,
         },
+        ModelLatency {
+            #[pin]
+            future: <LatencyRouter as tower::Service<Request>>::Future,
+        },
     }
 }
 
@@ -312,6 +336,9 @@ impl Future for ResponseFuture {
                     .map_err(InternalError::LoadBalancerError)
                     .map_err(Into::into)
             )),
+            EnumProj::ModelLatency { future } => {
+                Poll::Ready(ready!(future.poll(cx)))
+            }
         }
     }
 }

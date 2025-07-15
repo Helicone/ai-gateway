@@ -1,23 +1,41 @@
 use std::sync::Arc;
 
+use derive_more::{AsRef, Deref, DerefMut};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+
 use crate::{
     app_state::AppState,
-    config::{
-        model_mapping::ModelMappingConfig, providers::ProvidersConfig,
-        router::RouterConfig,
-    },
+    config::{model_mapping::ModelMappingConfig, router::RouterConfig},
     error::mapper::MapperError,
     types::{
-        model_id::{ModelId, ModelName},
+        model_id::{ModelId, ModelIdWithoutVersion, ModelName},
         provider::InferenceProvider,
     },
 };
+
+#[derive(Debug, Clone, Eq, PartialEq, Deref, DerefMut, AsRef)]
+struct ProviderModels(
+    HashMap<InferenceProvider, HashSet<ModelIdWithoutVersion>>,
+);
+
+impl ProviderModels {
+    fn new(app_state: &AppState) -> Self {
+        let mut map = HashMap::default();
+        for (provider, config) in app_state.config().providers.iter() {
+            let models =
+                config.models.iter().map(|m| m.clone().into()).collect();
+            map.insert(provider.clone(), models);
+        }
+        Self(map)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ModelMapper {
     app_state: AppState,
     router_config: Option<Arc<RouterConfig>>,
     model_id: Option<ModelId>,
+    provider_models: ProviderModels,
 }
 
 impl ModelMapper {
@@ -26,10 +44,12 @@ impl ModelMapper {
         app_state: AppState,
         router_config: Arc<RouterConfig>,
     ) -> Self {
+        let provider_models = ProviderModels::new(&app_state);
         Self {
             app_state,
             router_config: Some(router_config),
             model_id: None,
+            provider_models,
         }
     }
 
@@ -39,28 +59,28 @@ impl ModelMapper {
         router_config: Arc<RouterConfig>,
         model_id: ModelId,
     ) -> Self {
+        let provider_models = ProviderModels::new(&app_state);
         Self {
             app_state,
             router_config: Some(router_config),
             model_id: Some(model_id),
+            provider_models,
         }
     }
 
     #[must_use]
     pub fn new(app_state: AppState) -> Self {
+        let provider_models = ProviderModels::new(&app_state);
         Self {
             app_state,
             router_config: None,
             model_id: None,
+            provider_models,
         }
     }
 
     fn default_model_mapping(&self) -> &ModelMappingConfig {
         &self.app_state.0.config.default_model_mapping
-    }
-
-    fn providers_config(&self) -> &ProvidersConfig {
-        &self.app_state.0.config.providers
     }
 
     /// Map a model to a new model name for a target provider.
@@ -81,16 +101,17 @@ impl ModelMapper {
         if let Some(model_id) = self.model_id.clone() {
             return Ok(model_id);
         }
-        let models_offered_by_target_provider = &self
-            .providers_config()
-            .get(target_provider)
-            .ok_or_else(|| {
+        let models_offered_by_target_provider =
+            self.provider_models.0.get(target_provider).ok_or_else(|| {
                 MapperError::NoProviderConfig(target_provider.clone())
-            })?
-            .models;
+            })?;
 
-        let source_model_name = ModelName::from_model(source_model);
-        if models_offered_by_target_provider.contains(&source_model_name) {
+        let source_model_w_out_version =
+            ModelIdWithoutVersion::from(source_model.clone());
+
+        if models_offered_by_target_provider
+            .contains(&source_model_w_out_version)
+        {
             return Ok(source_model.clone());
         }
 
@@ -102,6 +123,7 @@ impl ModelMapper {
             self.default_model_mapping()
         };
 
+        let source_model_name = ModelName::from_model(source_model);
         let possible_mappings = model_mapping_config
             .as_ref()
             .get(&source_model_name)
@@ -117,7 +139,8 @@ impl ModelMapper {
         let target_model = possible_mappings
             .iter()
             .find(|m| {
-                models_offered_by_target_provider.contains(&m.as_model_name())
+                let possible_mapping = (*m).clone().into();
+                models_offered_by_target_provider.contains(&possible_mapping)
                     && m.inference_provider() == Some(target_provider.clone())
             })
             .ok_or_else(|| {

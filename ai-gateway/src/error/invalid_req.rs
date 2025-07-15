@@ -35,6 +35,10 @@ pub enum InvalidRequestError {
     RouterIdNotFound(String),
     /// Missing router id in request path
     MissingRouterId,
+    /// Missing model id in request body
+    MissingModelId,
+    /// Invalid model id in request body
+    InvalidModelId,
     /// Invalid request: {0}
     InvalidRequest(http::Error),
     /// Invalid request url: {0}
@@ -166,9 +170,9 @@ impl From<&InvalidRequestError> for InvalidRequestErrorMetric {
             InvalidRequestError::InvalidRequest(_)
             | InvalidRequestError::UnsupportedEndpoint(_)
             | InvalidRequestError::InvalidCacheConfig
-            | InvalidRequestError::InvalidPromptInputs(_) => {
-                Self::InvalidRequest
-            }
+            | InvalidRequestError::InvalidPromptInputs(_)
+            | InvalidRequestError::MissingModelId
+            | InvalidRequestError::InvalidModelId => Self::InvalidRequest,
             InvalidRequestError::InvalidUrl(_) => Self::InvalidUrl,
             InvalidRequestError::InvalidRequestBody(_) => {
                 Self::InvalidRequestBody

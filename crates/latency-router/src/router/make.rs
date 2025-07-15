@@ -1,28 +1,3 @@
-//! Copyright (c) 2019 Tower Contributors
-//!
-//! Permission is hereby granted, free of charge, to any
-//! person obtaining a copy of this software and associated
-//! documentation files (the "Software"), to deal in the
-//! Software without restriction, including without
-//! limitation the rights to use, copy, modify, merge,
-//! publish, distribute, sublicense, and/or sell copies of
-//! the Software, and to permit persons to whom the Software
-//! is furnished to do so, subject to the following
-//! conditions:
-//!
-//! The above copyright notice and this permission notice
-//! shall be included in all copies or substantial portions
-//! of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-//! ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-//! TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-//! PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-//! SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-//! CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-//! OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-//! IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-//! DEALINGS IN THE SOFTWARE.
 use std::{
     convert::Infallible,
     fmt,
@@ -34,40 +9,24 @@ use std::{
 };
 
 use futures::ready;
-use pin_project_lite::pin_project;
+use pin_project::pin_project;
 use tower::{Service, discover::Discover};
 
 use super::LatencyRouter;
 
-/// Constructs load balancers over dynamic service sets produced by a wrapped
-/// "inner" service.
-///
-/// This is effectively an implementation of [`MakeService`] except that it
-/// forwards the service descriptors (`Target`) to an inner service (`S`), and
-/// expects that service to produce a service set in the form of a [`Discover`].
-/// It then wraps the service set in a [`Balance`] before returning it as the
-/// "made" service.
-///
-/// See the [module-level documentation](crate::balance) for details on load
-/// balancing.
-///
-/// [`MakeService`]: crate::MakeService
-/// [`Discover`]: crate::discover::Discover
-/// [`Balance`]: crate::balance::p2c::Balance
-pub struct MakeRouter<S, Req> {
+pub struct MakeRouter<S, ReqBody, P> {
     inner: S,
-    _marker: PhantomData<fn(Req)>,
+    _marker: PhantomData<fn(ReqBody, P)>,
 }
 
-pin_project! {
-    pub struct MakeFuture<F, Req> {
-        #[pin]
-        inner: F,
-        _marker: PhantomData<fn(Req)>,
-    }
+#[pin_project]
+pub struct MakeFuture<F, ReqBody, P> {
+    #[pin]
+    inner: F,
+    _marker: PhantomData<fn(ReqBody, P)>,
 }
 
-impl<S, Req> MakeRouter<S, Req> {
+impl<S, ReqBody, P> MakeRouter<S, ReqBody, P> {
     /// Build routers using operating system entropy.
     pub const fn new(make_discover: S) -> Self {
         Self {
@@ -77,7 +36,7 @@ impl<S, Req> MakeRouter<S, Req> {
     }
 }
 
-impl<S, Req> Clone for MakeRouter<S, Req>
+impl<S, ReqBody, P> Clone for MakeRouter<S, ReqBody, P>
 where
     S: Clone,
 {
@@ -89,16 +48,18 @@ where
     }
 }
 
-impl<S, Target, Req> Service<Target> for MakeRouter<S, Req>
+impl<S, Target, ReqBody, P> Service<Target> for MakeRouter<S, ReqBody, P>
 where
     S: Service<Target>,
     S::Response: Discover,
     <S::Response as Discover>::Key: Hash + Send + Sync,
-    <S::Response as Discover>::Service: Service<Req, Error = Infallible>,
+    <S::Response as Discover>::Service:
+        Service<http::Request<ReqBody>, Error = Infallible>,
+    P: Hash,
 {
-    type Response = LatencyRouter<S::Response, Req>;
+    type Response = LatencyRouter<P, S::Response, ReqBody>;
     type Error = S::Error;
-    type Future = MakeFuture<S::Future, Req>;
+    type Future = MakeFuture<S::Future, ReqBody, P>;
 
     fn poll_ready(
         &mut self,
@@ -115,7 +76,7 @@ where
     }
 }
 
-impl<S, ReqBody> fmt::Debug for MakeRouter<S, ReqBody>
+impl<S, ReqBody, P> fmt::Debug for MakeRouter<S, ReqBody, P>
 where
     S: fmt::Debug,
 {
@@ -125,14 +86,16 @@ where
     }
 }
 
-impl<F, T, E, Req> Future for MakeFuture<F, Req>
+impl<F, T, E, ReqBody, P> Future for MakeFuture<F, ReqBody, P>
 where
     F: Future<Output = Result<T, E>>,
     T: Discover,
     <T as Discover>::Key: Hash + Send + Sync,
-    <T as Discover>::Service: Service<Req, Error = Infallible>,
+    <T as Discover>::Service:
+        Service<http::Request<ReqBody>, Error = Infallible>,
+    P: Hash,
 {
-    type Output = Result<LatencyRouter<T, Req>, E>;
+    type Output = Result<LatencyRouter<P, T, ReqBody>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -142,7 +105,7 @@ where
     }
 }
 
-impl<F, Req> fmt::Debug for MakeFuture<F, Req>
+impl<F, Req, P> fmt::Debug for MakeFuture<F, Req, P>
 where
     F: fmt::Debug,
 {

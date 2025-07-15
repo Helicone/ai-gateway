@@ -70,7 +70,8 @@ impl RouterConfig {
                         )));
                     }
                 }
-                BalanceConfigInner::BalancedLatency { .. } => {}
+                BalanceConfigInner::BalancedLatency { .. }
+                | BalanceConfigInner::ModelLatency { .. } => {}
             }
         }
 

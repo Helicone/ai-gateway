@@ -72,6 +72,13 @@ impl DispatcherDiscovery<WeightedKey> {
                             .to_string(),
                     ));
                 }
+                BalanceConfigInner::ModelLatency { .. } => {
+                    return Err(InitError::InvalidBalancer(
+                        "Model latency balancer not supported for provider \
+                         weighted discovery"
+                            .to_string(),
+                    ));
+                }
             };
             for target in weighted_balance_targets {
                 let weight =

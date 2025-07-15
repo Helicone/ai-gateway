@@ -144,6 +144,8 @@ pub enum BalanceConfigInner {
     BalancedLatency { providers: NESet<InferenceProvider> },
     /// Distributes and load balances requests among a set of (providers,model).
     ModelWeighted { models: NESet<WeightedModel> },
+    /// Distributes and load balances requests among a set of (providers,model).
+    ModelLatency { models: NESet<ModelId> },
 }
 
 impl BalanceConfigInner {
@@ -161,6 +163,15 @@ impl BalanceConfigInner {
                 .filter_map(|model| {
                     if let Some(provider) = model.model.inference_provider() { Some(provider) } else {
                         tracing::warn!(model = ?model.model, "Model has no inference provider");
+                        None
+                    }
+                })
+                .collect(),
+            Self::ModelLatency { models } => models
+                .iter()
+                .filter_map(|model| {
+                    if let Some(provider) = model.inference_provider() { Some(provider) } else {
+                        tracing::warn!(model = ?model, "Model has no inference provider");
                         None
                     }
                 })

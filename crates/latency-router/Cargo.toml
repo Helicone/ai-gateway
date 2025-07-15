@@ -10,7 +10,9 @@ publish = false
 
 [dependencies]
 futures = { workspace = true }
-pin-project-lite = { workspace = true }
+http = { workspace = true }
+pin-project = { workspace = true }
+rustc-hash = { workspace = true }
 tower = { workspace = true, features = ["discover", "ready-cache", "load"] }
 tokio = { workspace = true }
 thiserror = { workspace = true }

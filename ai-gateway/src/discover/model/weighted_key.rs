@@ -58,6 +58,14 @@ impl DispatcherDiscovery<WeightedKey> {
             router_config.load_balance.as_ref()
         {
             let weighted_balance_targets = match balance_config {
+                BalanceConfigInner::ModelWeighted { models } => models,
+                BalanceConfigInner::ModelLatency { .. } => {
+                    return Err(InitError::InvalidBalancer(
+                        "Model latency balancer not supported for model \
+                         weighted discovery"
+                            .to_string(),
+                    ));
+                }
                 BalanceConfigInner::ProviderWeighted { .. } => {
                     return Err(InitError::InvalidBalancer(
                         "Provider weighted balancer not supported for model \
@@ -65,7 +73,6 @@ impl DispatcherDiscovery<WeightedKey> {
                             .to_string(),
                     ));
                 }
-                BalanceConfigInner::ModelWeighted { models } => models,
                 BalanceConfigInner::BalancedLatency { .. } => {
                     return Err(InitError::InvalidBalancer(
                         "P2C balancer not supported for weighted discovery"

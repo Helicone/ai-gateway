@@ -51,6 +51,7 @@ infer = { workspace = true }
 isocountry = { workspace = true }
 jemallocator = { workspace = true }
 json-patch = { workspace = true }
+latency-router = { workspace = true }
 meltdown = { workspace = true }
 mime = { workspace = true }
 moka = { workspace = true }

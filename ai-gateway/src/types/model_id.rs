@@ -221,6 +221,50 @@ impl ModelId {
             ModelId::Unknown(model) => ModelName::borrowed(model),
         }
     }
+
+    #[must_use]
+    pub fn as_model_name_owned(&self) -> ModelName<'static> {
+        match self {
+            ModelId::ModelIdWithVersion { id, .. } => {
+                ModelName::owned(id.model.clone())
+            }
+            ModelId::Bedrock(model) => ModelName::owned(model.model.clone()),
+            ModelId::Ollama(model) => ModelName::owned(model.model.clone()),
+            ModelId::Unknown(model) => ModelName::owned(model.clone()),
+        }
+    }
+
+    #[must_use]
+    pub fn with_latest_version(self) -> ModelId {
+        match self {
+            ModelId::ModelIdWithVersion { provider, id } => {
+                ModelId::ModelIdWithVersion {
+                    provider,
+                    id: ModelIdWithVersion {
+                        model: id.model,
+                        version: Version::Latest,
+                    },
+                }
+            }
+            ModelId::Bedrock(bedrock_model_id) => {
+                ModelId::Bedrock(BedrockModelId {
+                    geo: bedrock_model_id.geo,
+                    provider: bedrock_model_id.provider,
+                    model: bedrock_model_id.model,
+                    version: Version::Latest,
+                    bedrock_internal_version: bedrock_model_id
+                        .bedrock_internal_version,
+                })
+            }
+            ModelId::Ollama(ollama_model_id) => {
+                ModelId::Ollama(OllamaModelId {
+                    model: ollama_model_id.model,
+                    tag: ollama_model_id.tag,
+                })
+            }
+            ModelId::Unknown(model) => ModelId::Unknown(model),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for ModelId {
@@ -290,6 +334,69 @@ impl Display for ModelId {
     }
 }
 
+impl From<ModelId> for ModelIdWithoutVersion {
+    fn from(model_id: ModelId) -> Self {
+        Self { inner: model_id }
+    }
+}
+
+impl PartialEq for ModelIdWithoutVersion {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.inner, &other.inner) {
+            (
+                ModelId::ModelIdWithVersion { provider, id },
+                ModelId::ModelIdWithVersion {
+                    provider: other_provider,
+                    id: other_id,
+                },
+            ) => provider == other_provider && id.model == other_id.model,
+            (ModelId::Bedrock(this), ModelId::Bedrock(other)) => {
+                this.provider == other.provider
+                    && this.model == other.model
+                    && this.bedrock_internal_version
+                        == other.bedrock_internal_version
+            }
+            (ModelId::Ollama(this), ModelId::Ollama(other)) => {
+                this.model == other.model && this.tag == other.tag
+            }
+            (ModelId::Unknown(this), ModelId::Unknown(other)) => this == other,
+            (
+                ModelId::ModelIdWithVersion { .. }
+                | ModelId::Bedrock(_)
+                | ModelId::Ollama(_)
+                | ModelId::Unknown(_),
+                _,
+            ) => false,
+        }
+    }
+}
+
+impl std::hash::Hash for ModelIdWithoutVersion {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match &self.inner {
+            ModelId::ModelIdWithVersion { provider, id } => {
+                provider.hash(state);
+                id.model.hash(state);
+            }
+            ModelId::Bedrock(bedrock_model_id) => {
+                bedrock_model_id.provider.hash(state);
+                bedrock_model_id.model.hash(state);
+                bedrock_model_id.bedrock_internal_version.hash(state);
+            }
+            ModelId::Ollama(ollama_model_id) => {
+                ollama_model_id.model.hash(state);
+                ollama_model_id.tag.hash(state);
+            }
+            ModelId::Unknown(model) => model.hash(state),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq)]
+pub struct ModelIdWithoutVersion {
+    inner: ModelId,
+}
+
 /// Has the format of: `{model}-{version}`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModelIdWithVersion {
@@ -343,6 +450,25 @@ impl Display for ModelIdWithVersion {
     }
 }
 
+impl<'de> Deserialize<'de> for ModelIdWithVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        ModelIdWithVersion::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for ModelIdWithVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 /// Has the format of: `{model}:{tag}`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OllamaModelId {
@@ -378,6 +504,25 @@ impl Display for OllamaModelId {
     }
 }
 
+impl<'de> Deserialize<'de> for OllamaModelId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        OllamaModelId::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for OllamaModelId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 /// Has the format of:
 /// `{geo}?.{provider}.{model}(-version)?-{bedrock_internal_version}`
 /// amazon.nova-pro-v1:0
@@ -386,7 +531,7 @@ pub struct BedrockModelId {
     pub geo: Option<String>,
     pub provider: String,
     pub model: String,
-    pub version: Option<Version>,
+    pub version: Version,
     pub bedrock_internal_version: String,
 }
 
@@ -441,7 +586,7 @@ impl FromStr for BedrockModelId {
             geo,
             provider: provider_str.to_string(),
             model: model.to_string(),
-            version,
+            version: version.unwrap_or(Version::ImplicitLatest),
             bedrock_internal_version: bedrock_version.to_string(),
         })
     }
@@ -450,7 +595,12 @@ impl FromStr for BedrockModelId {
 impl Display for BedrockModelId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (&self.geo, &self.version) {
-            (Some(geo), Some(version)) => write!(
+            (Some(geo), Version::ImplicitLatest) => write!(
+                f,
+                "{}.{}.{}-{}",
+                geo, self.provider, self.model, self.bedrock_internal_version
+            ),
+            (Some(geo), version) => write!(
                 f,
                 "{}.{}.{}-{}-{}",
                 geo,
@@ -459,12 +609,13 @@ impl Display for BedrockModelId {
                 version,
                 self.bedrock_internal_version
             ),
-            (Some(geo), None) => write!(
+
+            (None, Version::ImplicitLatest) => write!(
                 f,
-                "{}.{}.{}-{}",
-                geo, self.provider, self.model, self.bedrock_internal_version
+                "{}.{}-{}",
+                self.provider, self.model, self.bedrock_internal_version
             ),
-            (None, Some(version)) => write!(
+            (None, version) => write!(
                 f,
                 "{}.{}-{}-{}",
                 self.provider,
@@ -472,12 +623,26 @@ impl Display for BedrockModelId {
                 version,
                 self.bedrock_internal_version
             ),
-            (None, None) => write!(
-                f,
-                "{}.{}-{}",
-                self.provider, self.model, self.bedrock_internal_version
-            ),
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for BedrockModelId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        BedrockModelId::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for BedrockModelId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -1073,9 +1238,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-opus-4");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1103,9 +1266,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-3-7-sonnet");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1132,9 +1293,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-3-haiku");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1161,9 +1320,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-3-sonnet");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1190,9 +1347,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-3-5-sonnet");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1219,9 +1374,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-sonnet-4");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1438,9 +1591,7 @@ mod tests {
                 InferenceProvider::Anthropic.to_string()
             );
             assert_eq!(bedrock_model.model, "claude-3-sonnet");
-            let Version::Date { date, .. } =
-                bedrock_model.version.as_ref().unwrap()
-            else {
+            let Version::Date { date, .. } = &bedrock_model.version else {
                 panic!("Expected date version");
             };
             let expected_dt: chrono::DateTime<chrono::Utc> =
@@ -1465,7 +1616,7 @@ mod tests {
             assert_eq!(bedrock_model.geo, Some("eu".to_string()));
             assert_eq!(bedrock_model.provider, "amazon");
             assert_eq!(bedrock_model.model, "titan-embed-text");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1864,7 +2015,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "mistral");
             assert_eq!(bedrock_model.model, "mistral-7b-instruct");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v0:2");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1881,7 +2032,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "mistral");
             assert_eq!(bedrock_model.model, "mistral-large-2402");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
         } else {
             panic!("Expected Bedrock ModelId with Mistral provider");
@@ -1900,7 +2051,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "cohere");
             assert_eq!(bedrock_model.model, "command-text");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v14");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1917,7 +2068,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "cohere");
             assert_eq!(bedrock_model.model, "command-r");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1937,7 +2088,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "stability");
             assert_eq!(bedrock_model.model, "stable-diffusion-xl");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1957,7 +2108,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "amazon");
             assert_eq!(bedrock_model.model, "nova-pro");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -1974,7 +2125,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "amazon");
             assert_eq!(bedrock_model.model, "nova-lite");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
         } else {
             panic!("Expected Bedrock ModelId with Amazon provider");
@@ -1993,7 +2144,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "meta");
             assert_eq!(bedrock_model.model, "llama3-1-70b-instruct");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {
@@ -2010,7 +2161,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "meta");
             assert_eq!(bedrock_model.model, "llama3-1-405b-instruct");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
         } else {
             panic!("Expected Bedrock ModelId with Meta provider");
@@ -2031,7 +2182,7 @@ mod tests {
             assert_eq!(bedrock_model.geo, Some("provider".to_string()));
             assert_eq!(bedrock_model.provider, "model");
             assert_eq!(bedrock_model.model, "name.with.dots");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
         } else {
             panic!("Expected Bedrock ModelId");
@@ -2047,7 +2198,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "provider");
             assert_eq!(bedrock_model.model, "model");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v2:1");
         } else {
             panic!("Expected Bedrock ModelId");
@@ -2063,7 +2214,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "provider-name");
             assert_eq!(bedrock_model.model, "model");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
         } else {
             panic!("Expected Bedrock ModelId");
@@ -2094,7 +2245,7 @@ mod tests {
         if let Ok(ModelId::Bedrock(bedrock_model)) = &result {
             assert_eq!(bedrock_model.provider, "provider");
             assert_eq!(bedrock_model.model, "model");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1");
         } else {
             panic!("Expected Bedrock ModelId");
@@ -2142,7 +2293,7 @@ mod tests {
             assert_eq!(bedrock_model.geo, Some("eu-west-1".to_string()));
             assert_eq!(bedrock_model.provider, "mistral");
             assert_eq!(bedrock_model.model, "mistral-large-2402");
-            assert_eq!(bedrock_model.version, None);
+            assert!(matches!(bedrock_model.version, Version::ImplicitLatest));
             assert_eq!(bedrock_model.bedrock_internal_version, "v1:0");
             assert_eq!(result.as_ref().unwrap().to_string(), model_id_str);
         } else {

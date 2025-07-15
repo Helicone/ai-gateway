@@ -327,7 +327,6 @@ impl Dispatcher {
             crate::types::body::BodyReader,
             oneshot::Receiver<()>,
         ) = if mapper_ctx.is_stream {
-            tracing::debug!(method = %method, target_url = %target_url, "dispatching stream request");
             dispatch_stream_with_retry(
                 &self.app_state,
                 request_builder,
@@ -339,7 +338,6 @@ impl Dispatcher {
             )
             .await?
         } else {
-            tracing::debug!(method = %method, target_url = %target_url, "dispatching sync request");
             self.dispatch_sync_with_retry(
                 request_builder,
                 req_body_bytes.clone(),
@@ -349,6 +347,13 @@ impl Dispatcher {
             .instrument(info_span!("dispatch_sync"))
             .await?
         };
+        tracing::info!(
+            method = %method,
+            target_url = %target_url,
+            is_stream = %mapper_ctx.is_stream,
+            response_status = %client_response.status(),
+            "proxied request"
+        );
         let provider_request_id = {
             let headers = client_response.headers_mut();
             headers.remove(http::header::CONTENT_LENGTH);

@@ -65,33 +65,23 @@ impl Config {
                 ModelName,
             > = router_providers
                 .iter()
-                .flat_map(|provider| &self.providers[provider].models)
-                .cloned()
+                .flat_map(|provider| {
+                    self.providers[provider]
+                        .models
+                        .iter()
+                        .map(|m| m.as_model_name())
+                })
                 .collect();
 
             // For each provider this router might route to
             for target_provider in &router_providers {
                 let target_provider_config = &self.providers[target_provider];
 
-                let target_models =
-                    target_provider_config
-                        .models
-                        .iter()
-                        .map(|m| {
-                            ModelId::from_str_and_provider(
-                                target_provider.clone(),
-                                m.as_ref(),
-                            )
-                            .map_err(|_| {
-                                ModelMappingValidationError::ModelIdParseError {
-                                    model: m.to_string(),
-                                }
-                            })
-                        })
-                        .collect::<Result<
-                            IndexSet<ModelId>,
-                            ModelMappingValidationError,
-                        >>()?;
+                let target_models = target_provider_config
+                    .models
+                    .iter()
+                    .map(|m| m.clone().with_latest_version())
+                    .collect::<IndexSet<ModelId>>();
 
                 for source_model in &all_models_offered_by_configured_providers
                 {

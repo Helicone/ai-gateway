@@ -24,7 +24,9 @@ use crate::{
     app_state::AppState,
     config::{balance::BalanceConfigInner, router::RouterConfig},
     discover::{
-        model::weighted_key::WeightedKey as ModelWeightedKey,
+        model::{
+            key::Key as ModelKey, weighted_key::WeightedKey as ModelWeightedKey,
+        },
         provider::{
             key::Key as ProviderKey,
             weighted_key::WeightedKey as ProviderWeightedKey,
@@ -58,7 +60,8 @@ pub type RateLimitMonitorMap =
 pub enum ProviderRateLimitMonitor {
     ProviderWeighted(ProviderMonitorInner<ProviderWeightedKey>),
     ModelWeighted(ProviderMonitorInner<ModelWeightedKey>),
-    P2C(ProviderMonitorInner<ProviderKey>),
+    ProviderLatency(ProviderMonitorInner<ProviderKey>),
+    ModelLatency(ProviderMonitorInner<ModelKey>),
 }
 
 impl ProviderRateLimitMonitor {
@@ -90,13 +93,27 @@ impl ProviderRateLimitMonitor {
         ))
     }
 
-    fn p2c(
+    fn provider_latency(
         tx: Sender<Change<ProviderKey, DispatcherService>>,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
         app_state: AppState,
     ) -> Self {
-        Self::P2C(ProviderMonitorInner::new(
+        Self::ProviderLatency(ProviderMonitorInner::new(
+            tx,
+            router_id,
+            router_config,
+            app_state,
+        ))
+    }
+
+    fn model_latency(
+        tx: Sender<Change<ModelKey, DispatcherService>>,
+        router_id: RouterId,
+        router_config: Arc<RouterConfig>,
+        app_state: AppState,
+    ) -> Self {
+        Self::ModelLatency(ProviderMonitorInner::new(
             tx,
             router_id,
             router_config,
@@ -385,11 +402,47 @@ impl ProviderMonitorInner<ProviderWeightedKey> {
 }
 
 impl ProviderMonitorInner<ModelWeightedKey> {
-    fn create_key_for_endpoint(
+    fn create_model_weighted_key(
         &self,
-        _api_endpoint: &ApiEndpoint,
+        event: &RateLimitEvent,
     ) -> Result<ModelWeightedKey, InternalError> {
-        todo!()
+        let Some(model_id) = event.model_id.clone() else {
+            tracing::error!(
+                router_id = ?self.router_id,
+                api_endpoint = ?event.api_endpoint,
+                "No model id found in rate limit event"
+            );
+            return Err(InternalError::Internal);
+        };
+        let endpoint_type = event.api_endpoint.endpoint_type();
+        let model_config =
+            if let Some(BalanceConfigInner::ModelWeighted { models }) =
+                self.router_config.load_balance.0.get(&endpoint_type)
+            {
+                models.iter().find(|m| m.model == model_id)
+            } else {
+                tracing::error!(
+                    router_id = ?self.router_id,
+                    endpoint_type = ?endpoint_type,
+                    "No balance config found for endpoint type"
+                );
+                return Err(InternalError::Internal);
+            };
+        let weight = model_config
+            .ok_or_else(|| {
+                tracing::error!(
+                    router_id = ?self.router_id,
+                    endpoint_type = ?endpoint_type,
+                    "No model config found for endpoint type"
+                );
+                InternalError::Internal
+            })?
+            .weight;
+
+        let weight = Weight::from(
+            weight.to_f64().ok_or_else(|| InternalError::Internal)?,
+        );
+        Ok(ModelWeightedKey::new(model_id, endpoint_type, weight))
     }
 
     async fn monitor(
@@ -408,7 +461,124 @@ impl ProviderMonitorInner<ModelWeightedKey> {
             tokio::select! {
                 // Handle incoming rate limit events
                 Some(event) = rx.recv() => {
-                    let key = self.create_key_for_endpoint(&event.api_endpoint)?;
+                    let key = self.create_model_weighted_key(&event)?;
+                    if let std::collections::hash_map::Entry::Vacant(e) = rate_limited_providers.entry(key.clone()) {
+                        debug!(
+                            provider = ?event.api_endpoint.provider(),
+                            api_endpoint = ?event.api_endpoint,
+                            router_id = ?self.router_id,
+                            "Removing rate-limited provider from Weighted balancer"
+                        );
+
+                        if let Err(e) = self.tx.send(Change::Remove(key.clone())).await {
+                            error!(error = ?e, "Failed to send remove event for rate-limited provider");
+                        }
+                        e.insert(Instant::now());
+
+                        let duration = Duration::from_secs(
+                            event.retry_after_seconds.unwrap_or(DEFAULT_WAIT_SECONDS)
+                        ) + RATE_LIMIT_BUFFER_SECONDS;
+                        info!(
+                            provider = ?event.api_endpoint.provider(),
+                            endpoint_type = ?event.api_endpoint.endpoint_type(),
+                            api_endpoint = ?event.api_endpoint,
+                            router_id = ?self.router_id,
+                            duration_secs = duration.as_secs(),
+                            "Scheduled provider re-addition"
+                        );
+
+                        let restore = ProviderRestore {
+                            key: Some(key),
+                            api_endpoint: event.api_endpoint.clone(),
+                            timer: tokio::time::sleep(duration),
+                        };
+                        pending_restores.push(restore);
+                    } else {
+                        info!(
+                            provider = ?event.api_endpoint.provider(),
+                            endpoint = ?event.api_endpoint.endpoint_type(),
+                            "Provider already rate-limited, ignoring duplicate event"
+                        );
+                    }
+                }
+                // Handle provider restoration when rate limit expires
+                Some((key, api_endpoint)) = pending_restores.next() => {
+                    info!(
+                        provider = ?api_endpoint.provider(),
+                        endpoint = ?api_endpoint.endpoint_type(),
+                        api_endpoint = ?api_endpoint,
+                        router_id = ?self.router_id,
+                        "Re-adding provider to Weighted balancer after rate limit expired"
+                    );
+
+                    let service = Dispatcher::new(
+                        self.app_state.clone(),
+                        &self.router_id,
+                        &self.router_config,
+                        api_endpoint.provider(),
+                    )
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            error = ?e,
+                            provider = ?api_endpoint.provider(),
+                            api_endpoint = ?api_endpoint,
+                            router_id = ?self.router_id,
+                            "Failed to create dispatcher for recovered provider"
+                        );
+                    })?;
+                    self.tx.send(Change::Insert(key.clone(), service))
+                        .await
+                        .map_err(|e| {
+                            error!(error = ?e, router_id = ?self.router_id, "Failed to send insert event for recovered provider");
+                            RuntimeError::ChannelSendFailed
+                        })?;
+                    rate_limited_providers.remove(&key);
+                }
+                // Channel closed - shutdown gracefully
+                else => {
+                    info!("Rate limit channel closed, shutting down Weighted monitor");
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ProviderMonitorInner<ModelKey> {
+    fn create_model_latency_key(
+        &self,
+        event: &RateLimitEvent,
+    ) -> Result<ModelKey, InternalError> {
+        let Some(model_id) = event.model_id.clone() else {
+            tracing::error!(
+                router_id = ?self.router_id,
+                api_endpoint = ?event.api_endpoint,
+                "No model id found in rate limit event"
+            );
+            return Err(InternalError::Internal);
+        };
+        let endpoint_type = event.api_endpoint.endpoint_type();
+        Ok(ModelKey::new(model_id, endpoint_type))
+    }
+
+    async fn monitor(
+        self,
+        mut rx: Receiver<RateLimitEvent>,
+    ) -> Result<(), RuntimeError> {
+        info!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
+
+        let mut rate_limited_providers: HashMap<ModelKey, Instant> =
+            HashMap::default();
+        let mut pending_restores: FuturesUnordered<ProviderRestore<ModelKey>> =
+            FuturesUnordered::new();
+
+        loop {
+            tokio::select! {
+                // Handle incoming rate limit events
+                Some(event) = rx.recv() => {
+                    let key = self.create_model_latency_key(&event)?;
                     if let std::collections::hash_map::Entry::Vacant(e) = rate_limited_providers.entry(key.clone()) {
                         debug!(
                             provider = ?event.api_endpoint.provider(),
@@ -542,7 +712,10 @@ impl RateLimitMonitor {
                             ProviderRateLimitMonitor::ModelWeighted(inner) => {
                                 self.tasks.spawn(inner.monitor(rx));
                             },
-                            ProviderRateLimitMonitor::P2C(inner) => {
+                            ProviderRateLimitMonitor::ProviderLatency(inner) => {
+                                self.tasks.spawn(inner.monitor(rx));
+                            },
+                            ProviderRateLimitMonitor::ModelLatency(inner) => {
                                 self.tasks.spawn(inner.monitor(rx));
                             },
                         }
@@ -611,7 +784,7 @@ impl AppState {
         );
     }
 
-    pub async fn add_p2c_router_rate_limit_monitor(
+    pub async fn add_provider_latency_router_rate_limit_monitor(
         &self,
         router_id: RouterId,
         router_config: Arc<RouterConfig>,
@@ -619,7 +792,24 @@ impl AppState {
     ) {
         self.0.rate_limit_monitors.write().await.insert(
             router_id.clone(),
-            ProviderRateLimitMonitor::p2c(
+            ProviderRateLimitMonitor::provider_latency(
+                tx,
+                router_id,
+                router_config,
+                self.clone(),
+            ),
+        );
+    }
+
+    pub async fn add_model_latency_router_rate_limit_monitor(
+        &self,
+        router_id: RouterId,
+        router_config: Arc<RouterConfig>,
+        tx: Sender<Change<ModelKey, DispatcherService>>,
+    ) {
+        self.0.rate_limit_monitors.write().await.insert(
+            router_id.clone(),
+            ProviderRateLimitMonitor::model_latency(
                 tx,
                 router_id,
                 router_config,

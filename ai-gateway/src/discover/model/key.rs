@@ -23,7 +23,10 @@ use crate::{
     dispatcher::{Dispatcher, DispatcherService},
     endpoints::EndpointType,
     error::init::InitError,
-    types::{model_id::ModelId, router::RouterId},
+    types::{
+        model_id::{ModelId, ModelName},
+        router::RouterId,
+    },
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -42,6 +45,12 @@ impl Key {
     }
 }
 
+impl From<Key> for ModelName<'_> {
+    fn from(key: Key) -> Self {
+        key.model_id.as_model_name_owned()
+    }
+}
+
 impl DispatcherDiscovery<Key> {
     pub async fn new_model(
         app_state: &AppState,
@@ -54,25 +63,19 @@ impl DispatcherDiscovery<Key> {
         for (endpoint_type, balance_config) in
             router_config.load_balance.as_ref()
         {
-            let BalanceConfigInner::ModelWeighted { models } = balance_config
+            let BalanceConfigInner::ModelLatency { models } = balance_config
             else {
                 return Err(InitError::InvalidBalancer(
                     "incorrect dispatch discovery type used with model \
-                     weighted config"
+                     latency config"
                         .to_string(),
                 ));
             };
-            for weighted_model in models {
-                let key =
-                    Key::new(weighted_model.model.clone(), *endpoint_type);
-                let provider = weighted_model
-                    .model
-                    .inference_provider()
-                    .ok_or_else(|| {
-                        InitError::ModelIdNotRecognized(
-                            weighted_model.model.to_string(),
-                        )
-                    })?;
+            for model in models {
+                let key = Key::new(model.clone(), *endpoint_type);
+                let provider = model.inference_provider().ok_or_else(|| {
+                    InitError::ModelIdNotRecognized(model.to_string())
+                })?;
                 let dispatcher = Dispatcher::new(
                     app_state.clone(),
                     router_id,

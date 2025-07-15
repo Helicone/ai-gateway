@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use ai_gateway::control_plane::types::{MessageTypeRX, Update};
+use ai_gateway::{
+    control_plane::types::{MessageTypeRX, Update},
+    types::org::OrgId,
+};
 use axum::{
     Json,
     extract::{
@@ -93,12 +96,12 @@ fn mock_auth() -> ai_gateway::control_plane::types::Config {
     ai_gateway::control_plane::types::Config {
         auth: ai_gateway::control_plane::types::AuthData {
             user_id: user_id.clone(),
-            organization_id,
+            organization_id: organization_id.clone(),
         },
         keys: vec![ai_gateway::control_plane::types::Key {
             key_hash: key_hash,
             owner_id: user_id,
-            organization_id,
+            organization_id: OrgId::try_from(organization_id.as_str()).unwrap(),
         }],
         router_id: "my-router".to_string(),
         router_config: "{}".to_string(),

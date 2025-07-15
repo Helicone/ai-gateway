@@ -36,7 +36,7 @@ use crate::{
     utils::handle_error::{ErrorHandler, ErrorHandlerLayer},
 };
 
-const BUFFER_SIZE: usize = 256;
+pub(crate) const MIDDLEWARE_BUFFER_SIZE: usize = 256;
 
 pub type UnifiedApiService =
     RateLimitService<CacheService<ErrorHandler<unified_api::Service>>>;
@@ -63,8 +63,6 @@ impl MetaRouter {
             DeploymentTarget::Cloud => Self::cloud(app_state.clone()).await,
         }?;
         let service_stack = ServiceBuilder::new()
-            // NOTE: not sure if there is perf impact from Auth layer coming
-            // before buffer layer, but required due to Clone bound.
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(RouterDetailsLayer::new())
             .layer(AsyncRequireAuthorizationLayer::new(
@@ -74,7 +72,7 @@ impl MetaRouter {
             .layer(CacheLayer::global(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .map_err(crate::error::internal::InternalError::BufferError)
-            .layer(BufferLayer::new(BUFFER_SIZE))
+            .layer(BufferLayer::new(MIDDLEWARE_BUFFER_SIZE))
             .service(meta_router);
         Ok(BoxCloneService::new(service_stack))
     }

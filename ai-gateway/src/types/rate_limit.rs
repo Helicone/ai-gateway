@@ -11,7 +11,10 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 
-use crate::{endpoints::ApiEndpoint, types::router::RouterId};
+use crate::{
+    endpoints::ApiEndpoint,
+    types::{model_id::ModelId, router::RouterId},
+};
 
 pub type RateLimitEventSenders =
     RwLock<HashMap<RouterId, Sender<RateLimitEvent>>>;
@@ -21,6 +24,7 @@ pub type RateLimitEventReceivers =
 #[derive(Debug, Clone)]
 pub struct RateLimitEvent {
     pub api_endpoint: ApiEndpoint,
+    pub model_id: Option<ModelId>,
     pub retry_after_seconds: Option<u64>,
 }
 
@@ -32,7 +36,16 @@ impl RateLimitEvent {
     ) -> Self {
         Self {
             api_endpoint,
+            model_id: None,
             retry_after_seconds,
+        }
+    }
+
+    #[must_use]
+    pub fn with_model_id(self, model_id: ModelId) -> Self {
+        Self {
+            model_id: Some(model_id),
+            ..self
         }
     }
 }
