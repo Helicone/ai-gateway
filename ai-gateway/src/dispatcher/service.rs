@@ -310,24 +310,14 @@ impl Dispatcher {
 
         if self.app_state.0.config.deployment_target == DeploymentTarget::Cloud
         {
-            tracing::info!("setting provider key to auth header for cloud");
             if let Some(auth_ctx) = auth_ctx {
-                tracing::info!("auth_ctx: {:?}", auth_ctx);
                 let org_id = auth_ctx.org_id;
-                tracing::info!("org_id: {:?}", org_id);
                 let provider_key = self
                     .app_state
                     .0
                     .provider_keys
                     .get_provider_key(&self.provider, Some(&org_id))
                     .await;
-                tracing::info!("provider key: {:?}", provider_key);
-
-                tracing::debug!(
-                    "setting provider key to auth header for cloud, org_id: \
-                     {:?}",
-                    org_id
-                );
 
                 if let Some(ProviderKey::Secret(key)) = provider_key
                     && key.expose() != ""
