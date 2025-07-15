@@ -25,7 +25,7 @@ use tower_http::{
 use tracing::{Level, info};
 
 use crate::{
-    app_state::{AppState, InnerAppState},
+    app_state::{self, AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
     config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
@@ -40,7 +40,7 @@ use crate::{
     middleware::response_headers::ResponseHeaderLayer,
     router::meta::MetaRouter,
     store::{connect, minio::BaseMinioClient, router::RouterStore},
-    types::provider::ProviderKeys,
+    types::provider::{ProviderKeyMap, ProviderKeys},
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
         health_check::HealthCheckLayer, timer::TimerLayer,
@@ -220,15 +220,6 @@ impl App {
             })
             .transpose()?;
 
-        let direct_proxy_api_keys =
-            ProviderKeys::from_env_direct_proxy(&config.providers)
-                .inspect_err(|e| {
-                    tracing::error!(
-                        error = %e,
-                        "Error getting provider keys from direct proxy"
-                    );
-                })?;
-
         let cache_manager = setup_cache(&config, metrics.clone())?;
 
         let router_api_keys = if config.deployment_target
@@ -242,6 +233,7 @@ impl App {
         } else {
             None
         };
+        let provider_keys = ProviderKeys::new(&config);
 
         let app_state = AppState(Arc::new(InnerAppState {
             config,
@@ -252,10 +244,9 @@ impl App {
             control_plane_state: Arc::new(RwLock::new(
                 ControlPlaneState::default(),
             )),
-            provider_keys: RwLock::new(HashMap::default()),
+            provider_keys,
             global_rate_limit,
             router_rate_limits: RwLock::new(HashMap::default()),
-            direct_proxy_api_keys,
             metrics,
             endpoint_metrics,
             health_monitors: health_monitor,

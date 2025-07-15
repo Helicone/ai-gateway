@@ -4,12 +4,14 @@ use compact_str::CompactString;
 use rustc_hash::FxHashMap as HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use strum::{EnumIter, IntoEnumIterator};
+use tokio::sync::RwLock;
 
 use super::secret::Secret;
 use crate::{
-    config::{providers::ProvidersConfig, router::RouterConfig},
+    config::{Config, DeploymentTarget, providers::ProvidersConfig},
     endpoints::ApiEndpoint,
     error::provider::ProviderError,
+    types::org::OrgId,
 };
 
 #[derive(
@@ -117,6 +119,19 @@ impl InferenceProvider {
             }
         }
     }
+
+    pub fn from_helicone_provider_name(
+        provider_name: &str,
+    ) -> Result<Self, ProviderError> {
+        match provider_name {
+            "OpenAI" => Ok(InferenceProvider::OpenAI),
+            "Anthropic" => Ok(InferenceProvider::Anthropic),
+            "AWS Bedrock" => Ok(InferenceProvider::Bedrock),
+            "Ollama" => Ok(InferenceProvider::Ollama),
+            "Google AI (Gemini)" => Ok(InferenceProvider::GoogleGemini),
+            _ => Err(ProviderError::InvalidProviderName(provider_name.into())),
+        }
+    }
 }
 
 impl FromStr for InferenceProvider {
@@ -216,10 +231,73 @@ impl ProviderKey {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ProviderKeys(Arc<HashMap<InferenceProvider, ProviderKey>>);
+#[derive(Debug)]
+pub enum ProviderKeys {
+    Cloud(RwLock<HashMap<OrgId, ProviderKeyMap>>),
+    Sidecar(ProviderKeyMap),
+}
 
-impl std::ops::Deref for ProviderKeys {
+impl ProviderKeys {
+    pub fn new(config: &Config) -> Self {
+        if config.deployment_target == DeploymentTarget::Cloud {
+            Self::Cloud(RwLock::new(HashMap::default()))
+        } else {
+            Self::Sidecar(ProviderKeyMap::from_env(&config.providers))
+        }
+    }
+
+    pub async fn set_all_provider_keys(
+        &self,
+        provider_keys: HashMap<OrgId, ProviderKeyMap>,
+    ) {
+        match self {
+            ProviderKeys::Cloud(keys) => {
+                let mut keys = keys.write().await;
+                *keys = provider_keys;
+            }
+            ProviderKeys::Sidecar(_) => {}
+        }
+    }
+
+    pub async fn set_org_provider_keys(
+        &self,
+        org_id: OrgId,
+        provider_keys: ProviderKeyMap,
+    ) {
+        match self {
+            ProviderKeys::Cloud(keys) => {
+                let mut keys = keys.write().await;
+                keys.insert(org_id, provider_keys);
+            }
+            ProviderKeys::Sidecar(_) => {}
+        }
+    }
+
+    pub async fn get_provider_key(
+        &self,
+        provider: &InferenceProvider,
+        org_id: Option<&OrgId>,
+    ) -> Option<ProviderKey> {
+        match self {
+            ProviderKeys::Cloud(keys) => {
+                if let Some(org_id) = org_id {
+                    let keys = keys.read().await;
+                    keys.get(org_id)
+                        .and_then(|keys| keys.get(provider))
+                        .cloned()
+                } else {
+                    None
+                }
+            }
+            ProviderKeys::Sidecar(keys) => keys.get(provider).cloned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderKeyMap(Arc<HashMap<InferenceProvider, ProviderKey>>);
+
+impl std::ops::Deref for ProviderKeyMap {
     type Target = HashMap<InferenceProvider, ProviderKey>;
 
     fn deref(&self) -> &Self::Target {
@@ -227,15 +305,19 @@ impl std::ops::Deref for ProviderKeys {
     }
 }
 
-impl ProviderKeys {
-    pub fn from_env(router_config: &Arc<RouterConfig>) -> Self {
-        tracing::debug!("Discovering provider keys");
-        let balance_config = &router_config.load_balance;
-        let mut keys = HashMap::default();
-        let providers = balance_config.providers();
+impl ProviderKeyMap {
+    pub fn from_db(
+        provider_keys: HashMap<InferenceProvider, ProviderKey>,
+    ) -> Self {
+        Self(Arc::new(provider_keys))
+    }
 
-        for provider in providers {
-            if provider == InferenceProvider::Ollama {
+    pub fn from_env(providers_config: &ProvidersConfig) -> Self {
+        tracing::debug!("Discovering provider keys");
+        let mut keys = HashMap::default();
+
+        for (provider, _config) in providers_config.iter() {
+            if provider == &InferenceProvider::Ollama {
                 // ollama doesn't require an API key
                 continue;
             }
@@ -245,22 +327,6 @@ impl ProviderKeys {
         }
 
         Self(Arc::new(keys))
-    }
-
-    pub fn from_env_direct_proxy(
-        providers_config: &ProvidersConfig,
-    ) -> Result<Self, ProviderError> {
-        let keys = providers_config
-            .iter()
-            .filter_map(|(provider, _)| {
-                ProviderKey::from_env(provider).map(|key| {
-                    tracing::debug!(provider = %provider, "got llm provider key");
-                    (provider.clone(), key)
-                })
-            })
-            .collect();
-
-        Ok(Self(Arc::new(keys)))
     }
 }
 

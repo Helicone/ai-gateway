@@ -9,4 +9,6 @@ pub enum ProviderError {
     ProviderNotConfigured(InferenceProvider),
     /// Provider keys not found for router: {0}
     ProviderKeysNotFound(RouterId),
+    /// Invalid provider name: {0}
+    InvalidProviderName(String),
 }

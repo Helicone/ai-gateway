@@ -7,7 +7,6 @@ use crate::{
     config::router::RouterConfig,
     types::{
         extensions::{AuthContext, RequestContext},
-        provider::ProviderKeys,
         request::Request,
         response::Response,
     },
@@ -19,19 +18,13 @@ pub struct Service<S> {
     /// If `None`, this service is for a direct proxy.
     /// If `Some`, this service is for a load balanced router.
     router_config: Option<Arc<RouterConfig>>,
-    provider_keys: ProviderKeys,
 }
 
 impl<S> Service<S> {
-    pub fn new(
-        inner: S,
-        router_config: Option<Arc<RouterConfig>>,
-        provider_keys: ProviderKeys,
-    ) -> Self {
+    pub fn new(inner: S, router_config: Option<Arc<RouterConfig>>) -> Self {
         Self {
             inner,
             router_config,
-            provider_keys,
         }
     }
 }
@@ -56,11 +49,9 @@ where
     #[tracing::instrument(level = "debug", name = "request_context", skip_all)]
     fn call(&mut self, mut req: Request) -> Self::Future {
         let router_config = self.router_config.clone();
-        let provider_api_keys = self.provider_keys.clone();
         let auth_context = req.extensions_mut().remove::<AuthContext>();
         let req_ctx = RequestContext {
             router_config,
-            provider_api_keys,
             auth_context,
         };
         req.extensions_mut().insert(Arc::new(req_ctx));
@@ -71,26 +62,20 @@ where
 #[derive(Debug, Clone)]
 pub struct Layer {
     router_config: Option<Arc<RouterConfig>>,
-    provider_keys: ProviderKeys,
 }
 
 impl Layer {
     #[must_use]
-    pub fn for_router(
-        router_config: Arc<RouterConfig>,
-        provider_keys: ProviderKeys,
-    ) -> Self {
+    pub fn for_router(router_config: Arc<RouterConfig>) -> Self {
         Self {
             router_config: Some(router_config),
-            provider_keys,
         }
     }
 
     #[must_use]
-    pub fn for_direct_proxy(provider_keys: ProviderKeys) -> Self {
+    pub fn for_direct_proxy() -> Self {
         Self {
             router_config: None,
-            provider_keys,
         }
     }
 }
@@ -99,10 +84,6 @@ impl<S> tower::Layer<S> for Layer {
     type Service = Service<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        Service::new(
-            inner,
-            self.router_config.clone(),
-            self.provider_keys.clone(),
-        )
+        Service::new(inner, self.router_config.clone())
     }
 }

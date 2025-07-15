@@ -15,6 +15,8 @@ pub enum AuthError {
     MissingAuthorizationHeader,
     /// Invalid credentials
     InvalidCredentials,
+    /// Provider key not found
+    ProviderKeyNotFound,
 }
 
 impl IntoResponse for AuthError {
@@ -44,6 +46,18 @@ impl IntoResponse for AuthError {
                 }),
             )
                 .into_response(),
+            Self::ProviderKeyNotFound => (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: ErrorDetails {
+                        message: Self::ProviderKeyNotFound.to_string(),
+                        r#type: Some(INVALID_REQUEST_ERROR_TYPE.to_string()),
+                        param: None,
+                        code: Some("provider_key_not_found".to_string()),
+                    },
+                }),
+            )
+                .into_response(),
         }
     }
 }
@@ -57,6 +71,8 @@ pub enum AuthErrorMetric {
     MissingAuthorizationHeader,
     /// Invalid credentials
     InvalidCredentials,
+    /// Provider key not found
+    ProviderKeyNotFound,
 }
 
 impl From<&AuthError> for AuthErrorMetric {
@@ -66,6 +82,7 @@ impl From<&AuthError> for AuthErrorMetric {
                 Self::MissingAuthorizationHeader
             }
             AuthError::InvalidCredentials => Self::InvalidCredentials,
+            AuthError::ProviderKeyNotFound => Self::ProviderKeyNotFound,
         }
     }
 }

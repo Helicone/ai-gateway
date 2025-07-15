@@ -91,8 +91,9 @@ impl MetaRouter {
             .layer(RateLimitLayer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
-            .service(unified_api::Service::new(&app_state)?);
-        let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
+            .service(unified_api::Service::new(&app_state).await?);
+        let direct_proxies =
+            DirectProxiesWithoutMapper::new(&app_state).await?;
 
         let meta_router = Self {
             dynamic_router,
@@ -111,8 +112,9 @@ impl MetaRouter {
             .layer(RateLimitLayer::unified_api(&app_state)?)
             .layer(CacheLayer::unified_api(&app_state))
             .layer(ErrorHandlerLayer::new(app_state.clone()))
-            .service(unified_api::Service::new(&app_state)?);
-        let direct_proxies = DirectProxiesWithoutMapper::new(&app_state)?;
+            .service(unified_api::Service::new(&app_state).await?);
+        let direct_proxies =
+            DirectProxiesWithoutMapper::new(&app_state).await?;
         let meta_router = Self {
             dynamic_router,
             unified_api,

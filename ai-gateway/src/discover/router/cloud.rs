@@ -74,6 +74,13 @@ impl CloudDiscovery {
             .set_router_organization_map(router_organisation_map)
             .await;
 
+        let provider_keys = router_store.get_all_provider_keys().await?;
+        app_state
+            .0
+            .provider_keys
+            .set_all_provider_keys(provider_keys)
+            .await;
+
         tracing::debug!("Created config router discovery");
         Ok(Self {
             initial: ServiceMap::new(service_map),

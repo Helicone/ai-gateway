@@ -32,8 +32,8 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(app_state: &AppState) -> Result<Self, InitError> {
-        let direct_proxies = DirectProxies::new(app_state)?;
+    pub async fn new(app_state: &AppState) -> Result<Self, InitError> {
+        let direct_proxies = DirectProxies::new(app_state).await?;
         Ok(Self { direct_proxies })
     }
 }

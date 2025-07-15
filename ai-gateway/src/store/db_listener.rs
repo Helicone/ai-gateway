@@ -147,6 +147,19 @@ impl DatabaseListener {
             .set_router_organization(router_hash.clone(), organization_id)
             .await;
 
+        let router_store = app_state
+            .0
+            .router_store
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("router_store"))?;
+        let provider_keys =
+            router_store.get_org_provider_keys(organization_id).await?;
+        app_state
+            .0
+            .provider_keys
+            .set_org_provider_keys(organization_id, provider_keys)
+            .await;
+
         Ok(())
     }
 

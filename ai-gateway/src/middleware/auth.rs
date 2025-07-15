@@ -149,6 +149,9 @@ where
                         | AuthError::InvalidCredentials => {
                             app_state.0.metrics.auth_rejections.add(1, &[]);
                         }
+                        AuthError::ProviderKeyNotFound => {
+                            app_state.0.metrics.auth_rejections.add(1, &[]);
+                        }
                     }
                     Err(e.into_response())
                 }

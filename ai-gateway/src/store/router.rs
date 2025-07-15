@@ -1,11 +1,18 @@
 use std::collections::HashSet;
 
+use rustc_hash::FxHashMap;
 use sqlx::PgPool;
 use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::{
-    control_plane::types::Key, error::init::InitError, types::org::OrgId,
+    control_plane::types::Key,
+    error::{init::InitError, provider::ProviderError},
+    types::{
+        org::OrgId,
+        provider::{InferenceProvider, ProviderKey, ProviderKeyMap},
+        secret::Secret,
+    },
 };
 
 #[derive(Debug)]
@@ -25,6 +32,14 @@ pub struct DBApiKey {
     pub key_hash: String,
     pub owner_id: Uuid,
     pub organization_id: Uuid,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct DBProviderKey {
+    pub provider_name: String,
+    pub decrypted_provider_key: String,
+    pub org_id: Uuid,
+    pub config: serde_json::Value,
 }
 
 impl RouterStore {
@@ -110,5 +125,90 @@ impl RouterStore {
             .collect();
 
         Ok(keys)
+    }
+
+    pub async fn get_all_provider_keys(
+        &self,
+    ) -> Result<FxHashMap<OrgId, ProviderKeyMap>, InitError> {
+        let res = sqlx::query_as::<_, DBProviderKey>(
+            "SELECT decrypted_provider_keys.provider_name, \
+             decrypted_provider_keys.decrypted_provider_key, \
+             decrypted_provider_keys.org_id, decrypted_provider_keys.config \
+             FROM decrypted_provider_keys WHERE soft_delete = false",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get all provider keys");
+            InitError::DatabaseConnection(e)
+        })?;
+        let mut provider_keys: FxHashMap<
+            OrgId,
+            FxHashMap<InferenceProvider, ProviderKey>,
+        > = FxHashMap::default();
+        for key in res {
+            let provider_key =
+                ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
+            let inference_provider =
+                InferenceProvider::from_helicone_provider_name(
+                    &key.provider_name,
+                )
+                .map_err(|e| {
+                    error!(error = %e, "failed to get inference provider");
+                    InitError::ProviderError(
+                        ProviderError::InvalidProviderName(key.provider_name),
+                    )
+                })?;
+            let existing_provider_keys = provider_keys
+                .entry(OrgId::new(key.org_id))
+                .or_insert_with(|| FxHashMap::default());
+            existing_provider_keys.insert(inference_provider, provider_key);
+        }
+
+        let mut final_provider_keys = FxHashMap::default();
+        for (org_id, provider_keys) in provider_keys.drain() {
+            let provider_key_map =
+                ProviderKeyMap::from_db(provider_keys.clone());
+            final_provider_keys.insert(org_id, provider_key_map);
+        }
+
+        Ok(final_provider_keys)
+    }
+
+    pub async fn get_org_provider_keys(
+        &self,
+        org_id: OrgId,
+    ) -> Result<ProviderKeyMap, InitError> {
+        let res = sqlx::query_as::<_, DBProviderKey>(
+            "SELECT decrypted_provider_keys.provider_name, \
+             decrypted_provider_keys.decrypted_provider_key, \
+             decrypted_provider_keys.org_id, decrypted_provider_keys.config \
+             FROM decrypted_provider_keys WHERE org_id = $1 AND soft_delete = \
+             false",
+        )
+        .bind(org_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get organization provider keys");
+            InitError::DatabaseConnection(e)
+        })?;
+        let mut provider_keys = FxHashMap::default();
+        for key in res {
+            let provider_key =
+                ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
+            let inference_provider =
+                InferenceProvider::from_helicone_provider_name(
+                    &key.provider_name,
+                )
+                .map_err(|e| {
+                    error!(error = %e, "failed to get inference provider");
+                    InitError::ProviderError(
+                        ProviderError::InvalidProviderName(key.provider_name),
+                    )
+                })?;
+            provider_keys.insert(inference_provider, provider_key);
+        }
+        Ok(ProviderKeyMap::from_db(provider_keys))
     }
 }

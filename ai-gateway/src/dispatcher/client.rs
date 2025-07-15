@@ -19,10 +19,7 @@ use crate::{
         api::ApiError, init::InitError, internal::InternalError,
         stream::StreamError,
     },
-    types::{
-        provider::{InferenceProvider, ProviderKey},
-        router::RouterId,
-    },
+    types::provider::{InferenceProvider, ProviderKey},
 };
 
 pub trait ProviderClient {
@@ -75,6 +72,22 @@ impl Client {
         Ok(stream)
     }
 
+    pub(crate) async fn new(
+        app_state: &AppState,
+        inference_provider: InferenceProvider,
+    ) -> Result<Self, InitError> {
+        if inference_provider == InferenceProvider::Ollama {
+            return Self::new_inner(app_state, inference_provider, None);
+        }
+        let api_key = &app_state
+            .0
+            .provider_keys
+            .get_provider_key(&inference_provider, None)
+            .await;
+
+        Self::new_inner(app_state, inference_provider, api_key.as_ref())
+    }
+
     fn new_inner(
         app_state: &AppState,
         inference_provider: InferenceProvider,
@@ -108,49 +121,6 @@ impl Client {
                 Ok(Self::Ollama(OllamaClient::new(app_state, base_client)?))
             }
         }
-    }
-
-    pub(crate) async fn new_for_router(
-        app_state: &AppState,
-        inference_provider: InferenceProvider,
-        router_id: &RouterId,
-    ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
-            return Self::new_inner(app_state, inference_provider, None);
-        }
-        let api_key = &app_state
-            .get_provider_api_key_for_router(router_id, &inference_provider)
-            .await?;
-
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
-    }
-
-    pub(crate) fn new_for_direct_proxy(
-        app_state: &AppState,
-        inference_provider: InferenceProvider,
-    ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
-            return Self::new_inner(app_state, inference_provider, None);
-        }
-        let api_key = &app_state
-            .get_provider_api_key_for_direct_proxy(&inference_provider)?;
-
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
-    }
-
-    pub(crate) fn new_for_unified_api(
-        app_state: &AppState,
-        inference_provider: InferenceProvider,
-    ) -> Result<Self, InitError> {
-        if inference_provider == InferenceProvider::Ollama {
-            return Self::new_inner(app_state, inference_provider, None);
-        }
-        // we're cheating here but this will be changed soon for cloud hosted
-        // version
-        let api_key = &app_state
-            .get_provider_api_key_for_direct_proxy(&inference_provider)?;
-
-        Self::new_inner(app_state, inference_provider, api_key.as_ref())
     }
 }
 

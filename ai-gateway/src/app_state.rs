@@ -26,7 +26,9 @@ use crate::{
     store::{minio::BaseMinioClient, router::RouterStore},
     types::{
         org::OrgId,
-        provider::{InferenceProvider, ProviderKey, ProviderKeys},
+        provider::{
+            InferenceProvider, ProviderKey, ProviderKeyMap, ProviderKeys,
+        },
         rate_limit::{
             RateLimitEvent, RateLimitEventReceivers, RateLimitEventSenders,
         },
@@ -73,8 +75,9 @@ pub struct InnerAppState {
 
     pub control_plane_state: Arc<RwLock<ControlPlaneState>>,
 
-    pub direct_proxy_api_keys: ProviderKeys,
-    pub provider_keys: RwLock<HashMap<RouterId, ProviderKeys>>,
+    // pub direct_proxy_api_keys: ProviderKeys,
+    // pub provider_keys: RwLock<HashMap<RouterId, ProviderKeys>>,
+    pub provider_keys: ProviderKeys,
     pub helicone_api_keys: RwLock<Option<HashSet<Key>>>,
     pub router_organization_map: RwLock<HashMap<RouterId, OrgId>>,
 }
@@ -110,38 +113,39 @@ impl AppState {
         rate_limit_channels.insert(router_id, rate_limit_rx);
     }
 
-    pub async fn add_provider_keys_for_router(
-        &self,
-        router_id: RouterId,
-        router_config: &Arc<RouterConfig>,
-    ) -> ProviderKeys {
-        // This should be the only place we call .provider_keys(), everywhere
-        // else we should use the `router_id` to get the provider keys
-        // from the app state
-        let provider_keys = self.0.config.discover.provider_keys(router_config);
-        let mut provider_keys_map = self.0.provider_keys.write().await;
-        provider_keys_map.insert(router_id, provider_keys.clone());
-        provider_keys
-    }
+    // pub async fn add_provider_keys_for_router(
+    //     &self,
+    //     router_id: RouterId,
+    //     router_config: &Arc<RouterConfig>,
+    // ) -> ProviderKeyMap {
+    //     // This should be the only place we call .provider_keys(), everywhere
+    //     // else we should use the `router_id` to get the provider keys
+    //     // from the app state
+    //     let provider_keys =
+    // self.0.config.discover.provider_keys(router_config);     let mut
+    // provider_keys_map = self.0.provider_keys.write().await;
+    //     provider_keys_map.insert(router_id, provider_keys.clone());
+    //     provider_keys
+    // }
 
-    pub async fn get_provider_api_key_for_router(
-        &self,
-        router_id: &RouterId,
-        provider: &InferenceProvider,
-    ) -> Result<Option<ProviderKey>, ProviderError> {
-        let provider_keys = self.0.provider_keys.read().await;
-        let provider_keys = provider_keys.get(router_id).ok_or_else(|| {
-            ProviderError::ProviderKeysNotFound(router_id.clone())
-        })?;
-        Ok(provider_keys.get(provider).cloned())
-    }
+    // pub async fn get_provider_api_key_for_router(
+    //     &self,
+    //     router_id: &RouterId,
+    //     provider: &InferenceProvider,
+    // ) -> Result<Option<ProviderKey>, ProviderError> {
+    //     let provider_keys = self.0.provider_keys.read().await;
+    //     let provider_keys = provider_keys.get(router_id).ok_or_else(|| {
+    //         ProviderError::ProviderKeysNotFound(router_id.clone())
+    //     })?;
+    //     Ok(provider_keys.get(provider).cloned())
+    // }
 
-    pub fn get_provider_api_key_for_direct_proxy(
-        &self,
-        provider: &InferenceProvider,
-    ) -> Result<Option<ProviderKey>, ProviderError> {
-        Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
-    }
+    // pub fn get_provider_api_key_for_direct_proxy(
+    //     &self,
+    //     provider: &InferenceProvider,
+    // ) -> Result<Option<ProviderKey>, ProviderError> {
+    //     Ok(self.0.direct_proxy_api_keys.get(provider).cloned())
+    // }
 
     pub async fn get_router_tx(
         &self,

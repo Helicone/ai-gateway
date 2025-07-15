@@ -50,10 +50,6 @@ impl Router {
     ) -> Result<Self, InitError> {
         router_config.validate()?;
 
-        let provider_keys = app_state
-            .add_provider_keys_for_router(id.clone(), &router_config)
-            .await;
-
         let mut inner = HashMap::default();
         let rl_layer = rate_limit::Layer::per_router(
             &app_state,
@@ -63,10 +59,8 @@ impl Router {
         .await?;
         let prompt_layer = PromptLayer::new(&app_state)?;
         let cache_layer = CacheLayer::for_router(&app_state, &router_config)?;
-        let request_context_layer = request_context::Layer::for_router(
-            router_config.clone(),
-            provider_keys.clone(),
-        );
+        let request_context_layer =
+            request_context::Layer::for_router(router_config.clone());
         for (endpoint_type, balance_config) in
             router_config.load_balance.as_ref()
         {
