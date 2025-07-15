@@ -3,9 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use derive_more::{AsRef, From, Into};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    model_id::ModelId, org::OrgId, provider::ProviderKeyMap, user::UserId,
-};
+use super::{model_id::ModelId, org::OrgId, user::UserId};
 use crate::{config::router::RouterConfig, types::secret::Secret};
 
 #[derive(Debug, Clone, AsRef, From, Into)]

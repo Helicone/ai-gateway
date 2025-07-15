@@ -238,6 +238,7 @@ pub enum ProviderKeys {
 }
 
 impl ProviderKeys {
+    #[must_use]
     pub fn new(config: &Config) -> Self {
         if config.deployment_target == DeploymentTarget::Cloud {
             Self::Cloud(RwLock::new(HashMap::default()))
@@ -282,9 +283,8 @@ impl ProviderKeys {
             ProviderKeys::Cloud(keys) => {
                 if let Some(org_id) = org_id {
                     let keys = keys.read().await;
-                    keys.get(org_id)
-                        .and_then(|keys| keys.get(provider))
-                        .cloned()
+                    let org_keys = keys.get(org_id);
+                    org_keys.and_then(|keys| keys.get(provider)).cloned()
                 } else {
                     None
                 }
@@ -306,6 +306,7 @@ impl std::ops::Deref for ProviderKeyMap {
 }
 
 impl ProviderKeyMap {
+    #[must_use]
     pub fn from_db(
         provider_keys: HashMap<InferenceProvider, ProviderKey>,
     ) -> Self {
@@ -321,7 +322,7 @@ impl ProviderKeyMap {
                 // ollama doesn't require an API key
                 continue;
             }
-            if let Some(key) = ProviderKey::from_env(&provider) {
+            if let Some(key) = ProviderKey::from_env(provider) {
                 keys.insert(provider.clone(), key);
             }
         }

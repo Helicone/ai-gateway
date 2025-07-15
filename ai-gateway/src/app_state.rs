@@ -12,23 +12,21 @@ use crate::{
     cache::CacheClient,
     config::{
         Config, rate_limit::RateLimiterConfig,
-        response_headers::ResponseHeadersConfig, router::RouterConfig,
+        response_headers::ResponseHeadersConfig,
     },
     control_plane::{control_plane_state::ControlPlaneState, types::Key},
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
     },
-    error::{init::InitError, provider::ProviderError},
+    error::init::InitError,
     logger::service::JawnClient,
     metrics::Metrics,
     router::service::Router,
     store::{minio::BaseMinioClient, router::RouterStore},
     types::{
         org::OrgId,
-        provider::{
-            InferenceProvider, ProviderKey, ProviderKeyMap, ProviderKeys,
-        },
+        provider::ProviderKeys,
         rate_limit::{
             RateLimitEvent, RateLimitEventReceivers, RateLimitEventSenders,
         },

@@ -310,14 +310,18 @@ impl Dispatcher {
 
         if self.app_state.0.config.deployment_target == DeploymentTarget::Cloud
         {
-            if let Some(auth_ctx) = req_ctx.auth_context.as_ref() {
+            tracing::info!("setting provider key to auth header for cloud");
+            if let Some(auth_ctx) = auth_ctx {
+                tracing::info!("auth_ctx: {:?}", auth_ctx);
                 let org_id = auth_ctx.org_id;
+                tracing::info!("org_id: {:?}", org_id);
                 let provider_key = self
                     .app_state
                     .0
                     .provider_keys
                     .get_provider_key(&self.provider, Some(&org_id))
                     .await;
+                tracing::info!("provider key: {:?}", provider_key);
 
                 tracing::debug!(
                     "setting provider key to auth header for cloud, org_id: \
@@ -325,7 +329,9 @@ impl Dispatcher {
                     org_id
                 );
 
-                if let Some(ProviderKey::Secret(key)) = provider_key {
+                if let Some(ProviderKey::Secret(key)) = provider_key
+                    && key.expose() != ""
+                {
                     request_builder = request_builder.header(
                         http::header::AUTHORIZATION,
                         HeaderValue::from_str(&format!(
@@ -343,7 +349,7 @@ impl Dispatcher {
                         .ok_or(ApiError::Internal(InternalError::Internal))?
                         .get_org_provider_keys(org_id)
                         .await
-                        .map_err(|e| {
+                        .map_err(|_| {
                             ApiError::Internal(InternalError::Internal)
                         })?;
 

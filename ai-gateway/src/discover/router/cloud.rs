@@ -75,6 +75,7 @@ impl CloudDiscovery {
             .await;
 
         let provider_keys = router_store.get_all_provider_keys().await?;
+        tracing::info!("provider keys: {:?}", provider_keys);
         app_state
             .0
             .provider_keys

@@ -159,9 +159,8 @@ impl RouterStore {
                         ProviderError::InvalidProviderName(key.provider_name),
                     )
                 })?;
-            let existing_provider_keys = provider_keys
-                .entry(OrgId::new(key.org_id))
-                .or_insert_with(|| FxHashMap::default());
+            let existing_provider_keys =
+                provider_keys.entry(OrgId::new(key.org_id)).or_default();
             existing_provider_keys.insert(inference_provider, provider_key);
         }
 
@@ -179,6 +178,11 @@ impl RouterStore {
         &self,
         org_id: OrgId,
     ) -> Result<ProviderKeyMap, InitError> {
+        let org_id = Uuid::parse_str(&org_id.to_string()).map_err(|e| {
+            error!(error = %e, "failed to parse organization id");
+            InitError::InvalidOrganizationId(org_id.to_string())
+        })?;
+
         let res = sqlx::query_as::<_, DBProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
@@ -186,7 +190,7 @@ impl RouterStore {
              FROM decrypted_provider_keys WHERE org_id = $1 AND soft_delete = \
              false",
         )
-        .bind(org_id.to_string())
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {

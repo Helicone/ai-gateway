@@ -25,7 +25,7 @@ use tower_http::{
 use tracing::{Level, info};
 
 use crate::{
-    app_state::{self, AppState, InnerAppState},
+    app_state::{AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
     config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
@@ -40,7 +40,7 @@ use crate::{
     middleware::response_headers::ResponseHeaderLayer,
     router::meta::MetaRouter,
     store::{connect, minio::BaseMinioClient, router::RouterStore},
-    types::provider::{ProviderKeyMap, ProviderKeys},
+    types::provider::ProviderKeys,
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
         health_check::HealthCheckLayer, timer::TimerLayer,
