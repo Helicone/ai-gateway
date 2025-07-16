@@ -7,7 +7,10 @@ use url::Url;
 use uuid::Uuid;
 
 use super::user::UserId;
-use crate::error::logger::LoggerError;
+use crate::{
+    config::DeploymentTarget, error::logger::LoggerError,
+    types::router::RouterId,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct S3Log {
@@ -36,10 +39,17 @@ pub struct HeliconeLogMetadata {
     pub posthog_host: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lytix_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_router_id: Option<RouterId>,
+    pub gateway_deployment_target: DeploymentTarget,
 }
 
 impl HeliconeLogMetadata {
-    pub fn from_headers(headers: &mut HeaderMap) -> Result<Self, LoggerError> {
+    pub fn from_headers(
+        headers: &mut HeaderMap,
+        router_id: Option<RouterId>,
+        deployment_target: DeploymentTarget,
+    ) -> Result<Self, LoggerError> {
         let model_override = headers
             .remove("x-helicone-model-override")
             .map(|v| v.to_str().map(std::borrow::ToOwned::to_owned))
@@ -70,6 +80,8 @@ impl HeliconeLogMetadata {
             posthog_api_key,
             posthog_host,
             lytix_key,
+            gateway_router_id: router_id,
+            gateway_deployment_target: deployment_target,
         })
     }
 }

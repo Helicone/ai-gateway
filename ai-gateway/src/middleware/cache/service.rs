@@ -41,6 +41,7 @@ use crate::{
         provider::InferenceProvider,
         request::Request,
         response::Response,
+        router::RouterId,
     },
 };
 
@@ -318,6 +319,10 @@ async fn check_cache(
                             is_stream,
                             model: Some(model),
                         };
+                        let router_id =
+                            req_parts.extensions.get::<RouterId>().cloned();
+                        let deployment_target =
+                            app_state.config().deployment_target.clone();
 
                         let response_logger = LoggerService::builder()
                             .app_state(app_state.clone())
@@ -332,6 +337,8 @@ async fn check_cache(
                             .provider(provider)
                             .tfft_rx(tfft_rx)
                             .mapper_ctx(mapper_ctx)
+                            .router_id(router_id)
+                            .deployment_target(deployment_target)
                             .build();
                         if let Err(e) = response_logger.log().await {
                             let error_str = e.as_ref().to_string();

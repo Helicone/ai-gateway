@@ -372,6 +372,10 @@ impl Dispatcher {
                 .auth_context
                 .clone()
                 .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
+            let router_id =
+                client_response.extensions().get::<RouterId>().cloned();
+            let deployment_target =
+                self.app_state.config().deployment_target.clone();
 
             let response_logger = LoggerService::builder()
                 .app_state(self.app_state.clone())
@@ -386,6 +390,8 @@ impl Dispatcher {
                 .provider(target_provider.clone())
                 .tfft_rx(tfft_rx)
                 .mapper_ctx(mapper_ctx)
+                .router_id(router_id)
+                .deployment_target(deployment_target)
                 .build();
 
             let app_state = self.app_state.clone();

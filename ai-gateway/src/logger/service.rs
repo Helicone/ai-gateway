@@ -25,6 +25,7 @@ use crate::{
             HeliconeLogMetadata, Log, LogMessage, RequestLog, ResponseLog,
         },
         provider::InferenceProvider,
+        router::RouterId,
     },
 };
 
@@ -60,6 +61,8 @@ pub struct LoggerService {
     response_status: StatusCode,
     provider: InferenceProvider,
     mapper_ctx: MapperContext,
+    router_id: Option<RouterId>,
+    deployment_target: DeploymentTarget,
     tfft_rx: oneshot::Receiver<()>,
 }
 
@@ -118,8 +121,11 @@ impl LoggerService {
             .tfft_duration
             .record(tfft_duration.as_millis() as f64, &attributes);
 
-        let helicone_metadata =
-            HeliconeLogMetadata::from_headers(&mut self.request_headers)?;
+        let helicone_metadata = HeliconeLogMetadata::from_headers(
+            &mut self.request_headers,
+            self.router_id,
+            self.deployment_target,
+        )?;
         let req_path = self.target_url.path().to_string();
         let provider = match self.provider {
             InferenceProvider::Ollama => "CUSTOM".to_string(),
