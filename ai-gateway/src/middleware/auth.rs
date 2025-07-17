@@ -47,20 +47,24 @@ impl AuthService {
                                 && let Some(router_organization_id) = app_state
                                     .get_router_organization(router_id)
                                     .await
-                                && key.organization_id == router_organization_id
                             {
-                                Ok(AuthContext {
-                                    api_key: Secret::from(
-                                        api_key_without_bearer,
-                                    ),
-                                    user_id: key
-                                        .owner_id
-                                        .as_str()
-                                        .try_into()?,
-                                    org_id: key.organization_id,
-                                })
+                                if key.organization_id == router_organization_id
+                                {
+                                    Ok(AuthContext {
+                                        api_key: Secret::from(
+                                            api_key_without_bearer,
+                                        ),
+                                        user_id: key
+                                            .owner_id
+                                            .as_str()
+                                            .try_into()?,
+                                        org_id: key.organization_id,
+                                    })
+                                } else {
+                                    Err(AuthError::InvalidCredentials)
+                                }
                             } else {
-                                Err(AuthError::InvalidCredentials)
+                                Err(AuthError::RouterNotFound)
                             }
                         }
                         RequestKind::UnifiedApi | RequestKind::DirectProxy => {
@@ -147,7 +151,8 @@ where
                     match &e {
                         AuthError::MissingAuthorizationHeader
                         | AuthError::InvalidCredentials
-                        | AuthError::ProviderKeyNotFound => {
+                        | AuthError::ProviderKeyNotFound
+                        | AuthError::RouterNotFound => {
                             app_state.0.metrics.auth_rejections.add(1, &[]);
                         }
                     }
