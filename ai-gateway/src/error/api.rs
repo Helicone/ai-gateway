@@ -41,6 +41,9 @@ impl From<dynamic_router::router::Error> for ApiError {
             dynamic_router::router::Error::Discover(error) => Self::Internal(
                 InternalError::DynamicRouterDiscoveryError(error),
             ),
+            dynamic_router::router::Error::RouterNotFound(key) => {
+                Self::InvalidRequest(InvalidRequestError::RouterIdNotFound(key))
+            }
         }
     }
 }

@@ -73,6 +73,7 @@ impl MetaRouter {
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .map_err(crate::error::internal::InternalError::BufferError)
             .layer(BufferLayer::new(MIDDLEWARE_BUFFER_SIZE))
+            .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(meta_router);
         Ok(BoxCloneService::new(service_stack))
     }

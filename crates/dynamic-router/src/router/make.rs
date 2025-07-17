@@ -25,7 +25,7 @@
 //! DEALINGS IN THE SOFTWARE.
 use std::{
     convert::Infallible,
-    fmt,
+    fmt::{self, Display},
     future::Future,
     hash::Hash,
     marker::PhantomData,
@@ -94,7 +94,7 @@ impl<S, Target, ReqBody> Service<Target> for MakeRouter<S, ReqBody>
 where
     S: Service<Target>,
     S::Response: Discover,
-    <S::Response as Discover>::Key: Hash + Send + Sync,
+    <S::Response as Discover>::Key: Hash + Send + Sync + Display,
     <S::Response as Discover>::Service:
         Service<Request<ReqBody>, Error = Infallible>,
 {
@@ -131,7 +131,7 @@ impl<F, T, E, ReqBody> Future for MakeFuture<F, ReqBody>
 where
     F: Future<Output = Result<T, E>>,
     T: Discover,
-    <T as Discover>::Key: Hash + Send + Sync,
+    <T as Discover>::Key: Hash + Send + Sync + Display,
     <T as Discover>::Service: Service<Request<ReqBody>, Error = Infallible>,
 {
     type Output = Result<DynamicRouter<T, ReqBody>, E>;

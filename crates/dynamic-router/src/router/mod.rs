@@ -27,7 +27,7 @@ pub mod make;
 
 use std::{
     convert::Infallible,
-    fmt,
+    fmt::{self, Display},
     hash::Hash,
     marker::PhantomData,
     pin::Pin,
@@ -49,12 +49,14 @@ pub enum Error {
     ExtensionNotFound,
     #[error("Discover error: {0}")]
     Discover(tower::BoxError),
+    #[error("Router not found: {0}")]
+    RouterNotFound(String),
 }
 
 pub struct DynamicRouter<D, ReqBody>
 where
     D: Discover,
-    D::Key: Hash + Send + Sync,
+    D::Key: Hash + Send + Sync + Display,
 {
     discover: D,
 
@@ -66,7 +68,7 @@ where
 impl<D: Discover, ReqBody> fmt::Debug for DynamicRouter<D, ReqBody>
 where
     D: fmt::Debug,
-    D::Key: Hash + fmt::Debug + Send + Sync,
+    D::Key: Hash + fmt::Debug + Send + Sync + Display,
     D::Service: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -80,7 +82,7 @@ where
 impl<D, ReqBody> DynamicRouter<D, ReqBody>
 where
     D: Discover,
-    D::Key: Hash + Send + Sync,
+    D::Key: Hash + Send + Sync + Display,
     D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
 {
     pub fn new(discover: D) -> Self {
@@ -107,7 +109,7 @@ where
 impl<D, ReqBody> DynamicRouter<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone + Send + Sync,
+    D::Key: Hash + Clone + Send + Sync + Display,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
 {
@@ -170,7 +172,7 @@ where
 impl<D, ReqBody> Service<http::Request<ReqBody>> for DynamicRouter<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone + Send + Sync + 'static,
+    D::Key: Hash + Clone + Send + Sync + Display + 'static,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
     <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
@@ -198,8 +200,14 @@ where
             };
         };
 
-        let future = self.services.call_ready(&key, request);
-        ResponseFuture::Inner { future }
+        if let Some((_, _, _)) = self.services.get_ready(&key) {
+            let future = self.services.call_ready(&key, request);
+            ResponseFuture::Inner { future }
+        } else {
+            ResponseFuture::Ready {
+                error: Some(Error::RouterNotFound(key.to_string())),
+            }
+        }
     }
 }
 
@@ -207,7 +215,7 @@ where
 pub enum ResponseFuture<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone + Send + Sync + 'static,
+    D::Key: Hash + Clone + Send + Sync + Display + 'static,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
     <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
@@ -227,7 +235,7 @@ where
 impl<D, ReqBody> Future for ResponseFuture<D, ReqBody>
 where
     D: Discover + Unpin,
-    D::Key: Hash + Clone + Send + Sync + 'static,
+    D::Key: Hash + Clone + Send + Sync + Display + 'static,
     D::Error: Into<tower::BoxError>,
     D::Service: Service<http::Request<ReqBody>, Error = Infallible>,
     <D::Service as Service<http::Request<ReqBody>>>::Future: Send + 'static,
