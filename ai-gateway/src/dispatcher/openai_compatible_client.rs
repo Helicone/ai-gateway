@@ -4,7 +4,10 @@ use reqwest::ClientBuilder;
 use crate::{
     app_state::AppState,
     error::{init::InitError, provider::ProviderError},
-    types::provider::{InferenceProvider, ProviderKey},
+    types::{
+        provider::{InferenceProvider, ProviderKey},
+        secret::Secret,
+    },
     utils::host_header,
 };
 
@@ -46,5 +49,15 @@ impl Client {
             .build()
             .map_err(InitError::CreateReqwestClient)?;
         Ok(Self(inner))
+    }
+
+    pub fn set_auth_header(
+        request_builder: reqwest::RequestBuilder,
+        key: &Secret<String>,
+    ) -> reqwest::RequestBuilder {
+        request_builder.header(
+            http::header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", key.expose())).unwrap(),
+        )
     }
 }

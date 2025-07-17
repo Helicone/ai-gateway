@@ -5,7 +5,10 @@ use crate::{
     app_state::AppState,
     config::providers::DEFAULT_ANTHROPIC_VERSION,
     error::{init::InitError, provider::ProviderError},
-    types::provider::{InferenceProvider, ProviderKey},
+    types::{
+        provider::{InferenceProvider, ProviderKey},
+        secret::Secret,
+    },
     utils::host_header,
 };
 
@@ -56,5 +59,15 @@ impl Client {
             .build()
             .map_err(InitError::CreateReqwestClient)?;
         Ok(Self(inner))
+    }
+
+    pub fn set_auth_header(
+        request_builder: reqwest::RequestBuilder,
+        key: &Secret<String>,
+    ) -> reqwest::RequestBuilder {
+        request_builder.header(
+            HeaderName::from_static("x-api-key"),
+            HeaderValue::from_str(key.expose()).unwrap(),
+        )
     }
 }

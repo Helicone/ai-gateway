@@ -23,17 +23,14 @@ use tracing::{Instrument, info_span};
 
 use crate::{
     app_state::AppState,
-    config::{DeploymentTarget, retry::RetryConfig, router::RouterConfig},
+    config::{retry::RetryConfig, router::RouterConfig},
     discover::monitor::metrics::EndpointMetricsRegistry,
     dispatcher::{
         client::{Client, ProviderClient},
         extensions::ExtensionsCopier,
     },
     endpoints::ApiEndpoint,
-    error::{
-        api::ApiError, auth::AuthError, init::InitError,
-        internal::InternalError,
-    },
+    error::{api::ApiError, init::InitError, internal::InternalError},
     logger::service::LoggerService,
     metrics::tfft::TFFTFuture,
     middleware::{
@@ -44,7 +41,7 @@ use crate::{
         body::BodyReader,
         extensions::{MapperContext, RequestContext, RequestKind},
         model_id::ModelId,
-        provider::{InferenceProvider, ProviderKey},
+        provider::InferenceProvider,
         rate_limit::RateLimitEvent,
         request::Request,
         router::RouterId,
@@ -304,76 +301,16 @@ impl Dispatcher {
             .request(method.clone(), target_url.clone())
             .headers(headers.clone());
 
-        let mut request_builder = self
+        let request_builder = self
             .client
-            .extract_and_sign_aws_headers(request_builder, &req_body_bytes)?;
-
-        if self.app_state.0.config.deployment_target == DeploymentTarget::Cloud
-        {
-            if let Some(auth_ctx) = auth_ctx {
-                let org_id = auth_ctx.org_id;
-                let provider_key = self
-                    .app_state
-                    .0
-                    .provider_keys
-                    .get_provider_key(&self.provider, Some(&org_id))
-                    .await;
-
-                if let Some(ProviderKey::Secret(key)) = provider_key
-                    && key.expose() != ""
-                {
-                    request_builder = request_builder.header(
-                        http::header::AUTHORIZATION,
-                        HeaderValue::from_str(&format!(
-                            "Bearer {}",
-                            key.expose()
-                        ))
-                        .unwrap(),
-                    );
-                } else {
-                    let refetched_org_provider_keys = self
-                        .app_state
-                        .0
-                        .router_store
-                        .as_ref()
-                        .ok_or(ApiError::Internal(InternalError::Internal))?
-                        .get_org_provider_keys(org_id)
-                        .await
-                        .map_err(|_| {
-                            ApiError::Internal(InternalError::Internal)
-                        })?;
-
-                    // get the right provider key and then use it but set it
-                    // after
-                    let provider_key =
-                        refetched_org_provider_keys.get(&self.provider);
-
-                    self.app_state
-                        .0
-                        .provider_keys
-                        .set_org_provider_keys(
-                            org_id,
-                            refetched_org_provider_keys.clone(),
-                        )
-                        .await;
-
-                    if let Some(ProviderKey::Secret(key)) = provider_key {
-                        request_builder = request_builder.header(
-                            http::header::AUTHORIZATION,
-                            HeaderValue::from_str(&format!(
-                                "Bearer {}",
-                                key.expose()
-                            ))
-                            .unwrap(),
-                        );
-                    } else {
-                        return Err(ApiError::Authentication(
-                            AuthError::ProviderKeyNotFound,
-                        ));
-                    }
-                }
-            }
-        }
+            .authenticate(
+                &self.app_state,
+                request_builder,
+                &req_body_bytes,
+                auth_ctx,
+                self.provider.clone(),
+            )
+            .await?;
 
         let metrics_for_stream = self.app_state.0.endpoint_metrics.clone();
         if let Some(ref api_endpoint) = api_endpoint {

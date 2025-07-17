@@ -178,11 +178,6 @@ impl RouterStore {
         &self,
         org_id: OrgId,
     ) -> Result<ProviderKeyMap, InitError> {
-        let org_id = Uuid::parse_str(&org_id.to_string()).map_err(|e| {
-            error!(error = %e, "failed to parse organization id");
-            InitError::InvalidOrganizationId(org_id.to_string())
-        })?;
-
         let res = sqlx::query_as::<_, DBProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
@@ -190,7 +185,7 @@ impl RouterStore {
              FROM decrypted_provider_keys WHERE org_id = $1 AND soft_delete = \
              false",
         )
-        .bind(org_id)
+        .bind(org_id.as_ref())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
