@@ -1,0 +1,18 @@
+telemetry:
+  level: "info,ai_gateway=trace"
+  exporter: both
+
+helicone:
+  base-url: "http://localhost:8585"
+  websocket-url: "ws://localhost:8585/ws/v1/router/control-plane"
+  features: all
+
+rate-limit-store:
+  type: redis
+  host-url: "redis://localhost:6379"
+
+cache-store:
+  type: redis
+  host-url: "redis://localhost:6379"
+
+deployment-target: cloud
