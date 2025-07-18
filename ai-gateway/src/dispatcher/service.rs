@@ -212,16 +212,20 @@ impl Dispatcher {
         &self,
         mut req: Request,
     ) -> Result<http::Response<crate::types::body::Body>, ApiError> {
-        let mapper_ctx = req
-            .extensions_mut()
-            .remove::<MapperContext>()
-            .ok_or(InternalError::ExtensionNotFound("MapperContext"))?;
-        let req_ctx = req
-            .extensions_mut()
-            .remove::<Arc<RequestContext>>()
-            .ok_or(InternalError::ExtensionNotFound("RequestContext"))?;
+        // Extract request context and extensions
+        let (
+            mapper_ctx,
+            req_ctx,
+            api_endpoint,
+            extracted_path_and_query,
+            inference_provider,
+            router_id,
+            start_instant,
+            start_time,
+            request_kind,
+        ) = Self::extract_request_context(&mut req)?;
+
         let auth_ctx = req_ctx.auth_context.as_ref();
-        let api_endpoint = req.extensions().get::<ApiEndpoint>().cloned();
         let target_provider = &self.provider;
         let config = self.app_state.config();
         let provider_config =
@@ -244,43 +248,6 @@ impl Dispatcher {
         }
         let method = req.method().clone();
         let headers = req.headers().clone();
-        let extracted_path_and_query = req
-            .extensions_mut()
-            .remove::<PathAndQuery>()
-            .ok_or(ApiError::Internal(InternalError::ExtensionNotFound(
-                "PathAndQuery",
-            )))?;
-        let inference_provider = req
-            .extensions()
-            .get::<InferenceProvider>()
-            .cloned()
-            .ok_or(InternalError::ExtensionNotFound("InferenceProvider"))?;
-        let router_id = req.extensions().get::<RouterId>().cloned();
-        let start_instant = req
-            .extensions()
-            .get::<Instant>()
-            .copied()
-            .unwrap_or_else(|| {
-                tracing::warn!(
-                    "did not find expected Instant in req extensions"
-                );
-                Instant::now()
-            });
-        let start_time = req
-            .extensions()
-            .get::<DateTime<Utc>>()
-            .copied()
-            .unwrap_or_else(|| {
-                tracing::warn!(
-                    "did not find expected DateTime<Utc> in req extensions"
-                );
-                Utc::now()
-            });
-        let request_kind = req
-            .extensions()
-            .get::<RequestKind>()
-            .copied()
-            .ok_or(InternalError::ExtensionNotFound("RequestKind"))?;
 
         let target_url = base_url
             .join(extracted_path_and_query.as_str())
@@ -362,7 +329,7 @@ impl Dispatcher {
         tracing::debug!(provider_req_id = ?provider_request_id, status = %client_response.status(), "received response");
         let extensions_copier = ExtensionsCopier::builder()
             .inference_provider(inference_provider)
-            .router_id(router_id)
+            .router_id(router_id.clone())
             .auth_context(auth_ctx.cloned())
             .provider_request_id(provider_request_id)
             .mapper_ctx(mapper_ctx.clone())
@@ -376,76 +343,118 @@ impl Dispatcher {
             .extensions_mut()
             .insert(extracted_path_and_query);
 
-        if self.app_state.config().helicone.is_observability_enabled() {
-            let auth_ctx = req_ctx
-                .auth_context
-                .clone()
-                .ok_or(InternalError::ExtensionNotFound("AuthContext"))?;
-            let router_id =
-                client_response.extensions().get::<RouterId>().cloned();
-            let deployment_target =
-                self.app_state.config().deployment_target.clone();
+        let response_status = client_response.status();
+        let response_headers = client_response.headers();
+        self.handle_error_and_rate_limiting(
+            response_status,
+            response_headers,
+            api_endpoint.clone(),
+        )
+        .await?;
 
-            let response_logger = LoggerService::builder()
-                .app_state(self.app_state.clone())
-                .auth_ctx(auth_ctx)
-                .start_time(start_time)
-                .start_instant(start_instant)
-                .target_url(target_url)
-                .request_headers(headers)
-                .request_body(req_body_bytes)
-                .response_status(client_response.status())
-                .response_body(response_body_for_logger)
-                .provider(target_provider.clone())
-                .tfft_rx(tfft_rx)
-                .mapper_ctx(mapper_ctx)
-                .router_id(router_id)
-                .deployment_target(deployment_target)
-                .build();
+        // Handle logging
+        self.handle_logging(
+            &req_ctx,
+            start_time,
+            start_instant,
+            target_url,
+            headers,
+            req_body_bytes,
+            &client_response,
+            response_body_for_logger,
+            tfft_rx,
+            &mapper_ctx,
+            router_id,
+        );
 
-            let app_state = self.app_state.clone();
-            tokio::spawn(
-                async move {
-                    if let Err(e) = response_logger.log().await {
-                        let error_str = e.as_ref().to_string();
-                        app_state
-                            .0
-                            .metrics
-                            .error_count
-                            .add(1, &[KeyValue::new("type", error_str)]);
-                    }
-                }
-                .instrument(tracing::Span::current()),
-            );
-        } else {
-            let app_state = self.app_state.clone();
-            let model = mapper_ctx.model.as_ref().map_or_else(
-                || "unknown".to_string(),
-                std::string::ToString::to_string,
-            );
-            let path = target_url.path().to_string();
-            let provider_string = target_provider.to_string();
-            tokio::spawn(
-                async move {
-                    let tfft_future = TFFTFuture::new(start_instant, tfft_rx);
-                    let collect_future = response_body_for_logger.collect();
-                    let (_response_body, tfft_duration) = tokio::join!(collect_future, tfft_future);
-                    if let Ok(tfft_duration) = tfft_duration {
-                        tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
-                        let attributes = [
-                            KeyValue::new("provider", provider_string),
-                            KeyValue::new("model", model),
-                            KeyValue::new("path", path),
-                        ];
-                        #[allow(clippy::cast_precision_loss)]
-                        app_state.0.metrics.tfft_duration.record(tfft_duration.as_millis() as f64, &attributes);
-                    } else { tracing::error!("Failed to get TFFT signal") }
-                }
-                .instrument(tracing::Span::current()),
-            );
-        }
+        Ok(client_response)
+    }
 
-        if client_response.status().is_server_error() {
+    /// Extracts request context and extensions from the request
+    fn extract_request_context(
+        req: &mut Request,
+    ) -> Result<
+        (
+            MapperContext,
+            Arc<RequestContext>,
+            Option<ApiEndpoint>,
+            PathAndQuery,
+            InferenceProvider,
+            Option<RouterId>,
+            Instant,
+            DateTime<Utc>,
+            RequestKind,
+        ),
+        ApiError,
+    > {
+        let mapper_ctx = req
+            .extensions_mut()
+            .remove::<MapperContext>()
+            .ok_or(InternalError::ExtensionNotFound("MapperContext"))?;
+        let req_ctx = req
+            .extensions_mut()
+            .remove::<Arc<RequestContext>>()
+            .ok_or(InternalError::ExtensionNotFound("RequestContext"))?;
+        let api_endpoint = req.extensions().get::<ApiEndpoint>().cloned();
+        let extracted_path_and_query = req
+            .extensions_mut()
+            .remove::<PathAndQuery>()
+            .ok_or(ApiError::Internal(InternalError::ExtensionNotFound(
+                "PathAndQuery",
+            )))?;
+        let inference_provider = req
+            .extensions()
+            .get::<InferenceProvider>()
+            .cloned()
+            .ok_or(InternalError::ExtensionNotFound("InferenceProvider"))?;
+        let router_id = req.extensions().get::<RouterId>().cloned();
+        let start_instant = req
+            .extensions()
+            .get::<Instant>()
+            .copied()
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "did not find expected Instant in req extensions"
+                );
+                Instant::now()
+            });
+        let start_time = req
+            .extensions()
+            .get::<DateTime<Utc>>()
+            .copied()
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "did not find expected DateTime<Utc> in req extensions"
+                );
+                Utc::now()
+            });
+        let request_kind = req
+            .extensions()
+            .get::<RequestKind>()
+            .copied()
+            .ok_or(InternalError::ExtensionNotFound("RequestKind"))?;
+
+        Ok((
+            mapper_ctx,
+            req_ctx,
+            api_endpoint,
+            extracted_path_and_query,
+            inference_provider,
+            router_id,
+            start_instant,
+            start_time,
+            request_kind,
+        ))
+    }
+
+    /// Handles error responses and rate limiting
+    async fn handle_error_and_rate_limiting(
+        &self,
+        response_status: StatusCode,
+        response_headers: &HeaderMap,
+        api_endpoint: Option<ApiEndpoint>,
+    ) -> Result<(), ApiError> {
+        if response_status.is_server_error() {
             if let Some(api_endpoint) = api_endpoint {
                 let endpoint_metrics = self
                     .app_state
@@ -454,10 +463,9 @@ impl Dispatcher {
                     .health_metrics(api_endpoint)?;
                 endpoint_metrics.incr_remote_internal_error_count();
             }
-        } else if client_response.status() == StatusCode::TOO_MANY_REQUESTS {
+        } else if response_status == StatusCode::TOO_MANY_REQUESTS {
             if let Some(ref api_endpoint) = api_endpoint {
-                let retry_after =
-                    extract_retry_after(client_response.headers());
+                let retry_after = extract_retry_after(response_headers);
                 tracing::info!(
                     provider = ?self.provider,
                     api_endpoint = ?api_endpoint,
@@ -478,8 +486,87 @@ impl Dispatcher {
                 }
             }
         }
+        Ok(())
+    }
 
-        Ok(client_response)
+    /// Handles logging logic for both observability and metrics
+    fn handle_logging(
+        &self,
+        req_ctx: &RequestContext,
+        start_time: DateTime<Utc>,
+        start_instant: Instant,
+        target_url: url::Url,
+        headers: HeaderMap,
+        req_body_bytes: Bytes,
+        client_response: &http::Response<crate::types::body::Body>,
+        response_body_for_logger: BodyReader,
+        tfft_rx: oneshot::Receiver<()>,
+        mapper_ctx: &MapperContext,
+        router_id: Option<RouterId>,
+    ) {
+        let deployment_target =
+            self.app_state.config().deployment_target.clone();
+        if self.app_state.config().helicone.is_observability_enabled() {
+            if let Some(auth_ctx) = req_ctx.auth_context.clone() {
+                let response_logger = LoggerService::builder()
+                    .app_state(self.app_state.clone())
+                    .auth_ctx(auth_ctx)
+                    .start_time(start_time)
+                    .start_instant(start_instant)
+                    .target_url(target_url)
+                    .request_headers(headers)
+                    .request_body(req_body_bytes)
+                    .response_status(client_response.status())
+                    .response_body(response_body_for_logger)
+                    .provider(self.provider.clone())
+                    .tfft_rx(tfft_rx)
+                    .mapper_ctx(mapper_ctx.clone())
+                    .router_id(router_id)
+                    .deployment_target(deployment_target)
+                    .build();
+
+                let app_state = self.app_state.clone();
+                tokio::spawn(
+                    async move {
+                        if let Err(e) = response_logger.log().await {
+                            let error_str = e.as_ref().to_string();
+                            app_state
+                                .0
+                                .metrics
+                                .error_count
+                                .add(1, &[KeyValue::new("type", error_str)]);
+                        }
+                    }
+                    .instrument(tracing::Span::current()),
+                );
+            }
+        } else {
+            let app_state = self.app_state.clone();
+            let model = mapper_ctx.model.as_ref().map_or_else(
+                || "unknown".to_string(),
+                std::string::ToString::to_string,
+            );
+            let path = target_url.path().to_string();
+            let provider_string = self.provider.to_string();
+            tokio::spawn(
+                    async move {
+                        let tfft_future = TFFTFuture::new(start_instant, tfft_rx);
+                        let collect_future = response_body_for_logger.collect();
+                        let (_response_body, tfft_duration) = tokio::join!(collect_future, tfft_future);
+                        if let Ok(tfft_duration) = tfft_duration {
+                            tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
+                            let attributes = [
+                                KeyValue::new("provider", provider_string),
+                                KeyValue::new("model", model),
+                                KeyValue::new("path", path),
+                            ];
+                            #[allow(clippy::cast_precision_loss)]
+                            app_state.0.metrics.tfft_duration.record(tfft_duration.as_millis() as f64, &attributes);
+                        } else { tracing::error!("Failed to get TFFT signal") }
+                    }
+                    .instrument(tracing::Span::current()),
+                );
+        }
     }
 
     /// We take a `&RequestBuilder` so that `dispatch_stream` implements `FnMut`
