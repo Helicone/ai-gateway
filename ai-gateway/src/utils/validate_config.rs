@@ -3,14 +3,20 @@ use std::{
     task::{Context, Poll},
 };
 
-use axum_core::response::Response;
+use axum_core::response::{IntoResponse, Response};
 use futures::future::{BoxFuture, Either};
 use http::{Method, Request};
 use http_body_util::BodyExt;
 use serde::Serialize;
 use tower::{Layer, Service};
 
-use crate::config::router::RouterConfig;
+use crate::{
+    config::router::RouterConfig,
+    error::{
+        api::ApiError, internal::InternalError,
+        invalid_req::InvalidRequestError,
+    },
+};
 
 #[derive(Debug, Clone)]
 pub struct ValidateRouterConfigLayer<ReqBody> {
@@ -84,7 +90,6 @@ where
 {
     type Response = Response;
     type Error = S::Error;
-    // type Future = BoxFuture<'static, Result<Response, S::Error>>;
     type Future =
         Either<BoxFuture<'static, Result<Response, S::Error>>, S::Future>;
 
@@ -99,73 +104,43 @@ where
         if req.method() == Method::POST
             && req.uri().path() == "/validate-router-config"
         {
-            tracing::info!("validating router config");
             let fut = async move {
-                let config = req.into_body().collect().await;
-                tracing::info!("config");
-                let invalid_response_body =
-                    serde_json::to_string(&ValidateRouterConfigResponse {
-                        valid: false,
-                    })
-                    .unwrap();
-                let valid_response_body =
-                    serde_json::to_string(&ValidateRouterConfigResponse {
-                        valid: true,
-                    })
-                    .unwrap();
-
-                match config {
-                    Ok(config_body) => {
-                        let config = serde_json::from_slice::<RouterConfig>(
-                            &config_body.to_bytes(),
-                        );
-                        if config.is_err() {
-                            return Ok(http::Response::builder()
-                                .status(http::StatusCode::OK)
-                                .header(
-                                    http::header::CONTENT_TYPE,
-                                    "application/json",
-                                )
-                                .body(axum_core::body::Body::from(
-                                    invalid_response_body,
-                                ))
-                                .expect("always valid if tests pass"));
-                        }
-
-                        let config = config.unwrap();
-
-                        if config.validate().is_err() {
-                            return Ok(http::Response::builder()
-                                .status(http::StatusCode::OK)
-                                .header(
-                                    http::header::CONTENT_TYPE,
-                                    "application/json",
-                                )
-                                .body(axum_core::body::Body::from(
-                                    invalid_response_body,
-                                ))
-                                .expect("always valid if tests pass"));
-                        }
-
-                        Ok(http::Response::builder()
-                            .status(http::StatusCode::OK)
-                            .header(
-                                http::header::CONTENT_TYPE,
-                                "application/json",
-                            )
-                            .body(axum_core::body::Body::from(
-                                valid_response_body,
-                            ))
-                            .expect("always valid if tests pass"))
+                let config = match req.into_body().collect().await {
+                    Ok(body) => body.to_bytes(),
+                    Err(_e) => {
+                        tracing::warn!("failed to collect request body");
+                        let error = ApiError::Internal(InternalError::Internal);
+                        return Ok(error.into_response());
                     }
-                    Err(_e) => Ok(http::Response::builder()
-                        .status(http::StatusCode::OK)
-                        .header(http::header::CONTENT_TYPE, "application/json")
-                        .body(axum_core::body::Body::from(
-                            invalid_response_body,
-                        ))
-                        .expect("always valid if tests pass")),
-                }
+                };
+
+                let config =
+                    match serde_json::from_slice::<RouterConfig>(&config) {
+                        Ok(config) => config,
+                        Err(e) => {
+                            let error = ApiError::InvalidRequest(
+                                InvalidRequestError::InvalidRequestBody(e),
+                            );
+                            return Ok(error.into_response());
+                        }
+                    };
+
+                let valid = config.validate().is_ok();
+                let response_body =
+                    serde_json::to_vec(&ValidateRouterConfigResponse { valid })
+                        .expect(
+                            "can always serialize a \
+                             ValidateRouterConfigResponse",
+                        );
+
+                Ok(http::Response::builder()
+                    .status(http::StatusCode::OK)
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(axum_core::body::Body::from(response_body))
+                    .expect(
+                        "serialized ValidateRouterConfigResponse is always a \
+                         valid axum body",
+                    ))
             };
             Either::Left(Box::pin(fut))
         } else {
@@ -173,50 +148,3 @@ where
         }
     }
 }
-
-/*
-    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        if req.method() == Method::POST
-            && req.uri().path() == "/validate-router-config"
-        {
-            let fut = async move {
-                let config = req.body().await;
-                let config = serde_json::from_slice::<RouterConfig>(&config);
-                if config.is_err() {
-                    return Ok(http::Response::builder()
-                        .status(http::StatusCode::OK)
-                        .body(axum_core::body::Body::from(false))
-                        .expect("always valid if tests pass"));
-                }
-
-                Ok(http::Response::builder()
-                    .status(http::StatusCode::OK)
-                    .body(axum_core::body::Body::from(true))
-                    .expect("always valid if tests pass"))
-            };
-
-            Either::Left(Box::pin(fut))
-            // let this = self.clone();
-            // let this = std::mem::replace(self, this);
-            // Box::pin(async move {
-            //     Either::Left(ready(Ok(validate_config_response(
-            //         req.body().await,
-            //     ))))
-            // })
-        } else {
-            Either::Right(self.inner.call(req))
-        }
-    }
-
-*/
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn test_healthy_response() {
-//         let response = healthy_response();
-//         assert_eq!(response.status(), http::StatusCode::OK);
-//     }
-// }
