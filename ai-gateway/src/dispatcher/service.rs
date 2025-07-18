@@ -227,12 +227,6 @@ impl Dispatcher {
 
         let auth_ctx = req_ctx.auth_context.as_ref();
         let target_provider = &self.provider;
-        let config = self.app_state.config();
-        let provider_config =
-            config.providers.get(target_provider).ok_or_else(|| {
-                InternalError::ProviderNotConfigured(target_provider.clone())
-            })?;
-        let base_url = provider_config.base_url.clone();
         {
             let h = req.headers_mut();
             h.remove(http::header::HOST);
@@ -248,10 +242,11 @@ impl Dispatcher {
         }
         let method = req.method().clone();
         let headers = req.headers().clone();
-
-        let target_url = base_url
-            .join(extracted_path_and_query.as_str())
-            .expect("PathAndQuery joined with valid url will always succeed");
+        let target_url = self.build_target_url(
+            &req_ctx,
+            target_provider,
+            extracted_path_and_query.as_str(),
+        )?;
         // TODO: could change request type of dispatcher to
         // http::Request<reqwest::Body>
         // to avoid collecting the body twice
@@ -371,6 +366,7 @@ impl Dispatcher {
     }
 
     /// Extracts request context and extensions from the request
+    #[allow(clippy::type_complexity)]
     fn extract_request_context(
         req: &mut Request,
     ) -> Result<
@@ -490,6 +486,7 @@ impl Dispatcher {
     }
 
     /// Handles logging logic for both observability and metrics
+    #[allow(clippy::too_many_arguments)]
     fn handle_logging(
         &self,
         req_ctx: &RequestContext,
@@ -567,6 +564,36 @@ impl Dispatcher {
                     .instrument(tracing::Span::current()),
                 );
         }
+    }
+
+    fn build_target_url(
+        &self,
+        req_ctx: &RequestContext,
+        target_provider: &InferenceProvider,
+        extracted_path_and_query: &str,
+    ) -> Result<url::Url, ApiError> {
+        let config = self.app_state.config();
+        if let Some(router_config) = req_ctx.router_config.as_ref()
+            && let Some(router_provider_config) =
+                router_config.providers.as_ref()
+            && let Some(provider_config) =
+                router_provider_config.get(target_provider)
+        {
+            return Ok(provider_config
+                .base_url
+                .join(extracted_path_and_query)
+                .expect(
+                    "PathAndQuery joined with valid url will always succeed",
+                ));
+        }
+        let provider_config =
+            config.providers.get(target_provider).ok_or_else(|| {
+                InternalError::ProviderNotConfigured(target_provider.clone())
+            })?;
+        Ok(provider_config
+            .base_url
+            .join(extracted_path_and_query)
+            .expect("PathAndQuery joined with valid url will always succeed"))
     }
 
     /// We take a `&RequestBuilder` so that `dispatch_stream` implements `FnMut`

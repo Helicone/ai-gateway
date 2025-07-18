@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use derive_more::{AsMut, AsRef};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use super::{
     balance::{BalanceConfig, BalanceConfigInner},
@@ -12,7 +13,7 @@ use super::{
 use crate::{
     config::{cache::CacheConfig, rate_limit::RateLimitConfig},
     error::init::InitError,
-    types::router::RouterId,
+    types::{provider::InferenceProvider, router::RouterId},
 };
 
 #[derive(
@@ -46,6 +47,8 @@ pub struct RouterConfig {
     pub retries: Option<RetryConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<RateLimitConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub providers: Option<HashMap<InferenceProvider, RouterProviderConfig>>,
 }
 
 impl RouterConfig {
@@ -102,9 +105,18 @@ impl crate::tests::TestDefault for RouterConfigs {
                 )])),
                 retries: None,
                 rate_limit: None,
+                providers: None,
             },
         )]))
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct RouterProviderConfig {
+    pub base_url: Url,
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 #[cfg(test)]
@@ -135,6 +147,7 @@ mod tests {
             load_balance: balance,
             retries: Some(retries),
             rate_limit: None,
+            providers: None,
         }
     }
 
