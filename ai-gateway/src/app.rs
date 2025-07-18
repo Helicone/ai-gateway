@@ -17,10 +17,14 @@ use telemetry::{make_span::SpanFactory, tracing::MakeRequestId};
 use tokio::sync::RwLock;
 use tower::{ServiceBuilder, buffer::BufferLayer, util::BoxCloneService};
 use tower_http::{
-    ServiceBuilderExt, add_extension::AddExtension,
-    catch_panic::CatchPanicLayer, compression::CompressionLayer,
+    ServiceBuilderExt,
+    add_extension::AddExtension,
+    catch_panic::CatchPanicLayer,
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
     normalize_path::NormalizePathLayer,
-    sensitive_headers::SetSensitiveHeadersLayer, trace::TraceLayer,
+    sensitive_headers::SetSensitiveHeadersLayer,
+    trace::TraceLayer,
 };
 use tracing::{Level, info};
 
@@ -285,6 +289,11 @@ impl App {
             .deflate(true)
             .zstd(true);
 
+        let cors_layer = CorsLayer::new()
+            .allow_headers(Any)
+            .allow_methods(Any)
+            .allow_origin(Any);
+
         // global middleware is applied here
         let service_stack = ServiceBuilder::new()
             .layer(CatchPanicLayer::custom(PanicResponder))
@@ -306,6 +315,7 @@ impl App {
             .layer(NormalizePathLayer::trim_trailing_slash())
             .layer(metrics::request_count::Layer::new(app_state.clone()))
             .layer(compression_layer)
+            .layer(cors_layer)
             .layer(HealthCheckLayer::new())
             .layer(ValidateRouterConfigLayer::new())
             .layer(TimerLayer::new())

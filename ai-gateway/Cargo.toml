@@ -86,7 +86,7 @@ tokio-tungstenite = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true, features = ['full'] }
 tower_governor = { workspace = true, features = [] }
-tower-http = { workspace = true, features = [ 'default', 'auth', 'catch-panic', 'add-extension', 'normalize-path', 'request-id', 'trace', 'util', 'sensitive-headers', 'compression-br', 'compression-deflate', 'compression-gzip', 'compression-zstd', 'decompression-br', 'decompression-deflate', 'decompression-gzip', 'decompression-zstd' ] }
+tower-http = { workspace = true, features = [ 'default', 'auth', 'catch-panic', 'add-extension', 'normalize-path', 'request-id', 'trace', 'util', 'sensitive-headers', 'compression-br', 'compression-deflate', 'compression-gzip', 'compression-zstd', 'decompression-br', 'decompression-deflate', 'decompression-gzip', 'decompression-zstd', 'cors' ] }
 tower-otel-http-metrics = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
