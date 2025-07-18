@@ -44,6 +44,7 @@ use crate::{
     utils::{
         catch_panic::PanicResponder, handle_error::ErrorHandlerLayer,
         health_check::HealthCheckLayer, timer::TimerLayer,
+        validate_config::ValidateRouterConfigLayer,
     },
 };
 
@@ -306,6 +307,7 @@ impl App {
             .layer(metrics::request_count::Layer::new(app_state.clone()))
             .layer(compression_layer)
             .layer(HealthCheckLayer::new())
+            .layer(ValidateRouterConfigLayer::new())
             .layer(TimerLayer::new())
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .layer(ResponseHeaderLayer::new(

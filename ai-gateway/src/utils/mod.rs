@@ -4,6 +4,7 @@ pub mod health_check;
 pub mod meltdown;
 pub mod retry;
 pub mod timer;
+pub mod validate_config;
 
 use std::{fmt, fmt::Display, marker::PhantomData, str::FromStr};
 
