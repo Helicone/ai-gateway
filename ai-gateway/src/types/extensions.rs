@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use derive_more::{AsRef, From, Into};
-use serde::{Deserialize, Serialize};
 
 use super::{
     model_id::ModelId, org::OrgId, provider::ProviderKeys, user::UserId,
@@ -38,27 +37,9 @@ pub struct MapperContext {
     pub model: Option<ModelId>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum PromptInputValue {
-    String(String),
-    Number(f64),
-    Boolean(bool),
-}
-
-impl std::fmt::Display for PromptInputValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::String(s) => write!(f, "{s}"),
-            Self::Number(n) => write!(f, "{n}"),
-            Self::Boolean(b) => write!(f, "{b}"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PromptContext {
     pub prompt_id: String,
     pub prompt_version_id: Option<String>,
-    pub inputs: Option<HashMap<String, PromptInputValue>>,
+    pub inputs: Option<HashMap<String, serde_json::Value>>,
 }

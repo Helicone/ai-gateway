@@ -19,7 +19,7 @@ use crate::{
     },
     s3::S3Client,
     types::{
-        extensions::{AuthContext, PromptContext, PromptInputValue},
+        extensions::{AuthContext, PromptContext},
         request::Request,
         response::{JawnResponse, Response},
     },
@@ -337,7 +337,7 @@ fn process_prompt_variables(
 
 fn process_message_variables(
     message_value: &mut serde_json::Value,
-    inputs: &std::collections::HashMap<String, PromptInputValue>,
+    inputs: &std::collections::HashMap<String, serde_json::Value>,
     variable_regex: &Regex,
     validated_variables: &mut HashSet<String>,
 ) -> Result<(), ApiError> {
@@ -381,7 +381,7 @@ fn process_message_variables(
 
 fn replace_variables(
     text: &str,
-    inputs: &std::collections::HashMap<String, PromptInputValue>,
+    inputs: &std::collections::HashMap<String, serde_json::Value>,
     variable_regex: &Regex,
     validated_variables: &mut std::collections::HashSet<String>,
 ) -> Result<String, ApiError> {
@@ -417,14 +417,14 @@ fn replace_variables(
 }
 
 fn validate_variable_type(
-    value: &PromptInputValue,
+    value: &serde_json::Value,
     expected_type: &str,
 ) -> Result<String, ApiError> {
     let value_string = value.to_string();
 
     match expected_type {
         "number" => {
-            if matches!(value, PromptInputValue::Number(_)) {
+            if matches!(value, serde_json::Value::Number(_)) {
                 return Ok(value_string);
             }
 
@@ -441,7 +441,7 @@ fn validate_variable_type(
                 })
         }
         "boolean" => {
-            if matches!(value, PromptInputValue::Boolean(_)) {
+            if matches!(value, serde_json::Value::Bool(_)) {
                 return Ok(value_string);
             }
 
