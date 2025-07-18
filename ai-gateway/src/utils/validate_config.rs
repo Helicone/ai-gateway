@@ -1,5 +1,4 @@
 use std::{
-    future::{Ready, ready},
     marker::PhantomData,
     task::{Context, Poll},
 };
@@ -11,7 +10,7 @@ use http_body_util::BodyExt;
 use serde::Serialize;
 use tower::{Layer, Service};
 
-use crate::{config::router::RouterConfig, error::internal::InternalError};
+use crate::config::router::RouterConfig;
 
 #[derive(Debug, Clone)]
 pub struct ValidateRouterConfigLayer<ReqBody> {
@@ -159,18 +158,13 @@ where
                             ))
                             .expect("always valid if tests pass"))
                     }
-                    Err(_e) => {
-                        return Ok(http::Response::builder()
-                            .status(http::StatusCode::OK)
-                            .header(
-                                http::header::CONTENT_TYPE,
-                                "application/json",
-                            )
-                            .body(axum_core::body::Body::from(
-                                invalid_response_body,
-                            ))
-                            .expect("always valid if tests pass"));
-                    }
+                    Err(_e) => Ok(http::Response::builder()
+                        .status(http::StatusCode::OK)
+                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .body(axum_core::body::Body::from(
+                            invalid_response_body,
+                        ))
+                        .expect("always valid if tests pass")),
                 }
             };
             Either::Left(Box::pin(fut))
