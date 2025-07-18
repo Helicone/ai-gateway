@@ -333,7 +333,8 @@ fn process_prompt_variables(
             inputs,
             &variable_regex,
         )?;
-        body_obj.insert("response_format".to_string(), processed_response_format);
+        body_obj
+            .insert("response_format".to_string(), processed_response_format);
     }
 
     if let Some(tools_value) = body_obj.get_mut("tools") {
@@ -353,15 +354,19 @@ fn process_prompt_schema(
     inputs: &std::collections::HashMap<String, serde_json::Value>,
     variable_regex: &Regex,
 ) -> Result<serde_json::Value, ApiError> {
-    // Any KV in a tool or response schema can have a variable, with two cases: "{{hc:name:type}}" or "{{hc:name:type}} world."
-    // If the former, then we wholly replace it with the input, (which may an object, such as an array). This allows objects as prompt inputs in schemas.
-    // The latter is a partial match, and we perform regex replacement as we do normally.
+    // Any KV in a tool or response schema can have a variable, with two cases:
+    // "{{hc:name:type}}" or "{{hc:name:type}} world." If the former, then
+    // we wholly replace it with the input, (which may an object, such as an
+    // array). This allows objects as prompt inputs in schemas. The latter
+    // is a partial match, and we perform regex replacement as we do normally.
 
-    // Other than some specific cases for prompt input type validation, we allow the provider to complain on invalid schemas.
+    // Other than some specific cases for prompt input type validation, we allow
+    // the provider to complain on invalid schemas.
     match value {
         serde_json::Value::String(s) => {
             if is_whole_variable_match(&s, variable_regex) {
-                let variable_name = get_variable_name_from_string(&s, variable_regex)?;
+                let variable_name =
+                    get_variable_name_from_string(&s, variable_regex)?;
                 if let Some(input_value) = inputs.get(&variable_name) {
                     return Ok(input_value.clone());
                 }
@@ -377,7 +382,8 @@ fn process_prompt_schema(
         serde_json::Value::Array(arr) => {
             let mut processed_array = Vec::new();
             for item in arr {
-                let processed_item = process_prompt_schema(item, inputs, variable_regex)?;
+                let processed_item =
+                    process_prompt_schema(item, inputs, variable_regex)?;
                 processed_array.push(processed_item);
             }
             Ok(serde_json::Value::Array(processed_array))
@@ -385,33 +391,40 @@ fn process_prompt_schema(
         serde_json::Value::Object(obj) => {
             let mut processed_object = serde_json::Map::new();
             for (key, val) in obj {
-                let processed_key = if is_whole_variable_match(&key, variable_regex) {
-                    let variable_name = get_variable_name_from_string(&key, variable_regex)?;
-                    if let Some(input_value) = inputs.get(&variable_name) {
-                        if let Some(string_value) = input_value.as_str() {
-                            string_value.to_string()
+                let processed_key =
+                    if is_whole_variable_match(&key, variable_regex) {
+                        let variable_name = get_variable_name_from_string(
+                            &key,
+                            variable_regex,
+                        )?;
+                        if let Some(input_value) = inputs.get(&variable_name) {
+                            if let Some(string_value) = input_value.as_str() {
+                                string_value.to_string()
+                            } else {
+                                return Err(ApiError::InvalidRequest(
+                                    InvalidRequestError::InvalidPromptInputs(
+                                        format!(
+                                            "Variable '{}' in object schema \
+                                             key must be a string, got: {}",
+                                            variable_name, input_value
+                                        ),
+                                    ),
+                                ));
+                            }
                         } else {
-                            return Err(ApiError::InvalidRequest(
-                                InvalidRequestError::InvalidPromptInputs(format!(
-                                    "Variable '{}' in object schema key must be a string, got: {}",
-                                    variable_name,
-                                    input_value
-                                ))
-                            ));
+                            key
                         }
                     } else {
-                        key
-                    }
-                } else {
-                    replace_variables(
-                        &key,
-                        inputs,
-                        variable_regex,
-                        &mut HashSet::new(),
-                    )?
-                };
+                        replace_variables(
+                            &key,
+                            inputs,
+                            variable_regex,
+                            &mut HashSet::new(),
+                        )?
+                    };
 
-                let processed_value = process_prompt_schema(val, inputs, variable_regex)?;
+                let processed_value =
+                    process_prompt_schema(val, inputs, variable_regex)?;
                 processed_object.insert(processed_key, processed_value);
             }
             Ok(serde_json::Value::Object(processed_object))
@@ -442,7 +455,7 @@ fn get_variable_name_from_string(
         InvalidRequestError::InvalidPromptInputs(format!(
             "Failed to extract variable name from: {}",
             text
-        ))
+        )),
     ))
 }
 
