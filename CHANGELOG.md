@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-beta.29] - 2025-07-18
+
+### 🚀 Features
+
+- Configurable generic oai handler (#210)
+- Mistral support (#211)
+- Prompts (#200)
+- [ENG-2217] specify version id to pull prompt (#214)
+- [ENG-2231] Prompt Templating (#216)
+- [ENG-2237] Support true types of prompt inputs (#217)
+- Allow configuring middleware for unified api (#219)
+- Dynamic router for cloud gateway (#220)
+- Authenticate cloud routers using their own api keys (#225)
+- Add model weighted router (#230)
+- Send router id and deployment target in helicone metadata (#234)
+- Cloud provider keys (#233)
+- Use Model latency router (#235)
+- Validate router config endpoint (#237)
+- Add local cloud config to config folder (#238)
+
+### 🐛 Bug Fixes
+
+- Return 429 errors in OpenAI format (#218)
+- Temporarily disable validation (#227)
+- Resolve bedrock model id issues (#231)
+- Respect `AWS_REGION` (#232)
+- Router not found panic (#236)
+
+### 💼 Other
+
+- V0.2.0-beta.28 (#228)
+
+### 🚜 Refactor
+
+- Remove "default" router keyword (#215)
+- Prep for new latency router (#226)
+- Reorg discover module (#229)
+
+### ⚙️ Miscellaneous Tasks
+
+- InitError if store not properly configured (#221)
+- Add dependency caching to ci (#222)
+- Use router_hash(cuid) for routers instead of router_id(uuid) (#224)
+
 ## [0.2.0-beta.28] - 2025-07-11
 
 ### 🚀 Features

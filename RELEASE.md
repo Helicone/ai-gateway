@@ -5,11 +5,12 @@ These are instructions on how to conduct a release of the Helicone ai-gateway
 2) Bump the version in the workspace `Cargo.toml`
     - eg with sed: `sed -i '' "/^\[workspace\.package\]/,/^\[/ s/^version = \"[^\"]*\"/version = \"<version_tag>\"/" Cargo.toml`
     - then ensure `Cargo.lock` is updated as well: `cargo c` (or let rust analyzer do it)
-3) Generate the `CHANGELOG.md` updates:
+3) Generate the `CHANGELOG.md` updates, eg:
 
 ```sh
 git fetch --tags
-git cliff --unreleased --prepend CHANGELOG.md
+# the tag argument here is the new version to be released
+git cliff --unreleased --tag v0.2.0-beta.29 --prepend CHANGELOG.md
 git add CHANGELOG.md Cargo.*
 ```
 
