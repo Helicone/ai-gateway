@@ -84,6 +84,16 @@ deepseek:
     - "deepseek-reasoner"
   base-url: https://api.deepseek.com/
 
+xai:
+  models:
+    - "grok-4"
+    - "grok-3"
+    - "grok-3-mini"
+    - "grok-3-fast"
+    - "grok-3-mini-fast"
+    - "grok-2-vision"
+  base-url: https://api.x.ai/
+
 ollama:
   models:
     - "deepseek-r1"
