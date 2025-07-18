@@ -78,6 +78,12 @@ groq:
     - "qwen/qwen3-32b"
   base-url: https://api.groq.com/openai/
 
+deepseek:
+  models:
+    - "deepseek-chat"
+    - "deepseek-reasoner"
+  base-url: https://api.deepseek.com/
+
 ollama:
   models:
     - "deepseek-r1"

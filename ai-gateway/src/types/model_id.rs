@@ -668,6 +668,15 @@ fn parse_date(input: &str) -> Option<(DateTime<Utc>, &'static str)> {
             return Some((Utc.from_utc_datetime(&naive_dt), "%m-%d"));
         }
     }
+    // then MMDD (assume current year)
+    if let Ok(date) = NaiveDate::parse_from_str(
+        &format!("{}{}", chrono::Utc::now().year(), input),
+        "%Y%m%d",
+    ) {
+        if let Some(naive_dt) = date.and_hms_opt(0, 0, 0) {
+            return Some((Utc.from_utc_datetime(&naive_dt), "%m%d"));
+        }
+    }
     None
 }
 
@@ -2357,5 +2366,66 @@ mod tests {
         } else {
             panic!("Expected Bedrock ModelId with geo field");
         }
+    }
+
+    #[test]
+    fn test_parse_date_mmdd_format() {
+        // Test MMDD format parsing
+        let current_year = chrono::Utc::now().year();
+
+        // Test a valid MMDD date
+        let test_date = "0315"; // March 15
+        if let Some((parsed_date, format)) = parse_date(test_date) {
+            assert_eq!(format, "%m%d");
+            assert_eq!(parsed_date.year(), current_year);
+            assert_eq!(parsed_date.month(), 3);
+            assert_eq!(parsed_date.day(), 15);
+        } else {
+            panic!("Failed to parse MMDD date");
+        }
+
+        // Test another MMDD date
+        let test_date = "1225"; // December 25
+        if let Some((parsed_date, format)) = parse_date(test_date) {
+            assert_eq!(format, "%m%d");
+            assert_eq!(parsed_date.year(), current_year);
+            assert_eq!(parsed_date.month(), 12);
+            assert_eq!(parsed_date.day(), 25);
+        } else {
+            panic!("Failed to parse MMDD date");
+        }
+    }
+
+    #[test]
+    fn test_model_with_mmdd_date_version() {
+        // Test a model with MMDD date version
+        let model_id_str = "gpt-4-0125";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::OpenAI,
+            model_id_str,
+        );
+
+        assert!(result.is_ok());
+        let ModelId::ModelIdWithVersion {
+            provider,
+            id: model_with_version,
+        } = result.unwrap()
+        else {
+            panic!("Expected ModelIdWithVersion");
+        };
+
+        assert!(matches!(provider, InferenceProvider::OpenAI));
+        assert_eq!(model_with_version.model, "gpt-4");
+
+        let Version::Date { date, format } = &model_with_version.version else {
+            panic!("Expected date version");
+        };
+
+        assert_eq!(format, &"%m%d");
+        assert_eq!(date.year(), chrono::Utc::now().year());
+        assert_eq!(date.month(), 1);
+        assert_eq!(date.day(), 25);
+
+        assert_eq!(model_with_version.to_string(), model_id_str);
     }
 }

@@ -76,11 +76,12 @@ impl DispatcherDiscovery<Key> {
                 let provider = model.inference_provider().ok_or_else(|| {
                     InitError::ModelIdNotRecognized(model.to_string())
                 })?;
-                let dispatcher = Dispatcher::new(
+                let dispatcher = Dispatcher::new_with_model_id(
                     app_state.clone(),
                     router_id,
                     router_config,
                     provider,
+                    model.clone(),
                 )
                 .await?;
                 service_map.insert(key, dispatcher);
