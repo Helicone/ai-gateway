@@ -15,7 +15,7 @@ pub struct ChatCompletions;
 
 impl crate::endpoints::Endpoint for ChatCompletions {
     // https://ollama.com/blog/openai-compatibility
-    const PATH: &'static str = "/v1/chat/completions";
+    const PATH: &'static str = "v1/chat/completions";
     type RequestBody = CreateChatCompletionRequestOllama;
     type ResponseBody = CreateChatCompletionResponse;
     type StreamResponseBody = CreateChatCompletionStreamResponse;

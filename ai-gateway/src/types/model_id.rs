@@ -768,6 +768,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn groq_model_id_format_with_slash() {
+        let groq_model_id_str = "meta-llama/llama-4-maverick-17b-128e-instruct";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Named("groq".into()),
+            groq_model_id_str,
+        )
+        .unwrap();
+        let ModelId::ModelIdWithVersion { provider, id } = result else {
+            panic!("Expected ModelIdWithVersion with Groq provider");
+        };
+        assert_eq!(
+            id,
+            ModelIdWithVersion {
+                model: "meta-llama/llama-4-maverick-17b-128e-instruct"
+                    .to_string(),
+                version: Version::ImplicitLatest,
+            }
+        );
+        assert_eq!(provider, InferenceProvider::Named("groq".into()));
+    }
+
+    #[test]
+    fn groq_model_id_format_without_slash() {
+        let groq_model_id_str = "deepseek-r1-distill-llama-70b";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Named("groq".into()),
+            groq_model_id_str,
+        )
+        .unwrap();
+        let ModelId::ModelIdWithVersion { provider, id } = result else {
+            panic!("Expected ModelIdWithVersion with Groq provider");
+        };
+        assert_eq!(
+            id,
+            ModelIdWithVersion {
+                model: "deepseek-r1-distill-llama-70b".to_string(),
+                version: Version::ImplicitLatest,
+            }
+        );
+        assert_eq!(provider, InferenceProvider::Named("groq".into()));
+    }
+
+    #[test]
     fn test_openai_o1_snapshot_model() {
         let model_id_str = "o1-2024-12-17";
         let result = ModelId::from_str_and_provider(

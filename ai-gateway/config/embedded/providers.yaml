@@ -17,7 +17,7 @@ openai:
     - "codex-mini"
     - "gpt-4o-mini-search"
     - "gpt-4o-search"
-  base-url: https://api.openai.com
+  base-url: https://api.openai.com/
 
 anthropic:
   models:
@@ -29,7 +29,7 @@ anthropic:
     - "claude-3-5-haiku"
     - "claude-3-5-sonnet"
     - "claude-3-opus"
-  base-url: https://api.anthropic.com
+  base-url: https://api.anthropic.com/
   version: "2023-06-01"
 
 gemini:
@@ -41,7 +41,7 @@ gemini:
     - "gemini-1.5-flash"
     - "gemini-1.5-flash-8b"
     - "gemini-1.5-pro"
-  base-url: https://generativelanguage.googleapis.com
+  base-url: https://generativelanguage.googleapis.com/
 
 mistral:
   models:
@@ -58,7 +58,25 @@ mistral:
     - "codestral"
     - "open-mistral-nemo"
     - "mistral-ocr"
-  base-url: https://api.mistral.ai
+  base-url: https://api.mistral.ai/
+
+groq:
+  models:
+    # groq "production" models
+    - "gemma2-9b-it"
+    - "llama-3.1-8b-instant"
+    - "llama-3.3-70b-versatile"
+    - "meta-llama/llama-guard-4-12b"
+    # groq "preview" models
+    - "deepseek-r1-distill-llama-70b"
+    - "meta-llama/llama-4-maverick-17b-128e-instruct"
+    - "meta-llama/llama-4-scout-17b-16e-instruct"
+    - "meta-llama/llama-prompt-guard-2-22m"
+    - "meta-llama/llama-prompt-guard-2-86m"
+    - "mistral-saba-24b"
+    - "moonshotai/kimi-k2-instruct"
+    - "qwen/qwen3-32b"
+  base-url: https://api.groq.com/openai/
 
 ollama:
   models:
@@ -71,7 +89,7 @@ ollama:
     - "llama3"
     - "phi4"
     - "llava"
-  base-url: http://localhost:11434
+  base-url: http://localhost:11434/
 
 bedrock:
   # bedrock models must be enabled prior to sending
@@ -99,4 +117,4 @@ bedrock:
     - "meta.llama3-2-3b-instruct-v1:0"
     - "meta.llama3-2-90b-instruct-v1:0"
     - "meta.llama4-maverick-17b-instruct-v1:0"
-  base-url: https://bedrock-runtime.us-east-1.amazonaws.com
+  base-url: https://bedrock-runtime.us-east-1.amazonaws.com/

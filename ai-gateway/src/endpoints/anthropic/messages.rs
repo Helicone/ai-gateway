@@ -13,7 +13,7 @@ use crate::{
 pub struct Messages;
 
 impl Endpoint for Messages {
-    const PATH: &'static str = "/v1/messages";
+    const PATH: &'static str = "v1/messages";
     type RequestBody = CreateMessageParams;
     type ResponseBody = CreateMessageResponse;
     type StreamResponseBody = message::StreamEvent;

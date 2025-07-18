@@ -49,7 +49,7 @@ impl TryFrom<&EndpointRoute> for OpenAI {
 pub struct OpenAICompatibleChatCompletions;
 
 impl Endpoint for OpenAICompatibleChatCompletions {
-    const PATH: &'static str = "/v1/chat/completions";
+    const PATH: &'static str = "v1/chat/completions";
     type RequestBody = OpenAICompatibleChatCompletionRequest;
     type ResponseBody = async_openai::types::CreateChatCompletionResponse;
     type StreamResponseBody =

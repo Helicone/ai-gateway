@@ -114,11 +114,11 @@ impl<S> RouterDetailsService<S> {
                     extract_router_id_and_path(&self.router_url_regex, path)?;
                 Ok(RouteType::Router {
                     id: router_id,
-                    path: extracted_api_path.into(),
+                    path: extracted_api_path.trim_start_matches('/').into(),
                 })
             } else if is_unified_api_request {
                 Ok(RouteType::UnifiedApi {
-                    path: rest_path.into(),
+                    path: rest_path.trim_start_matches('/').into(),
                 })
             } else {
                 let Ok(provider) = InferenceProvider::from_str(first_segment);
@@ -271,6 +271,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_join() {
+        let url = "https://api.groq.com/openai/";
+        let url = url::Url::parse(url).unwrap();
+        let url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://api.groq.com/openai/v1/chat/completions"
+        );
+    }
 
     #[test]
     fn test_unified_regex() {

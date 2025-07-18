@@ -48,7 +48,7 @@ latency-router = { path = "./crates/latency-router" }
 
 anthropic-ai-sdk = { version = "0.2.25" }
 anyhow = "1.0.98"
-async-openai = { version = "0.29.0" }
+async-openai = { version = "0.29.0", git = "https://github.com/tomharmon/async-openai.git" }
 async-trait = "0.1.88"
 axum = "0.8.4"
 axum-core = "0.5.2"

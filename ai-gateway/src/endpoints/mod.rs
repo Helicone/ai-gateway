@@ -37,13 +37,15 @@ macro_rules! define_endpoints {
         }
 
         impl EndpointRoute {
-            #[must_use] pub const fn path(&self) -> &'static str {
+            #[must_use]
+            pub const fn path(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $path,)*
                 }
             }
 
-            #[must_use] pub fn from_path(path: &str) -> Option<Self> {
+            #[must_use]
+            pub fn from_path(path: &str) -> Option<Self> {
                 match path {
                     $($path => Some(Self::$variant),)*
                     _ => None,
@@ -54,7 +56,7 @@ macro_rules! define_endpoints {
 }
 
 define_endpoints! {
-    (ChatCompletions, "/chat/completions"),
+    (ChatCompletions, "chat/completions"),
 }
 
 pub trait AiRequest {

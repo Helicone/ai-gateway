@@ -14,7 +14,7 @@ use crate::{
 pub struct Converse;
 
 impl Endpoint for Converse {
-    const PATH: &'static str = "/model/{model_id}/converse";
+    const PATH: &'static str = "model/{model_id}/converse";
     type RequestBody = ConverseInput;
     type ResponseBody = ConverseOutput;
     type StreamResponseBody = ConverseStreamOutput;

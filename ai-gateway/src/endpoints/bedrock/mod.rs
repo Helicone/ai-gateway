@@ -15,9 +15,9 @@ impl Bedrock {
         match self {
             Self::Converse(_) => {
                 if is_stream {
-                    format!("/model/{model_id}/converse-stream")
+                    format!("model/{model_id}/converse-stream")
                 } else {
-                    format!("/model/{model_id}/converse")
+                    format!("model/{model_id}/converse")
                 }
             }
         }

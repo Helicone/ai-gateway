@@ -118,7 +118,7 @@ impl TryFrom<&str> for UnifiedApi {
     type Error = InvalidRequestError;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "/chat/completions" => Ok(Self::ChatCompletions()),
+            "chat/completions" => Ok(Self::ChatCompletions()),
             _ => {
                 Err(InvalidRequestError::UnsupportedEndpoint(value.to_string()))
             }

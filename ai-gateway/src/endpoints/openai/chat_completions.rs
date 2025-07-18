@@ -15,7 +15,7 @@ use crate::{
 pub struct ChatCompletions;
 
 impl Endpoint for ChatCompletions {
-    const PATH: &'static str = "/v1/chat/completions";
+    const PATH: &'static str = "v1/chat/completions";
     type RequestBody = CreateChatCompletionRequest;
     type ResponseBody = CreateChatCompletionResponse;
     type StreamResponseBody = CreateChatCompletionStreamResponse;
