@@ -174,6 +174,80 @@ impl RouterStore {
         Ok(final_provider_keys)
     }
 
+    pub async fn get_all_provider_keys_by_ids(
+        &self,
+    ) -> Result<FxHashMap<OrgId, ProviderKeyMap>, InitError> {
+        let ids = self.get_all_provider_key_ids().await?;
+        let mut provider_keys: FxHashMap<
+            OrgId,
+            FxHashMap<InferenceProvider, ProviderKey>,
+        > = FxHashMap::default();
+
+        for id in ids {
+            match sqlx::query_as::<_, DBProviderKey>(
+                "SELECT decrypted_provider_keys.provider_name, \
+                 decrypted_provider_keys.decrypted_provider_key, \
+                 decrypted_provider_keys.org_id, \
+                 decrypted_provider_keys.config FROM decrypted_provider_keys \
+                 WHERE id = $1 AND soft_delete = false",
+            )
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await
+            {
+                Ok(key) => {
+                    let provider_key = ProviderKey::Secret(Secret::from(
+                        key.decrypted_provider_key,
+                    ));
+                    let inference_provider =
+                        match InferenceProvider::from_helicone_provider_name(
+                            &key.provider_name,
+                        ) {
+                            Ok(provider) => provider,
+                            Err(e) => {
+                                error!(error = %e, provider_name = %key.provider_name, id = %id, "Failed to parse inference provider, skipping");
+                                continue;
+                            }
+                        };
+                    let existing_provider_keys = provider_keys
+                        .entry(OrgId::new(key.org_id))
+                        .or_default();
+                    existing_provider_keys
+                        .insert(inference_provider, provider_key);
+                }
+                Err(e) => {
+                    error!(error = %e, id = %id, "Failed to get provider key, skipping");
+                }
+            }
+        }
+
+        let mut final_provider_keys = FxHashMap::default();
+        for (org_id, provider_keys) in provider_keys.drain() {
+            let provider_key_map =
+                ProviderKeyMap::from_db(provider_keys.clone());
+            final_provider_keys.insert(org_id, provider_key_map);
+        }
+
+        Ok(final_provider_keys)
+    }
+
+    pub async fn get_all_provider_key_ids(
+        &self,
+    ) -> Result<Vec<Uuid>, InitError> {
+        let res = sqlx::query_scalar::<_, Uuid>(
+            "SELECT decrypted_provider_keys.id FROM decrypted_provider_keys \
+             WHERE soft_delete = false",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "failed to get all provider keys");
+            InitError::DatabaseConnection(e)
+        })?;
+
+        Ok(res)
+    }
+
     pub async fn get_org_provider_keys(
         &self,
         org_id: OrgId,

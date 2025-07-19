@@ -74,13 +74,7 @@ impl CloudDiscovery {
             .set_router_organization_map(router_organisation_map)
             .await;
 
-        let provider_keys = match router_store.get_all_provider_keys().await {
-            Ok(keys) => keys,
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to get provider keys from router store");
-                FxHashMap::default()
-            }
-        };
+        let provider_keys = router_store.get_all_provider_keys_by_ids().await?;
         app_state
             .0
             .provider_keys
