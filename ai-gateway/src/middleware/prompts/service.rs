@@ -172,25 +172,10 @@ async fn build_prompt_request(
         .await
         .map_err(|e| ApiError::Internal(InternalError::PromptError(e)))?;
 
-    tracing::debug!(
-        "Prompt body from S3: {}",
-        serde_json::to_string_pretty(&prompt_body_json).unwrap_or_default()
-    );
-
     let merged_body =
         merge_prompt_with_request(prompt_body_json, &request_json)?;
 
-    tracing::debug!(
-        "Merged body: {}",
-        serde_json::to_string_pretty(&merged_body).unwrap_or_default()
-    );
-
     let processed_body = process_prompt_variables(merged_body, &prompt_ctx)?;
-
-    tracing::debug!(
-        "Processed body: {}",
-        serde_json::to_string_pretty(&processed_body).unwrap_or_default()
-    );
 
     let merged_bytes = serde_json::to_vec(&processed_body)
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
