@@ -39,7 +39,6 @@ pub struct DBProviderKey {
     pub provider_name: String,
     pub decrypted_provider_key: String,
     pub org_id: Uuid,
-    pub config: serde_json::Value,
 }
 
 impl RouterStore {
@@ -133,9 +132,24 @@ impl RouterStore {
         let res = sqlx::query_as::<_, DBProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
-             decrypted_provider_keys.org_id, decrypted_provider_keys.config \
-             FROM decrypted_provider_keys WHERE soft_delete = false",
+             decrypted_provider_keys.org_id \
+             FROM decrypted_provider_keys INNER JOIN provider_keys ON decrypted_provider_keys.id=provider_keys.id WHERE decrypted_provider_keys.soft_delete=false",
         )
+//         let res = sqlx::query_as::<_, DBProviderKey>(
+//             "SELECT provider_keys.id,
+//     provider_keys.org_id,
+//     provider_keys.provider_name,
+//     provider_keys.provider_key_name,
+//     provider_keys.vault_key_id,
+//     provider_keys.soft_delete,
+//     provider_keys.created_at,
+//     provider_keys.provider_key,
+//         provider_keys.provider_key AS decrypted_provider_key,
+//     provider_keys.key_id,
+//     provider_keys.nonce,
+//     provider_keys.config
+//    FROM provider_keys",
+//         )
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -150,15 +164,15 @@ impl RouterStore {
             let provider_key =
                 ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
             let inference_provider =
-                InferenceProvider::from_helicone_provider_name(
+                match InferenceProvider::from_helicone_provider_name(
                     &key.provider_name,
-                )
-                .map_err(|e| {
-                    error!(error = %e, "failed to get inference provider");
-                    InitError::ProviderError(
-                        ProviderError::InvalidProviderName(key.provider_name),
-                    )
-                })?;
+                ) {
+                    Ok(provider) => provider,
+                    Err(e) => {
+                        error!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                        continue;
+                    }
+                };
             let existing_provider_keys =
                 provider_keys.entry(OrgId::new(key.org_id)).or_default();
             existing_provider_keys.insert(inference_provider, provider_key);
@@ -181,7 +195,7 @@ impl RouterStore {
         let res = sqlx::query_as::<_, DBProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
-             decrypted_provider_keys.org_id, decrypted_provider_keys.config \
+             decrypted_provider_keys.org_id \
              FROM decrypted_provider_keys WHERE org_id = $1 AND soft_delete = \
              false",
         )
@@ -197,15 +211,15 @@ impl RouterStore {
             let provider_key =
                 ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
             let inference_provider =
-                InferenceProvider::from_helicone_provider_name(
+                match InferenceProvider::from_helicone_provider_name(
                     &key.provider_name,
-                )
-                .map_err(|e| {
-                    error!(error = %e, "failed to get inference provider");
-                    InitError::ProviderError(
-                        ProviderError::InvalidProviderName(key.provider_name),
-                    )
-                })?;
+                ) {
+                    Ok(provider) => provider,
+                    Err(e) => {
+                        error!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                        continue;
+                    }
+                };
             provider_keys.insert(inference_provider, provider_key);
         }
         Ok(ProviderKeyMap::from_db(provider_keys))
