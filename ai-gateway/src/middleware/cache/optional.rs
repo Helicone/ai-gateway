@@ -27,16 +27,14 @@ impl Layer {
         Ok(Self { inner: layer })
     }
 
-    #[must_use]
-    pub fn global(app_state: &AppState) -> Self {
-        let layer = CacheLayer::global(app_state);
-        Self { inner: layer }
+    pub fn global(app_state: &AppState) -> Result<Self, InitError> {
+        let layer = CacheLayer::global(app_state)?;
+        Ok(Self { inner: layer })
     }
 
-    #[must_use]
-    pub fn unified_api(app_state: &AppState) -> Self {
-        let layer = CacheLayer::unified_api(app_state);
-        Self { inner: layer }
+    pub fn unified_api(app_state: &AppState) -> Result<Self, InitError> {
+        let layer = CacheLayer::unified_api(app_state)?;
+        Ok(Self { inner: layer })
     }
 
     /// For when we statically know that caching is disabled.

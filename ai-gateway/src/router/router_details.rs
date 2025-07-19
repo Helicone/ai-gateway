@@ -259,12 +259,6 @@ where
             let response = future.await?;
             Ok(response)
         })
-
-        // match route {
-        //     RouteType::Router { id, path } => {
-        //         self.inner.call(req)
-        //     }
-        // }
     }
 }
 

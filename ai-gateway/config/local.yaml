@@ -7,6 +7,13 @@ helicone:
   websocket-url: "ws://localhost:8585/ws/v1/router/control-plane"
   features: none
 
+global:
+  cache:
+    directive: "max-age=10"
+
+cache-store:
+  type: in-memory
+
 routers:
   my-router:
     load-balance:

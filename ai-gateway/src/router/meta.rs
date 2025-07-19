@@ -69,7 +69,7 @@ impl MetaRouter {
                 crate::middleware::auth::AuthService::new(app_state.clone()),
             ))
             .layer(RateLimitLayer::global(&app_state)?)
-            .layer(CacheLayer::global(&app_state))
+            .layer(CacheLayer::global(&app_state)?)
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .map_err(crate::error::internal::InternalError::BufferError)
             .layer(BufferLayer::new(MIDDLEWARE_BUFFER_SIZE))
@@ -88,7 +88,7 @@ impl MetaRouter {
 
         let unified_api = ServiceBuilder::new()
             .layer(RateLimitLayer::unified_api(&app_state)?)
-            .layer(CacheLayer::unified_api(&app_state))
+            .layer(CacheLayer::unified_api(&app_state)?)
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state).await?);
         let direct_proxies =
@@ -109,7 +109,7 @@ impl MetaRouter {
         let dynamic_router = router_factory.call(None).await?;
         let unified_api = ServiceBuilder::new()
             .layer(RateLimitLayer::unified_api(&app_state)?)
-            .layer(CacheLayer::unified_api(&app_state))
+            .layer(CacheLayer::unified_api(&app_state)?)
             .layer(ErrorHandlerLayer::new(app_state.clone()))
             .service(unified_api::Service::new(&app_state).await?);
         let direct_proxies =
@@ -217,11 +217,16 @@ impl tower::Service<crate::types::request::Request> for MetaRouter {
             Some(RouteType::DirectProxy { provider, .. }) => {
                 self.handle_direct_proxy_request(req, provider.clone())
             }
-            None => ResponseFuture::Ready {
-                future: ready(Err(ApiError::InvalidRequest(
-                    InvalidRequestError::NotFound(req.uri().path().to_string()),
-                ))),
-            },
+            None => {
+                tracing::debug!("no route type found");
+                ResponseFuture::Ready {
+                    future: ready(Err(ApiError::InvalidRequest(
+                        InvalidRequestError::NotFound(
+                            req.uri().path().to_string(),
+                        ),
+                    ))),
+                }
+            }
         }
     }
 }

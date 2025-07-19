@@ -133,21 +133,23 @@ impl CacheLayer {
         }
     }
 
-    pub fn global(app_state: &AppState) -> Option<Self> {
+    pub fn global(app_state: &AppState) -> Result<Option<Self>, InitError> {
         let cloned_app_state = app_state.clone();
         if let Some(config) = &app_state.config().global.cache {
-            Self::new(cloned_app_state, config.clone()).ok()
+            Self::new(cloned_app_state, config.clone()).map(Some)
         } else {
-            None
+            Ok(None)
         }
     }
 
-    pub fn unified_api(app_state: &AppState) -> Option<Self> {
+    pub fn unified_api(
+        app_state: &AppState,
+    ) -> Result<Option<Self>, InitError> {
         let cloned_app_state = app_state.clone();
         if let Some(config) = &app_state.config().unified_api.cache {
-            Self::new(cloned_app_state, config.clone()).ok()
+            Self::new(cloned_app_state, config.clone()).map(Some)
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -373,16 +375,17 @@ async fn check_cache(
                 Ok(CacheCheckResult::Fresh(response))
             }
         }
-        BeforeRequest::Stale { request, matches } if matches => {
-            Ok(CacheCheckResult::Stale(request))
-        }
+        BeforeRequest::Stale {
+            request: _,
+            matches,
+        } if matches => Ok(CacheCheckResult::Stale),
         BeforeRequest::Stale { .. } => Ok(CacheCheckResult::Miss),
     }
 }
 
 enum CacheCheckResult {
     Fresh(Response),
-    Stale(Parts),
+    Stale,
     Miss,
 }
 
@@ -523,8 +526,8 @@ where
                 ]);
                 return Ok(resp);
             }
-            Ok((bucket, key, CacheCheckResult::Stale(stale_parts))) => {
-                stale_hits.push((bucket, key, stale_parts));
+            Ok((bucket, key, CacheCheckResult::Stale)) => {
+                stale_hits.push((bucket, key));
             }
             Ok((bucket, _, CacheCheckResult::Miss)) => {
                 empty_buckets.push(bucket);
@@ -536,15 +539,14 @@ where
     }
 
     // Try stale hits
-    if let Some((bucket, key, stale_parts)) = stale_hits.into_iter().next() {
-        let req =
-            Request::from_parts(stale_parts.clone(), body_bytes.clone().into());
+    if let Some((bucket, key)) = stale_hits.into_iter().next() {
+        let req = Request::from_parts(parts.clone(), body_bytes.clone().into());
         let resp = inner.call(req).await.map_err(|e| {
             tracing::error!(error = %e, "encountered infallible error");
             ApiError::Internal(InternalError::Internal)
         })?;
         let req_for_cache =
-            Request::from_parts(stale_parts, body_bytes.clone().into());
+            Request::from_parts(parts, body_bytes.clone().into());
         return handle_response_for_cache_miss(
             cache,
             &ctx,
