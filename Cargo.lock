@@ -61,6 +61,7 @@ dependencies = [
  "clap",
  "compact_str",
  "config",
+ "dashmap",
  "derive_more",
  "displaydoc",
  "dotenvy",
