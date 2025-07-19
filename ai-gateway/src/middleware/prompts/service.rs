@@ -312,18 +312,18 @@ fn process_prompt_variables(
     let variable_regex = Regex::new(r"\{\{\s*hc\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
-    if let Some(messages_value) = body_obj.get_mut("messages") {
-        if let Some(messages_array) = messages_value.as_array_mut() {
-            let mut validated_variables = HashSet::new();
+    if let Some(messages_value) = body_obj.get_mut("messages")
+        && let Some(messages_array) = messages_value.as_array_mut()
+    {
+        let mut validated_variables = HashSet::new();
 
-            for message_value in messages_array {
-                process_message_variables(
-                    message_value,
-                    inputs,
-                    &variable_regex,
-                    &mut validated_variables,
-                )?;
-            }
+        for message_value in messages_array {
+            process_message_variables(
+                message_value,
+                inputs,
+                &variable_regex,
+                &mut validated_variables,
+            )?;
         }
     }
 
@@ -434,10 +434,10 @@ fn process_prompt_schema(
 }
 
 fn is_whole_variable_match(text: &str, variable_regex: &Regex) -> bool {
-    if let Some(captures) = variable_regex.captures(text) {
-        if let Some(full_match) = captures.get(0) {
-            return full_match.as_str() == text;
-        }
+    if let Some(captures) = variable_regex.captures(text)
+        && let Some(full_match) = captures.get(0)
+    {
+        return full_match.as_str() == text;
     }
     false
 }
@@ -446,10 +446,10 @@ fn get_variable_name_from_string(
     text: &str,
     variable_regex: &Regex,
 ) -> Result<String, ApiError> {
-    if let Some(captures) = variable_regex.captures(text) {
-        if let Some(name_match) = captures.get(1) {
-            return Ok(name_match.as_str().to_string());
-        }
+    if let Some(captures) = variable_regex.captures(text)
+        && let Some(name_match) = captures.get(1)
+    {
+        return Ok(name_match.as_str().to_string());
     }
     Err(ApiError::InvalidRequest(
         InvalidRequestError::InvalidPromptInputs(format!(
