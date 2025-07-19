@@ -214,6 +214,23 @@ impl EndpointConverterRegistryInner {
         ));
         registry.register_converter(key, converter);
 
+        let key = RegistryKey::new(
+            ApiEndpoint::OpenAI(OpenAI::chat_completions()),
+            ApiEndpoint::OpenAICompatible {
+                provider: InferenceProvider::Named("hyperbolic".into()),
+                openai_endpoint: OpenAI::chat_completions(),
+            },
+        );
+        let converter = TypedEndpointConverter::<
+            endpoints::openai::ChatCompletions,
+            endpoints::openai::OpenAICompatibleChatCompletions,
+            OpenAICompatibleConverter,
+        >::new(OpenAICompatibleConverter::new(
+            InferenceProvider::Named("hyperbolic".into()),
+            model_mapper.clone(),
+        ));
+        registry.register_converter(key, converter);
+
         registry
     }
 

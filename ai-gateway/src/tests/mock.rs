@@ -375,7 +375,7 @@ impl Mock {
         handle_presigned_url_mock(
             &self.jawn_mock,
             &self.minio_mock,
-            self.args.stubs.as_ref(),
+            Some(&stubs),
         )
         .await;
     }
