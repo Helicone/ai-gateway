@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     control_plane::types::Key,
-    error::{init::InitError, provider::ProviderError},
+    error::init::InitError,
     types::{
         org::OrgId,
         provider::{InferenceProvider, ProviderKey, ProviderKeyMap},
