@@ -404,9 +404,9 @@ fn process_prompt_schema(
                                 return Err(ApiError::InvalidRequest(
                                     InvalidRequestError::InvalidPromptInputs(
                                         format!(
-                                            "Variable '{}' in object schema \
-                                             key must be a string, got: {}",
-                                            variable_name, input_value
+                                            "Variable '{variable_name}' in \
+                                             object schema key must be a \
+                                             string, got: {input_value}"
                                         ),
                                     ),
                                 ));
@@ -453,8 +453,7 @@ fn get_variable_name_from_string(
     }
     Err(ApiError::InvalidRequest(
         InvalidRequestError::InvalidPromptInputs(format!(
-            "Failed to extract variable name from: {}",
-            text
+            "Failed to extract variable name from: {text}"
         )),
     ))
 }
