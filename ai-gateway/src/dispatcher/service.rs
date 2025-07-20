@@ -20,6 +20,7 @@ use tokio::{
 };
 use tower::{Service, ServiceBuilder};
 use tracing::{Instrument, info_span};
+use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
@@ -316,8 +317,14 @@ impl Dispatcher {
             response_status = %client_response.status(),
             "proxied request"
         );
+        let helicone_request_id = Uuid::new_v4();
         let provider_request_id = {
             let headers = client_response.headers_mut();
+            headers.insert(
+                "helicone-id",
+                HeaderValue::from_str(&helicone_request_id.to_string())
+                    .expect("a uuid is always a valid header value"),
+            );
             headers.remove(http::header::CONTENT_LENGTH);
             headers.remove("x-request-id")
         };
@@ -360,6 +367,7 @@ impl Dispatcher {
             tfft_rx,
             &mapper_ctx,
             router_id,
+            helicone_request_id,
         );
 
         Ok(client_response)
@@ -500,6 +508,7 @@ impl Dispatcher {
         tfft_rx: oneshot::Receiver<()>,
         mapper_ctx: &MapperContext,
         router_id: Option<RouterId>,
+        helicone_request_id: Uuid,
     ) {
         let deployment_target =
             self.app_state.config().deployment_target.clone();
@@ -520,6 +529,7 @@ impl Dispatcher {
                     .mapper_ctx(mapper_ctx.clone())
                     .router_id(router_id)
                     .deployment_target(deployment_target)
+                    .request_id(helicone_request_id)
                     .build();
 
                 let app_state = self.app_state.clone();

@@ -117,16 +117,24 @@ pub struct RequestLog {
     pub country_code: Option<isocountry::CountryCode>,
     pub request_created_at: DateTime<Utc>,
     pub is_stream: bool,
-    // TODO: make proper type, this is not really a string
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(default)]
-    pub helicone_template: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default)]
     pub experiment_column_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default)]
     pub experiment_row_index: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default)]
+    pub cache_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default)]
+    pub cache_bucket_max_size: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default)]
+    pub cache_control: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default)]
+    pub cache_reference_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, TypedBuilder)]

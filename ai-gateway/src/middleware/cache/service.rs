@@ -20,6 +20,7 @@ use opentelemetry::KeyValue;
 use rustc_hash::FxHasher;
 use tracing::Instrument;
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
@@ -50,6 +51,7 @@ const CACHE_BUCKET_IDX: HeaderName =
     HeaderName::from_static("helicone-cache-bucket-idx");
 const CACHE_HIT_HEADER_VALUE: HeaderValue = HeaderValue::from_static("HIT");
 const CACHE_MISS_HEADER_VALUE: HeaderValue = HeaderValue::from_static("MISS");
+const DEFAULT_UUID: Uuid = Uuid::from_u128(0);
 
 #[derive(Debug)]
 struct CacheContext {
@@ -225,6 +227,7 @@ async fn check_cache(
     req: Request,
     bucket: u8,
     now: std::time::SystemTime,
+    ctx: &CacheContext,
 ) -> Result<CacheCheckResult, ApiError> {
     let Some((http_resp, policy)) =
         cache.get(key).await.map_err(InternalError::CacheError)?
@@ -287,6 +290,13 @@ async fn check_cache(
                     ty: "async_openai::types::CreateChatCompletionRequest",
                     error: e,
                 });
+                let max_buckets = ctx.buckets;
+                let cache_control = ctx.directive.clone();
+                let helicone_request_id = response
+                    .headers()
+                    .get("helicone-id")
+                    .and_then(|hv| Uuid::parse_str(hv.to_str().unwrap()).ok())
+                    .unwrap_or(DEFAULT_UUID);
                 tokio::spawn(
                     async move {
                         let Ok(deserialized_body) = deserialized_body else {
@@ -341,6 +351,13 @@ async fn check_cache(
                             .mapper_ctx(mapper_ctx)
                             .router_id(router_id)
                             .deployment_target(deployment_target)
+                            .cache_enabled(Some(true))
+                            .cache_bucket_max_size(max_buckets)
+                            .cache_control(cache_control)
+                            .cache_reference_id(Some(
+                                helicone_request_id.to_string(),
+                            ))
+                            .request_id(helicone_request_id)
                             .build();
                         if let Err(e) = response_logger.log().await {
                             let error_str = e.as_ref().to_string();
@@ -501,15 +518,24 @@ where
         bucket_indices.shuffle(&mut rng);
     }
 
+    let ctx_ref = &ctx;
     for bucket in bucket_indices {
         let mut cloned_hasher = hasher.clone();
         bucket.hash(&mut cloned_hasher);
         let key = cloned_hasher.finish().to_string();
         let req = Request::from_parts(parts.clone(), body_bytes.clone().into());
         futures.push(async move {
-            check_cache(app_state.clone(), cache, &key, req, bucket, now)
-                .await
-                .map(|result| (bucket, key, result))
+            check_cache(
+                app_state.clone(),
+                cache,
+                &key,
+                req,
+                bucket,
+                now,
+                ctx_ref,
+            )
+            .await
+            .map(|result| (bucket, key, result))
         });
     }
 

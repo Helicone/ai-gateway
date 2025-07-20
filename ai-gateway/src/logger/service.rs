@@ -64,6 +64,15 @@ pub struct LoggerService {
     router_id: Option<RouterId>,
     deployment_target: DeploymentTarget,
     tfft_rx: oneshot::Receiver<()>,
+    request_id: Uuid,
+    #[builder(default)]
+    cache_enabled: Option<bool>,
+    #[builder(default)]
+    cache_bucket_max_size: Option<u8>,
+    #[builder(default)]
+    cache_control: Option<String>,
+    #[builder(default)]
+    cache_reference_id: Option<String>,
 }
 
 impl LoggerService {
@@ -86,7 +95,6 @@ impl LoggerService {
         tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
         let req_body_len = self.request_body.len();
         let resp_body_len = response_body.len();
-        let request_id = Uuid::new_v4();
         let s3_client = match self.app_state.config().deployment_target {
             DeploymentTarget::Cloud => {
                 MinioClient::cloud(&self.app_state.0.minio)
@@ -99,7 +107,7 @@ impl LoggerService {
             .log_bodies(
                 &self.app_state,
                 &self.auth_ctx,
-                request_id,
+                self.request_id,
                 self.request_body,
                 response_body,
             )
@@ -133,7 +141,7 @@ impl LoggerService {
             provider => provider.to_string().to_uppercase(),
         };
         let request_log = RequestLog::builder()
-            .id(request_id)
+            .id(self.request_id)
             .user_id(self.auth_ctx.user_id)
             .properties(IndexMap::new())
             .target_url(self.target_url)
@@ -141,10 +149,14 @@ impl LoggerService {
             .body_size(req_body_len as f64)
             .path(req_path)
             .request_created_at(self.start_time)
-            .is_stream(false)
+            .is_stream(self.mapper_ctx.is_stream)
+            .cache_enabled(self.cache_enabled)
+            .cache_bucket_max_size(self.cache_bucket_max_size)
+            .cache_control(self.cache_control)
+            .cache_reference_id(self.cache_reference_id)
             .build();
         let response_log = ResponseLog::builder()
-            .id(request_id)
+            .id(self.request_id)
             .status(f64::from(self.response_status.as_u16()))
             .body_size(resp_body_len as f64)
             .response_created_at(Utc::now())
