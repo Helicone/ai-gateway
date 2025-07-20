@@ -17,7 +17,7 @@ use tokio_tungstenite::{
 use tracing::{debug, error};
 
 use super::{
-    control_plane_state::ControlPlaneState,
+    control_plane_state::StateWithMetadata,
     types::{MessageTypeRX, MessageTypeTX},
 };
 use crate::{
@@ -34,7 +34,7 @@ pub struct WebsocketChannel {
 
 #[derive(Debug)]
 pub struct ControlPlaneClient {
-    pub state: Arc<RwLock<ControlPlaneState>>,
+    pub state: Arc<RwLock<StateWithMetadata>>,
     channel: WebsocketChannel,
     /// Config about Control plane, such as the websocket url,
     /// reconnect interval/backoff policy, heartbeat interval, etc.
@@ -42,7 +42,7 @@ pub struct ControlPlaneClient {
 }
 
 async fn handle_message(
-    state: &Arc<RwLock<ControlPlaneState>>,
+    state: &Arc<RwLock<StateWithMetadata>>,
     message: Message,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let bytes = message.into_data();
@@ -128,7 +128,7 @@ impl ControlPlaneClient {
     }
 
     pub async fn connect(
-        control_plane_state: Arc<RwLock<ControlPlaneState>>,
+        control_plane_state: Arc<RwLock<StateWithMetadata>>,
         config: HeliconeConfig,
     ) -> Result<Self, InitError> {
         let channel = connect_with_retry(&config).await?;
@@ -230,7 +230,7 @@ mod tests {
     use crate::{
         config::helicone::HeliconeConfig,
         control_plane::{
-            control_plane_state::ControlPlaneState, types::MessageTypeTX,
+            control_plane_state::StateWithMetadata, types::MessageTypeTX,
         },
     };
 
@@ -277,7 +277,7 @@ mod tests {
             ..Default::default()
         };
 
-        let control_plane_state: Arc<RwLock<ControlPlaneState>> =
+        let control_plane_state: Arc<RwLock<StateWithMetadata>> =
             Arc::default();
         // This will fail if no server is running on 8585, which is expected
         let connect_fut = ControlPlaneClient::connect(

@@ -14,7 +14,7 @@ use crate::{
     control_plane::types::Key,
     error::{init::InitError, runtime::RuntimeError},
     router::service::Router,
-    types::{org::OrgId, router::RouterId},
+    types::{org::OrgId, router::RouterId, user::UserId},
 };
 
 /// A database listener service that handles LISTEN/NOTIFY functionality.
@@ -44,14 +44,14 @@ enum ConnectedCloudGatewaysNotification {
         router_id: String,
         router_hash: RouterId,
         router_config_id: String,
-        organization_id: String,
+        organization_id: OrgId,
         version: String,
         op: Op,
         config: Box<RouterConfig>,
     },
     ApiKeyUpdated {
-        owner_id: String,
-        organization_id: String,
+        owner_id: UserId,
+        organization_id: OrgId,
         api_key_hash: String,
         soft_delete: bool,
         op: Op,
@@ -193,10 +193,6 @@ impl DatabaseListener {
                     debug!("Router configuration updated");
                     match op {
                         Op::Insert => {
-                            let organization_id = OrgId::try_from(organization_id.as_str()).map_err(|e| {
-                                error!(error = %e, "failed to convert organization id to OrgId");
-                                RuntimeError::Internal(crate::error::internal::InternalError::Internal)
-                            })?;
                             Self::handle_router_config_insert(
                                 router_hash,
                                 *config,
@@ -225,10 +221,6 @@ impl DatabaseListener {
                     op,
                 } => match op {
                     Op::Insert => {
-                        let organization_id = OrgId::try_from(organization_id.as_str()).map_err(|e| {
-                                error!(error = %e, "failed to convert organization id to OrgId");
-                                RuntimeError::Internal(crate::error::internal::InternalError::Internal)
-                            })?;
                         let _ = app_state
                             .set_router_api_key(Key {
                                 key_hash: api_key_hash,

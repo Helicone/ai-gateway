@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
-use crate::types::org::OrgId;
+use crate::types::{org::OrgId, user::UserId};
 
 /// Computes the hash of an API key for storage and lookup in the control plane.
 /// This function adds a "Bearer " prefix to the key before hashing to match
@@ -30,20 +30,15 @@ pub fn hash_key(key: &str) -> String {
 #[serde(tag = "_type")]
 pub enum MessageTypeTX {
     Heartbeat,
-    RequestConfig {},
-    SendLog {
-        log: String, // TODO: replace with log
-    },
 }
 
 #[derive(TS, Serialize, Deserialize, Debug, Clone)]
 #[ts(export)]
 #[ts(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
 pub struct AuthData {
-    pub user_id: String,
-    pub organization_id: String,
+    pub user_id: UserId,
+    pub organization_id: OrgId,
 }
 
 #[derive(
@@ -52,11 +47,9 @@ pub struct AuthData {
 #[ts(export)]
 #[ts(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
 pub struct Key {
     pub key_hash: String,
-    pub owner_id: String,
-    #[ts(as = "String")]
+    pub owner_id: UserId,
     pub organization_id: OrgId,
 }
 
@@ -64,15 +57,12 @@ pub struct Key {
 #[ts(export)]
 #[ts(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
-pub struct Config {
+pub struct ControlPlaneState {
     pub auth: AuthData,
     pub keys: Vec<Key>,
-    pub router_id: String,
-    pub router_config: String, // TODO: replace with router config
 }
 
-impl Config {
+impl ControlPlaneState {
     #[must_use]
     pub fn get_key_from_hash(&self, key_hash: &str) -> Option<&Key> {
         self.keys.iter().find(|k| k.key_hash == key_hash)
@@ -80,7 +70,7 @@ impl Config {
 }
 
 #[cfg(feature = "testing")]
-impl crate::tests::TestDefault for Config {
+impl crate::tests::TestDefault for ControlPlaneState {
     fn test_default() -> Self {
         use uuid::Uuid;
 
@@ -90,16 +80,14 @@ impl crate::tests::TestDefault for Config {
         let organization_id = Uuid::new_v4();
         Self {
             auth: AuthData {
-                user_id: user_id.to_string(),
-                organization_id: organization_id.to_string(),
+                user_id: UserId::new(user_id),
+                organization_id: OrgId::new(organization_id),
             },
             keys: vec![Key {
                 key_hash: key_hash.clone(),
-                owner_id: user_id.to_string(),
+                owner_id: UserId::new(user_id),
                 organization_id: OrgId::new(organization_id),
             }],
-            router_id: "my-router".to_string(),
-            router_config: "{}".to_string(),
         }
     }
 }
@@ -107,8 +95,7 @@ impl crate::tests::TestDefault for Config {
 #[derive(TS, Serialize, Deserialize, Debug, Clone)]
 #[ts(export)]
 pub enum Update {
-    AuthData { data: AuthData },
-    Config { data: Config },
+    Config { data: ControlPlaneState },
     Keys { data: Vec<Key> },
 }
 
@@ -125,13 +112,6 @@ pub enum Status {
 
 #[derive(TS, Serialize, Deserialize, Debug, Clone)]
 #[ts(export)]
-pub enum Ack {
-    Heartbeat(Status),
-    SendLog(Status),
-}
-
-#[derive(TS, Serialize, Deserialize, Debug, Clone)]
-#[ts(export)]
 pub enum ControlPlaneError {
     Unauthorized { message: String },
 }
@@ -140,7 +120,6 @@ pub enum ControlPlaneError {
 #[ts(export)]
 #[serde(tag = "_type")]
 pub enum MessageTypeRX {
-    Ack(Ack),
     Update(Update),
     Error(ControlPlaneError),
 }

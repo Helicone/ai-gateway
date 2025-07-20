@@ -6,7 +6,10 @@ use thiserror::Error;
 use super::api::ErrorResponse;
 use crate::{
     error::api::ErrorDetails,
-    middleware::mapper::openai::INVALID_REQUEST_ERROR_TYPE, types::json::Json,
+    middleware::mapper::openai::{
+        INVALID_REQUEST_ERROR_TYPE, SERVER_ERROR_TYPE,
+    },
+    types::json::Json,
 };
 
 #[derive(Debug, strum::AsRefStr, Error, Display)]
@@ -19,6 +22,8 @@ pub enum AuthError {
     ProviderKeyNotFound,
     /// Router not found
     RouterNotFound,
+    /// Auth data not ready
+    AuthDataNotReady,
 }
 
 impl IntoResponse for AuthError {
@@ -72,6 +77,18 @@ impl IntoResponse for AuthError {
                 }),
             )
                 .into_response(),
+            Self::AuthDataNotReady => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorDetails {
+                        message: Self::AuthDataNotReady.to_string(),
+                        r#type: Some(SERVER_ERROR_TYPE.to_string()),
+                        param: None,
+                        code: Some("auth_data_not_ready".to_string()),
+                    },
+                }),
+            )
+                .into_response(),
         }
     }
 }
@@ -89,6 +106,8 @@ pub enum AuthErrorMetric {
     ProviderKeyNotFound,
     /// Router not found
     RouterNotFound,
+    /// Auth data not ready
+    AuthDataNotReady,
 }
 
 impl From<&AuthError> for AuthErrorMetric {
@@ -100,6 +119,7 @@ impl From<&AuthError> for AuthErrorMetric {
             AuthError::InvalidCredentials => Self::InvalidCredentials,
             AuthError::ProviderKeyNotFound => Self::ProviderKeyNotFound,
             AuthError::RouterNotFound => Self::RouterNotFound,
+            AuthError::AuthDataNotReady => Self::AuthDataNotReady,
         }
     }
 }

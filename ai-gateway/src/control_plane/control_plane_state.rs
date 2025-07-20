@@ -1,26 +1,27 @@
 use chrono::{DateTime, Utc};
 
-use super::types::{Config, ControlPlaneError, MessageTypeRX, Update};
+use super::types::{ControlPlaneError, MessageTypeRX, Update};
+use crate::control_plane::types::ControlPlaneState;
 const MAX_HISTORY_SIZE: usize = 100;
 
 #[derive(Debug, Default)]
-pub struct ControlPlaneState {
+pub struct StateWithMetadata {
     pub last_heartbeat: Option<DateTime<Utc>>,
-    pub config: Config,
-
+    pub state: Option<ControlPlaneState>,
     // used mainly for debugging and testing, can remove later
     pub history: Vec<MessageTypeRX>,
 }
 
-impl ControlPlaneState {
+impl StateWithMetadata {
     #[must_use]
     pub fn new() -> Self {
         Self {
             last_heartbeat: None,
-            config: Config::default(),
+            state: None,
             history: Vec::new(),
         }
     }
+
     pub fn update(&mut self, m: MessageTypeRX) {
         self.history.push(m.clone());
         if self.history.len() > MAX_HISTORY_SIZE {
@@ -29,15 +30,13 @@ impl ControlPlaneState {
 
         match m {
             MessageTypeRX::Update(Update::Keys { data }) => {
-                self.config.keys = data;
-            }
-            MessageTypeRX::Update(Update::AuthData { data }) => {
-                self.config.auth = data;
+                if let Some(state) = self.state.as_mut() {
+                    state.keys = data;
+                }
             }
             MessageTypeRX::Update(Update::Config { data }) => {
-                self.config = data;
+                self.state.replace(data);
             }
-            MessageTypeRX::Ack(_) => todo!(),
             MessageTypeRX::Error(ControlPlaneError::Unauthorized {
                 message,
             }) => {

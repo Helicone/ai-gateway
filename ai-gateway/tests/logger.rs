@@ -131,6 +131,7 @@ async fn unauthenticated_sidecar() {
     let mut harness = Harness::builder()
         .with_config(config)
         .with_mock_args(mock_args)
+        .with_mock_auth()
         .build()
         .await;
     let body_bytes = serde_json::to_vec(&json!({
@@ -147,7 +148,6 @@ async fn unauthenticated_sidecar() {
     let request_body = axum_core::body::Body::from(body_bytes.clone());
     let request = Request::builder()
         .method(Method::POST)
-        .header("authorization", "Bearer sk-helicone-test-key")
         .uri("http://router.helicone.com/router/my-router/chat/completions")
         .body(request_body)
         .unwrap();

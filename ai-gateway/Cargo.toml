@@ -97,7 +97,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v7"] }
 weighted-balance = { workspace = true }
 workspace_root = { workspace = true, optional = true }
-ts-rs = { workspace = true }
+ts-rs = { workspace = true, features = ["uuid-impl"] }
 
 [dev-dependencies]
 cargo-husky = { workspace = true, features = ["user-hooks"] }

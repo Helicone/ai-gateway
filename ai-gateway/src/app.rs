@@ -33,7 +33,7 @@ use crate::{
     cache::{CacheClient, RedisCacheManager},
     cli,
     config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
-    control_plane::control_plane_state::ControlPlaneState,
+    control_plane::control_plane_state::StateWithMetadata,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -247,7 +247,7 @@ impl App {
             pg_pool,
             jawn_http_client,
             control_plane_state: Arc::new(RwLock::new(
-                ControlPlaneState::default(),
+                StateWithMetadata::default(),
             )),
             provider_keys,
             global_rate_limit,

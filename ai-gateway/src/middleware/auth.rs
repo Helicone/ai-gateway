@@ -54,10 +54,7 @@ impl AuthService {
                                         api_key: Secret::from(
                                             api_key_without_bearer,
                                         ),
-                                        user_id: key
-                                            .owner_id
-                                            .as_str()
-                                            .try_into()?,
+                                        user_id: key.owner_id,
                                         org_id: key.organization_id,
                                     })
                                 } else {
@@ -70,7 +67,7 @@ impl AuthService {
                         RequestKind::UnifiedApi | RequestKind::DirectProxy => {
                             Ok(AuthContext {
                                 api_key: Secret::from(api_key_without_bearer),
-                                user_id: key.owner_id.as_str().try_into()?,
+                                user_id: key.owner_id,
                                 org_id: key.organization_id,
                             })
                         }
@@ -80,18 +77,17 @@ impl AuthService {
                 }
             }
             DeploymentTarget::Sidecar => {
-                let config =
-                    &app_state.0.control_plane_state.read().await.config;
-                let key = config.get_key_from_hash(&computed_hash);
+                let Some(control_plane_state) =
+                    &app_state.0.control_plane_state.read().await.state
+                else {
+                    return Err(AuthError::AuthDataNotReady);
+                };
+                let key = control_plane_state.get_key_from_hash(&computed_hash);
                 if let Some(key) = key {
                     Ok(AuthContext {
                         api_key: Secret::from(api_key_without_bearer),
-                        user_id: key.owner_id.as_str().try_into()?,
-                        org_id: config
-                            .auth
-                            .organization_id
-                            .as_str()
-                            .try_into()?,
+                        user_id: key.owner_id,
+                        org_id: control_plane_state.auth.organization_id,
                     })
                 } else {
                     Err(AuthError::InvalidCredentials)
@@ -154,6 +150,9 @@ where
                         | AuthError::ProviderKeyNotFound
                         | AuthError::RouterNotFound => {
                             app_state.0.metrics.auth_rejections.add(1, &[]);
+                        }
+                        AuthError::AuthDataNotReady => {
+                            tracing::warn!("auth data not ready");
                         }
                     }
                     Err(e.into_response())

@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use ai_gateway::{
-    control_plane::types::{MessageTypeRX, Update},
-    types::org::OrgId,
-};
+use ai_gateway::control_plane::types::{MessageTypeRX, Update};
 use axum::{
     Json,
     extract::{
@@ -14,6 +11,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
+use uuid::Uuid;
 
 use crate::AppState;
 
@@ -88,22 +86,22 @@ async fn websocket(stream: WebSocket) {
     }
 }
 
-fn mock_auth() -> ai_gateway::control_plane::types::Config {
+fn mock_auth() -> ai_gateway::control_plane::types::ControlPlaneState {
     let test_key = "sk-helicone-test-key";
     let key_hash = ai_gateway::control_plane::types::hash_key(test_key);
-    let organization_id = "c3bc2b69-c55c-4dfc-8a29-47db1245ee7c".to_string();
-    let user_id = "a41cbcd7-5e9e-4104-b29b-2ef4473d71a7".to_string();
-    ai_gateway::control_plane::types::Config {
+    let organization_id =
+        Uuid::parse_str("c3bc2b69-c55c-4dfc-8a29-47db1245ee7c").unwrap();
+    let user_id =
+        Uuid::parse_str("a41cbcd7-5e9e-4104-b29b-2ef4473d71a7").unwrap();
+    ai_gateway::control_plane::types::ControlPlaneState {
         auth: ai_gateway::control_plane::types::AuthData {
-            user_id: user_id.clone(),
-            organization_id: organization_id.clone(),
+            user_id: user_id.clone().into(),
+            organization_id: organization_id.clone().into(),
         },
         keys: vec![ai_gateway::control_plane::types::Key {
             key_hash: key_hash,
-            owner_id: user_id,
-            organization_id: OrgId::try_from(organization_id.as_str()).unwrap(),
+            owner_id: user_id.into(),
+            organization_id: organization_id.into(),
         }],
-        router_id: "my-router".to_string(),
-        router_config: "{}".to_string(),
     }
 }

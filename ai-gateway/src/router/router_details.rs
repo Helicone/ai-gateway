@@ -1,10 +1,11 @@
 use std::{
+    future::{Ready, ready},
     str::FromStr,
     task::{Context, Poll},
 };
 
 use compact_str::CompactString;
-use futures::future::BoxFuture;
+use futures::future::Either;
 use http::uri::PathAndQuery;
 use regex::Regex;
 
@@ -193,7 +194,7 @@ where
 {
     type Response = Response;
     type Error = ApiError;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = Either<Ready<Result<Self::Response, Self::Error>>, S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -211,7 +212,7 @@ where
                         match extract_path_and_query(path, req.uri().query()) {
                             Ok(p) => p,
                             Err(e) => {
-                                return Box::pin(async move { Err(e) });
+                                return Either::Left(ready(Err(e)));
                             }
                         };
 
@@ -224,7 +225,7 @@ where
                         match extract_path_and_query(path, req.uri().query()) {
                             Ok(p) => p,
                             Err(e) => {
-                                return Box::pin(async move { Err(e) });
+                                return Either::Left(ready(Err(e)));
                             }
                         };
                     req.extensions_mut().insert(extracted_path_and_query);
@@ -235,7 +236,7 @@ where
                         match extract_path_and_query(path, req.uri().query()) {
                             Ok(p) => p,
                             Err(e) => {
-                                return Box::pin(async move { Err(e) });
+                                return Either::Left(ready(Err(e)));
                             }
                         };
                     req.extensions_mut().insert(extracted_path_and_query);
@@ -255,10 +256,7 @@ where
         }
 
         let future = self.inner.call(req);
-        Box::pin(async move {
-            let response = future.await?;
-            Ok(response)
-        })
+        Either::Right(future)
     }
 }
 

@@ -12,6 +12,7 @@ use crate::{
         org::OrgId,
         provider::{InferenceProvider, ProviderKey, ProviderKeyMap},
         secret::Secret,
+        user::UserId,
     },
 };
 
@@ -85,7 +86,7 @@ impl RouterStore {
             .into_iter()
             .map(|k| Key {
                 key_hash: k.key_hash,
-                owner_id: k.owner_id.to_string(),
+                owner_id: UserId::new(k.owner_id),
                 organization_id: OrgId::new(k.organization_id),
             })
             .collect();
@@ -119,7 +120,7 @@ impl RouterStore {
             .into_iter()
             .map(|k| Key {
                 key_hash: k.key_hash,
-                owner_id: k.owner_id.to_string(),
+                owner_id: UserId::new(k.owner_id),
                 organization_id: OrgId::new(k.organization_id),
             })
             .collect();

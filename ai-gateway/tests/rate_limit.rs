@@ -163,12 +163,12 @@ async fn rate_limit_per_user_isolation_impl(
         .with_auth_keys(vec![
             Key {
                 key_hash: hash_key(user1_auth),
-                owner_id: user1_id.to_string(),
+                owner_id: user1_id.into(),
                 organization_id: OrgId::new(org1_id),
             },
             Key {
                 key_hash: hash_key(user2_auth),
-                owner_id: user2_id.to_string(),
+                owner_id: user2_id.into(),
                 organization_id: OrgId::new(org2_id),
             },
         ])

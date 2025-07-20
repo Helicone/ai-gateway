@@ -14,7 +14,7 @@ use crate::{
         Config, rate_limit::RateLimiterConfig,
         response_headers::ResponseHeadersConfig,
     },
-    control_plane::{control_plane_state::ControlPlaneState, types::Key},
+    control_plane::{control_plane_state::StateWithMetadata, types::Key},
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
         rate_limit::RateLimitMonitorMap,
@@ -71,7 +71,7 @@ pub struct InnerAppState {
     pub rate_limit_receivers: RateLimitEventReceivers,
     pub router_tx: RwLock<Option<Sender<Change<RouterId, Router>>>>,
 
-    pub control_plane_state: Arc<RwLock<ControlPlaneState>>,
+    pub control_plane_state: Arc<RwLock<StateWithMetadata>>,
 
     pub provider_keys: ProviderKeys,
     pub helicone_api_keys: RwLock<Option<HashSet<Key>>>,

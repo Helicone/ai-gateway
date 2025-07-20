@@ -1,12 +1,24 @@
-use derive_more::AsRef;
+use derive_more::{AsRef, From};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::auth::AuthError;
 
 #[derive(
-    Debug, AsRef, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize,
+    TS,
+    Debug,
+    AsRef,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    From,
 )]
+#[ts(export)]
 pub struct UserId(Uuid);
 
 impl UserId {

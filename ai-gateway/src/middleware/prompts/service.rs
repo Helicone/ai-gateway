@@ -117,10 +117,11 @@ async fn build_prompt_request(
         ApiError::InvalidRequest(InvalidRequestError::InvalidRequestBody(e))
     })?;
 
-    tracing::debug!(
-        "Request JSON: {}",
-        serde_json::to_string_pretty(&request_json).unwrap_or_default()
-    );
+    if request_json.pointer("/prompt_id").is_none() {
+        let req =
+            Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
+        return Ok(req);
+    }
 
     let Ok(prompt_ctx) = get_prompt_params(&request_json) else {
         let req =

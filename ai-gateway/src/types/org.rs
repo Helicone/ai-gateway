@@ -1,10 +1,12 @@
-use derive_more::AsRef;
+use derive_more::{AsRef, From};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::auth::AuthError;
 
 #[derive(
+    TS,
     Debug,
     AsRef,
     Copy,
@@ -15,6 +17,7 @@ use crate::error::auth::AuthError;
     Serialize,
     Deserialize,
     Default,
+    From,
 )]
 pub struct OrgId(Uuid);
 
