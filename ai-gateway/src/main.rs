@@ -130,16 +130,22 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
         ai_gateway::utils::meltdown::wait_for_shutdown_signals,
     ));
 
-    if app.state.0.config.helicone.is_auth_enabled() {
+    if config.helicone.is_auth_enabled()
+        && config.deployment_target == DeploymentTarget::Sidecar
+    {
         meltdown = meltdown.register(TaggedService::new(
             "control-plane-client",
-            ControlPlaneClient::connect(control_plane_state, helicone_config)
-                .await?,
+            ControlPlaneClient::connect(
+                control_plane_state,
+                helicone_config,
+                config.control_plane.clone(),
+            )
+            .await?,
         ));
         tasks.push("control-plane-client");
     }
 
-    if app.state.0.config.deployment_target == DeploymentTarget::Cloud {
+    if config.deployment_target == DeploymentTarget::Cloud {
         let pg_pool = app
             .state
             .0

@@ -1,5 +1,6 @@
 pub mod balance;
 pub mod cache;
+pub mod control_plane;
 pub mod database;
 pub mod discover;
 pub mod dispatcher;
@@ -80,6 +81,7 @@ pub struct Config {
     pub discover: self::discover::DiscoverConfig,
     pub response_headers: self::response_headers::ResponseHeadersConfig,
     pub deployment_target: DeploymentTarget,
+    pub control_plane: self::control_plane::ControlPlaneConfig,
 
     /// If a request is made with a model that is not in the `RouterConfig`
     /// model mapping, then we fallback to this.
@@ -212,6 +214,7 @@ impl crate::tests::TestDefault for Config {
             minio: self::minio::Config::test_default(),
             database: self::database::DatabaseConfig::test_default(),
             dispatcher: self::dispatcher::DispatcherConfig::test_default(),
+            control_plane: self::control_plane::ControlPlaneConfig::default(),
             default_model_mapping:
                 self::model_mapping::ModelMappingConfig::default(),
             global: MiddlewareConfig::default(),

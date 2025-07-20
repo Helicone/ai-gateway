@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use rust_decimal::Decimal;
+use backon::{BackoffBuilder, ConstantBuilder, ExponentialBuilder};
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const DEFAULT_RETRY_FACTOR: f32 = 2.0;
@@ -32,6 +33,40 @@ pub enum RetryConfig {
         #[serde(rename = "max-retries", default = "default_max_retries")]
         max_retries: u8,
     },
+}
+
+impl RetryConfig {
+    #[must_use]
+    pub fn as_iterator(
+        &self,
+    ) -> Box<dyn Iterator<Item = Duration> + Send + Sync> {
+        match self {
+            Self::Exponential {
+                min_delay,
+                max_delay,
+                max_retries,
+                factor,
+            } => {
+                let backoff = ExponentialBuilder::default()
+                    .with_min_delay(*min_delay)
+                    .with_max_delay(*max_delay)
+                    .with_max_times(usize::from(*max_retries))
+                    .with_factor(
+                        factor.to_f32().unwrap_or(DEFAULT_RETRY_FACTOR),
+                    )
+                    .with_jitter()
+                    .build();
+                Box::new(backoff)
+            }
+            Self::Constant { delay, max_retries } => {
+                let backoff = ConstantBuilder::default()
+                    .with_delay(*delay)
+                    .with_max_times(usize::from(*max_retries))
+                    .build();
+                Box::new(backoff)
+            }
+        }
+    }
 }
 
 fn default_factor() -> Decimal {

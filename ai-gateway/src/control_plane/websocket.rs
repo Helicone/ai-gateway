@@ -1,12 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
-use backon::{ExponentialBuilder, Retryable};
+use backon::{BackoffBuilder, ConstantBuilder, ExponentialBuilder, Retryable};
 use futures::{
     SinkExt, StreamExt,
     future::BoxFuture,
     stream::{SplitSink, SplitStream},
 };
 use meltdown::Token;
+use rust_decimal::prelude::ToPrimitive;
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
@@ -21,7 +22,10 @@ use super::{
     types::{MessageTypeRX, MessageTypeTX},
 };
 use crate::{
-    config::helicone::HeliconeConfig,
+    config::{
+        control_plane::ControlPlaneConfig, helicone::HeliconeConfig,
+        retry::RetryConfig,
+    },
     error::{init::InitError, runtime::RuntimeError},
 };
 type TlsWebSocketStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -39,6 +43,7 @@ pub struct ControlPlaneClient {
     /// Config about Control plane, such as the websocket url,
     /// reconnect interval/backoff policy, heartbeat interval, etc.
     config: HeliconeConfig,
+    retry_config: RetryConfig,
 }
 
 async fn handle_message(
@@ -100,10 +105,28 @@ async fn connect_async_and_split(
 
 async fn connect_with_retry(
     helicone_config: &HeliconeConfig,
+    retry_config: &RetryConfig,
 ) -> Result<WebsocketChannel, InitError> {
-    (|| async { connect_async_and_split(helicone_config).await })
-            // Retry with exponential backoff + jitter
-            .retry(ExponentialBuilder::default().with_jitter().without_max_times())
+    match retry_config {
+        RetryConfig::Exponential {
+            min_delay,
+            max_delay,
+            max_retries,
+            factor,
+        } => {
+            let retry_strategy = ExponentialBuilder::default()
+                .with_max_delay(*max_delay)
+                .with_min_delay(*min_delay)
+                .with_max_times(usize::from(*max_retries))
+                .with_factor(
+                    factor
+                        .to_f32()
+                        .unwrap_or(crate::config::retry::DEFAULT_RETRY_FACTOR),
+                )
+                .with_jitter()
+                .build();
+            (|| async { connect_async_and_split(helicone_config).await })
+            .retry(retry_strategy)
             .sleep(tokio::time::sleep)
             .when(|e: &InitError| {
                 matches!(e, InitError::WebsocketConnection(_))
@@ -117,11 +140,35 @@ async fn connect_with_retry(
                     );
                 }
             }).await
+        }
+        RetryConfig::Constant { delay, max_retries } => {
+            let retry_strategy = ConstantBuilder::default()
+                .with_max_times(usize::from(*max_retries))
+                .with_delay(*delay)
+                .build();
+            (|| async { connect_async_and_split(helicone_config).await })
+            .retry(retry_strategy)
+            .sleep(tokio::time::sleep)
+            .when(|e: &InitError| {
+                matches!(e, InitError::WebsocketConnection(_))
+            })
+            .notify(|err: &InitError, dur: Duration| {
+                if let InitError::WebsocketConnection(_) = err {
+                    tracing::warn!(
+                        error = %err,
+                        "Failed to connect to control plane, retrying in {} seconds...",
+                        dur.as_secs()
+                    );
+                }
+            }).await
+        }
+    }
 }
 
 impl ControlPlaneClient {
     async fn reconnect_websocket(&mut self) -> Result<(), InitError> {
-        let channel = connect_with_retry(&self.config).await?;
+        let channel =
+            connect_with_retry(&self.config, &self.retry_config).await?;
         self.channel = channel;
         tracing::info!("Successfully reconnected to control plane");
         Ok(())
@@ -130,12 +177,15 @@ impl ControlPlaneClient {
     pub async fn connect(
         control_plane_state: Arc<RwLock<StateWithMetadata>>,
         config: HeliconeConfig,
+        control_plane_config: ControlPlaneConfig,
     ) -> Result<Self, InitError> {
-        let channel = connect_with_retry(&config).await?;
+        let channel =
+            connect_with_retry(&config, &control_plane_config.retry).await?;
         Ok(Self {
             channel,
             config,
             state: control_plane_state,
+            retry_config: control_plane_config.retry,
         })
     }
 
@@ -162,6 +212,7 @@ impl ControlPlaneClient {
 
     async fn run_control_plane_forever(mut self) -> Result<(), RuntimeError> {
         let state_clone = Arc::clone(&self.state);
+        let mut backoff = self.retry_config.as_iterator();
         loop {
             while let Some(message) = self.channel.msg_rx.next().await {
                 match message {
@@ -169,7 +220,7 @@ impl ControlPlaneClient {
                         let _ = handle_message(&state_clone, message)
                             .await
                             .inspect_err(|e| {
-                                tracing::error!(error = ?e, "websocket error");
+                                tracing::error!(error = ?e, "error handling websocket message");
                             });
                     }
                     Err(tungstenite::Error::AlreadyClosed) => {
@@ -187,10 +238,16 @@ impl ControlPlaneClient {
             }
 
             // if the connection is closed, we need to reconnect
+            let sleep_duration =
+                backoff.next().unwrap_or(Duration::from_secs(20));
+            tracing::info!(
+                "control plane client reconnecting in {} seconds",
+                sleep_duration.as_secs()
+            );
+            tokio::time::sleep(sleep_duration).await;
             self.reconnect_websocket()
                 .await
                 .map_err(RuntimeError::Init)?;
-            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }
@@ -228,7 +285,7 @@ mod tests {
 
     use super::ControlPlaneClient;
     use crate::{
-        config::helicone::HeliconeConfig,
+        config::{control_plane::ControlPlaneConfig, helicone::HeliconeConfig},
         control_plane::{
             control_plane_state::StateWithMetadata, types::MessageTypeTX,
         },
@@ -256,8 +313,12 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Test connection
-        let result =
-            ControlPlaneClient::connect(Arc::default(), helicone_config).await;
+        let result = ControlPlaneClient::connect(
+            Arc::default(),
+            helicone_config,
+            ControlPlaneConfig::default(),
+        )
+        .await;
         assert!(result.is_ok(), "Should connect to mock server");
     }
 
@@ -283,6 +344,7 @@ mod tests {
         let connect_fut = ControlPlaneClient::connect(
             control_plane_state.clone(),
             helicone_config,
+            ControlPlaneConfig::default(),
         );
         let result = timeout(Duration::from_secs(1), connect_fut).await;
         let Ok(result) = result else {
