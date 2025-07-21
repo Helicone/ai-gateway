@@ -37,7 +37,7 @@ impl ConfigDiscovery {
             service_map.insert(key, router);
         }
 
-        tracing::debug!("Created config router discovery");
+        tracing::debug!("created config router discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
         })

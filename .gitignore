@@ -5,6 +5,7 @@ node_modules
 .idea/*
 .DS_Store
 bindings/
+cloud.yaml
 
 # Terraform files
 .terraform/

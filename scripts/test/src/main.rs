@@ -40,6 +40,9 @@ enum Commands {
         #[arg(short = 'r', long = "request-type", default_value_t = RequestType::LoadBalanced)]
         request_type: RequestType,
 
+        #[arg(long = "router-id", default_value = "my-router")]
+        router_id: Option<String>,
+
         /// Model identifier to use
         #[arg(
             short = 'm',
@@ -71,6 +74,9 @@ enum Commands {
             default_value = "openai/gpt-4o-mini"
         )]
         model: String,
+
+        #[arg(long = "router-id", default_value = "my-router")]
+        router_id: Option<String>,
     },
 }
 
@@ -102,6 +108,7 @@ impl Default for Commands {
             stream: false,
             auth: false,
             model: "openai/gpt-4o-mini".to_string(),
+            router_id: Some("my-router".to_string()),
         }
     }
 }
@@ -112,6 +119,7 @@ async fn test(
     send_auth: bool,
     request_type: RequestType,
     model: &str,
+    router_id: Option<String>,
 ) {
     let openai_request_body = serde_json::json!({
         "model": model,
@@ -149,8 +157,11 @@ async fn test(
             "http://localhost:8080/ai/chat/completions".to_string()
         }
         RequestType::LoadBalanced => {
-            "http://localhost:8080/router/my-router/chat/completions"
-                .to_string()
+            let router_id = router_id.unwrap_or("my-router".to_string());
+            format!(
+                "http://localhost:8080/router/{}/chat/completions",
+                router_id
+            )
         }
     };
 
@@ -223,6 +234,7 @@ async fn run_forever_loop(
     send_auth: bool,
     request_type: RequestType,
     model: String,
+    router_id: Option<String>,
 ) {
     let mut rng = rand::rng();
     let mut request_count = 0u64;
@@ -240,7 +252,7 @@ async fn run_forever_loop(
                 break;
             }
             _ = async {
-                test(false, is_stream, send_auth, request_type, &model).await;
+                test(false, is_stream, send_auth, request_type, &model, router_id.clone()).await;
                 request_count += 1;
 
                 if request_count % 100 == 0 {
@@ -267,9 +279,10 @@ async fn main() {
             stream,
             auth,
             model,
+            router_id,
         } => {
             println!("Starting single test...");
-            test(true, stream, auth, request_type, &model).await;
+            test(true, stream, auth, request_type, &model, router_id).await;
             println!("Test completed successfully!");
         }
         Commands::LoadTest {
@@ -277,9 +290,11 @@ async fn main() {
             stream,
             auth,
             model,
+            router_id,
         } => {
             println!("Starting load test - press Ctrl+C to stop...");
-            run_forever_loop(stream, auth, request_type, model).await;
+            run_forever_loop(stream, auth, request_type, model, router_id)
+                .await;
         }
     }
 }

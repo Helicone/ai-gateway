@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use rustc_hash::FxHashMap;
 use sqlx::PgPool;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -40,7 +40,7 @@ pub struct DBProviderKey {
     pub provider_name: String,
     pub decrypted_provider_key: String,
     pub org_id: Uuid,
-    pub config: serde_json::Value,
+    pub config: Option<serde_json::Value>,
 }
 
 impl RouterStore {
@@ -156,7 +156,7 @@ impl RouterStore {
                 ) {
                     Ok(provider) => provider,
                     Err(e) => {
-                        error!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                        warn!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
                         continue;
                     }
                 };
@@ -206,7 +206,7 @@ impl RouterStore {
                         ) {
                             Ok(provider) => provider,
                             Err(e) => {
-                                error!(error = %e, provider_name = %key.provider_name, id = %id, "Failed to parse inference provider, skipping");
+                                warn!(error = %e, provider_name = %key.provider_name, id = %id, "Failed to parse inference provider, skipping");
                                 continue;
                             }
                         };
@@ -277,7 +277,7 @@ impl RouterStore {
                 ) {
                     Ok(provider) => provider,
                     Err(e) => {
-                        error!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                        warn!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
                         continue;
                     }
                 };

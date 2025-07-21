@@ -1,6 +1,7 @@
 pub mod make_span;
 pub mod tracing;
 pub mod utils;
+
 use opentelemetry::{
     TraceId, global,
     trace::{TracerProvider, noop::NoopTextMapPropagator},
@@ -259,7 +260,7 @@ fn env_filter(config: &Config) -> Result<EnvFilter, TelemetryError> {
         .add_directive("hyper=off".parse()?)
         .add_directive("tonic=off".parse()?)
         .add_directive("h2=off".parse()?)
-        .add_directive("opentelemetry_sdk=off".parse()?)
+        .add_directive("opentelemetry_sdk=error".parse()?)
         .add_directive("reqwest=off".parse()?);
     Ok(filter)
 }
@@ -275,7 +276,7 @@ fn tracer_provider(
                 // we don't need an exporter here for stdout since we really
                 // just want the tracer to generate trace ids
                 .with_id_generator(UuidGenerator)
-                .with_max_events_per_span(64)
+                .with_max_events_per_span(256)
                 .with_max_attributes_per_span(16)
                 .build())
         }
@@ -288,7 +289,7 @@ fn tracer_provider(
                 .with_resource(resource)
                 .with_batch_exporter(exporter)
                 .with_id_generator(UuidGenerator)
-                .with_max_events_per_span(64)
+                .with_max_events_per_span(256)
                 .with_max_attributes_per_span(16)
                 .build();
             Ok(provider)

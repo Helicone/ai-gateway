@@ -124,7 +124,10 @@ impl InferenceProvider {
         provider_name: &str,
     ) -> Result<Self, ProviderError> {
         match provider_name {
-            "OpenAI" => Ok(InferenceProvider::OpenAI),
+            // ideally we clean up the provider names in the database
+            // but for a quick fix, we can accept both `OpenAI` and `openai`
+            // here for now until the database is cleaned up
+            "OpenAI" | "openai" => Ok(InferenceProvider::OpenAI),
             "Anthropic" => Ok(InferenceProvider::Anthropic),
             "AWS Bedrock" => Ok(InferenceProvider::Bedrock),
             "Ollama" => Ok(InferenceProvider::Ollama),

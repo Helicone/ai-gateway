@@ -81,7 +81,7 @@ impl CloudDiscovery {
             .set_all_provider_keys(provider_keys)
             .await;
 
-        tracing::debug!("Created config router discovery");
+        tracing::debug!("Created cloud router discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             events: ReceiverStream::new(rx),

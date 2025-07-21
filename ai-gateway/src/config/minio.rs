@@ -4,7 +4,7 @@ use url::Url;
 use crate::types::secret::Secret;
 
 /// The request url format of a S3 bucket.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UrlStyle {
     /// Requests will use "path-style" url: i.e:
@@ -13,6 +13,7 @@ pub enum UrlStyle {
     /// This style should be considered deprecated and is **NOT RECOMMENDED**.
     /// Check [Amazon S3 Path Deprecation Plan](https://aws.amazon.com/blogs/aws/amazon-s3-path-deprecation-plan-the-rest-of-the-story/)
     /// for more informations.
+    #[default]
     Path,
     /// Requests will use "virtual-hosted-style" urls, i.e:
     /// `https://<bucket>.s3.<region>.amazonaws.com/<key>`.
@@ -31,7 +32,7 @@ impl From<UrlStyle> for rusty_s3::UrlStyle {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
-    #[serde(default = "default_url_style")]
+    #[serde(default)]
     pub url_style: UrlStyle,
     #[serde(default = "default_bucket_name")]
     pub bucket_name: String,
@@ -54,7 +55,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            url_style: default_url_style(),
+            url_style: UrlStyle::default(),
             bucket_name: default_bucket_name(),
             host: default_host(),
             region: default_region(),
@@ -62,10 +63,6 @@ impl Default for Config {
             secret_key: default_secret_key(),
         }
     }
-}
-
-fn default_url_style() -> UrlStyle {
-    UrlStyle::Path
 }
 
 fn default_bucket_name() -> String {
@@ -77,7 +74,7 @@ fn default_host() -> Url {
 }
 
 fn default_region() -> String {
-    "us-west-1".to_string()
+    "us-east-1".to_string()
 }
 
 fn default_access_key() -> Secret<String> {

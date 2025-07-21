@@ -71,7 +71,7 @@ impl DispatcherDiscovery<Key> {
             }
         }
 
-        tracing::debug!("Created config provider discovery");
+        tracing::debug!("created provider discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             events,
