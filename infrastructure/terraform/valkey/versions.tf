@@ -6,4 +6,12 @@ terraform {
       version = "~> 5.80"
     }
   }
+
+  cloud {
+    organization = "helicone"
+
+    workspaces {
+      name = "ai-gateway-valkey"
+    }
+  }
 } 
