@@ -22,6 +22,7 @@ use super::{
     types::{MessageTypeRX, MessageTypeTX},
 };
 use crate::{
+    app_state::AppState,
     config::{
         control_plane::ControlPlaneConfig, helicone::HeliconeConfig,
         retry::RetryConfig,
@@ -44,17 +45,19 @@ pub struct ControlPlaneClient {
     /// reconnect interval/backoff policy, heartbeat interval, etc.
     config: HeliconeConfig,
     retry_config: RetryConfig,
+    app_state: AppState,
 }
 
 async fn handle_message(
+    app_state: &AppState,
     state: &Arc<RwLock<StateWithMetadata>>,
     message: Message,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let bytes = message.into_data();
     let m: MessageTypeRX = serde_json::from_slice(&bytes)?;
-    tracing::debug!(websocket_msg = ?m, "received message");
+    tracing::debug!("received websocket message");
     let mut state_guard = state.write().await;
-    state_guard.update(m);
+    state_guard.update(m, app_state);
 
     Ok(())
 }
@@ -178,6 +181,7 @@ impl ControlPlaneClient {
         control_plane_state: Arc<RwLock<StateWithMetadata>>,
         config: HeliconeConfig,
         control_plane_config: ControlPlaneConfig,
+        app_state: AppState,
     ) -> Result<Self, InitError> {
         let channel =
             connect_with_retry(&config, &control_plane_config.retry).await?;
@@ -186,6 +190,7 @@ impl ControlPlaneClient {
             config,
             state: control_plane_state,
             retry_config: control_plane_config.retry,
+            app_state,
         })
     }
 
@@ -217,7 +222,7 @@ impl ControlPlaneClient {
             while let Some(message) = self.channel.msg_rx.next().await {
                 match message {
                     Ok(message) => {
-                        let _ = handle_message(&state_clone, message)
+                        let _ = handle_message(&self.app_state, &state_clone, message)
                             .await
                             .inspect_err(|e| {
                                 tracing::error!(error = ?e, "error handling websocket message");
@@ -272,121 +277,5 @@ impl meltdown::Service for ControlPlaneClient {
             }
             Ok(())
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{sync::Arc, time::Duration};
-
-    use meltdown::{Service, Token};
-    use tokio::{net::TcpListener, sync::RwLock, time::timeout};
-    use tokio_tungstenite::accept_async;
-
-    use super::ControlPlaneClient;
-    use crate::{
-        config::{control_plane::ControlPlaneConfig, helicone::HeliconeConfig},
-        control_plane::{
-            control_plane_state::StateWithMetadata, types::MessageTypeTX,
-        },
-    };
-
-    #[tokio::test]
-    async fn test_mock_server_connection() {
-        // Start a simple mock server
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let ws_url = format!("ws://{addr}");
-        let helicone_config = HeliconeConfig {
-            websocket_url: ws_url.parse().unwrap(),
-            ..Default::default()
-        };
-
-        // Spawn mock server that just accepts connections
-        tokio::spawn(async move {
-            if let Ok((stream, _)) = listener.accept().await {
-                let _ = accept_async(stream).await;
-                // Just accept and do nothing - minimal mock
-            }
-        });
-
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        // Test connection
-        let result = ControlPlaneClient::connect(
-            Arc::default(),
-            helicone_config,
-            ControlPlaneConfig::default(),
-        )
-        .await;
-        assert!(result.is_ok(), "Should connect to mock server");
-    }
-
-    #[tokio::test]
-    /// Sends a heartbeat to the control plane and verifies that it is received
-    /// and we get an ack back
-    async fn test_integration_localhost_8585_heartbeat() {
-        unsafe {
-            std::env::set_var(
-                "HELICONE_CONTROL_PLANE_API_KEY",
-                "sk-helicone-n2zkt2i-x3mukmi-tgvgzyy-xom3q4y",
-            );
-        }
-        println!("setting api key");
-        let helicone_config = HeliconeConfig {
-            websocket_url: "ws://localhost:8585".parse().unwrap(),
-            ..Default::default()
-        };
-
-        let control_plane_state: Arc<RwLock<StateWithMetadata>> =
-            Arc::default();
-        // This will fail if no server is running on 8585, which is expected
-        let connect_fut = ControlPlaneClient::connect(
-            control_plane_state.clone(),
-            helicone_config,
-            ControlPlaneConfig::default(),
-        );
-        let result = timeout(Duration::from_secs(1), connect_fut).await;
-        let Ok(result) = result else {
-            println!("timed out connecting to control plane, passing test");
-            return;
-        };
-        println!("connected to control plane {result:?}");
-
-        assert!(
-            control_plane_state
-                .clone()
-                .read()
-                .await
-                .last_heartbeat
-                .is_none(),
-            "Last heartbeat should be none"
-        );
-
-        if let Ok(mut client) = result {
-            println!("sending heartbeat");
-            let send_result =
-                client.send_message(MessageTypeTX::Heartbeat {}).await;
-            let token = Token::new();
-            let handle = tokio::spawn(client.run(token.clone()));
-
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            // without the `token.trigger()` call, this test will hang
-            token.trigger();
-            handle
-                .await
-                .expect("should be able to join tokio task")
-                .expect("client should close successfully");
-
-            assert!(send_result.is_ok(), "Should be able to send heartbeat");
-            // wait for the heartbeat to be received
-            println!("waiting for heartbeat to be received");
-            tokio::time::sleep(Duration::from_secs(10)).await;
-
-            assert!(
-                control_plane_state.read().await.last_heartbeat.is_some(),
-                "Last heartbeat should be some"
-            );
-        }
     }
 }

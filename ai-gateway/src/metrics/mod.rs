@@ -123,6 +123,8 @@ pub struct RouterMetrics {
     /// labels:
     /// - `router_id`
     pub rate_limit_enabled: UpDownCounter<i64>,
+    pub provider_api_keys: UpDownCounter<i64>,
+    pub helicone_api_keys: UpDownCounter<i64>,
 }
 
 impl RouterMetrics {
@@ -152,6 +154,14 @@ impl RouterMetrics {
             .i64_up_down_counter("rate_limit_enabled")
             .with_description("Number of routers with rate limit enabled")
             .build();
+        let provider_api_keys = meter
+            .i64_up_down_counter("provider_api_keys")
+            .with_description("Number of provider API keys")
+            .build();
+        let helicone_api_keys = meter
+            .i64_up_down_counter("helicone_api_keys")
+            .with_description("Number of helicone API keys")
+            .build();
         Self {
             routers,
             router_strategies,
@@ -159,6 +169,8 @@ impl RouterMetrics {
             cache_enabled,
             retries_enabled,
             rate_limit_enabled,
+            provider_api_keys,
+            helicone_api_keys,
         }
     }
 }

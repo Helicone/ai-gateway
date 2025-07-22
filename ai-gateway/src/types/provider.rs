@@ -11,6 +11,7 @@ use crate::{
     config::{Config, DeploymentTarget, providers::ProvidersConfig},
     endpoints::ApiEndpoint,
     error::provider::ProviderError,
+    metrics::Metrics,
     types::org::OrgId,
 };
 
@@ -247,10 +248,15 @@ pub enum ProviderKeys {
 
 impl ProviderKeys {
     #[must_use]
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, metrics: &Metrics) -> Self {
         if config.deployment_target == DeploymentTarget::Cloud {
             Self::Cloud(RwLock::new(HashMap::default()))
         } else {
+            let keys = ProviderKeyMap::from_env(&config.providers);
+            metrics
+                .routers
+                .provider_api_keys
+                .add(i64::try_from(keys.len()).unwrap_or(i64::MAX), &[]);
             Self::Sidecar(ProviderKeyMap::from_env(&config.providers))
         }
     }

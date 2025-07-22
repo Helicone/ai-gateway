@@ -238,7 +238,7 @@ impl App {
         } else {
             None
         };
-        let provider_keys = ProviderKeys::new(&config);
+        let provider_keys = ProviderKeys::new(&config, &metrics);
 
         let app_state = AppState(Arc::new(InnerAppState {
             config,

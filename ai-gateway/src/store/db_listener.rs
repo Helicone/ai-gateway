@@ -257,7 +257,7 @@ impl DatabaseListener {
                 } => match op {
                     Op::Insert => {
                         let _ = app_state
-                            .set_router_api_key(Key {
+                            .set_helicone_api_key(Key {
                                 key_hash: api_key_hash,
                                 owner_id,
                                 organization_id,
@@ -269,15 +269,16 @@ impl DatabaseListener {
                     Op::Delete => {
                         // This case should never happen, since we update the
                         // soft delete flag when we delete an api key.
-                        let _ =
-                            app_state.remove_router_api_key(api_key_hash).await;
+                        let _ = app_state
+                            .remove_helicone_api_key(api_key_hash)
+                            .await;
                         debug!("router key removed");
                         Ok(())
                     }
                     Op::Update => {
                         if soft_delete {
                             let _ = app_state
-                                .remove_router_api_key(api_key_hash)
+                                .remove_helicone_api_key(api_key_hash)
                                 .await;
                             debug!("router key removed");
                         }

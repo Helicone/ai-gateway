@@ -27,7 +27,7 @@ use crate::{
     store::{minio::BaseMinioClient, router::RouterStore},
     types::{
         org::OrgId,
-        provider::ProviderKeys,
+        provider::{ProviderKeyMap, ProviderKeys},
         rate_limit::{
             RateLimitEvent, RateLimitEventReceivers, RateLimitEventSenders,
         },
@@ -122,11 +122,6 @@ impl AppState {
         *router_tx = Some(tx);
     }
 
-    pub async fn get_router_api_keys(&self) -> Option<HashSet<Key>> {
-        let router_api_keys = self.0.helicone_api_keys.read().await;
-        router_api_keys.clone()
-    }
-
     pub async fn check_helicone_api_key(
         &self,
         api_key_hash: &str,
@@ -139,12 +134,7 @@ impl AppState {
             .cloned()
     }
 
-    pub async fn set_router_api_keys(&self, keys: Option<HashSet<Key>>) {
-        let mut router_api_keys = self.0.helicone_api_keys.write().await;
-        (*router_api_keys).clone_from(&keys);
-    }
-
-    pub async fn set_router_api_key(
+    pub async fn set_helicone_api_key(
         &self,
         api_key: Key,
     ) -> Result<Option<HashSet<Key>>, InitError> {
@@ -154,10 +144,11 @@ impl AppState {
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
             .insert(api_key.clone());
+        self.0.metrics.routers.helicone_api_keys.add(1, &[]);
         Ok(router_api_keys.clone())
     }
 
-    pub async fn remove_router_api_key(
+    pub async fn remove_helicone_api_key(
         &self,
         api_key_hash: String,
     ) -> Result<Option<HashSet<Key>>, InitError> {
@@ -166,6 +157,7 @@ impl AppState {
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
             .retain(|k| k.key_hash != api_key_hash);
+        self.0.metrics.routers.helicone_api_keys.add(-1, &[]);
         Ok(router_api_keys.clone())
     }
 
@@ -315,5 +307,38 @@ impl AppState {
                 .rate_limit_enabled
                 .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
         }
+    }
+
+    pub async fn set_all_provider_keys(
+        &self,
+        provider_keys: HashMap<OrgId, ProviderKeyMap>,
+    ) {
+        let num_keys = provider_keys.values().map(|m| m.len()).sum::<usize>();
+        self.0
+            .metrics
+            .routers
+            .provider_api_keys
+            .add(i64::try_from(num_keys).unwrap_or(i64::MAX), &[]);
+        self.0
+            .provider_keys
+            .set_all_provider_keys(provider_keys)
+            .await;
+    }
+
+    pub async fn set_org_provider_keys(
+        &self,
+        org_id: OrgId,
+        provider_keys: ProviderKeyMap,
+    ) {
+        let num_keys = provider_keys.len();
+        self.0
+            .metrics
+            .routers
+            .provider_api_keys
+            .add(i64::try_from(num_keys).unwrap_or(i64::MAX), &[]);
+        self.0
+            .provider_keys
+            .set_org_provider_keys(org_id, provider_keys)
+            .await;
     }
 }

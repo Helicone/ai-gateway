@@ -74,11 +74,7 @@ impl CloudDiscovery {
             .await;
 
         let provider_keys = router_store.get_all_provider_keys().await?;
-        app_state
-            .0
-            .provider_keys
-            .set_all_provider_keys(provider_keys)
-            .await;
+        app_state.set_all_provider_keys(provider_keys).await;
 
         tracing::debug!("Created cloud router discoverer");
         Ok(Self {

@@ -127,8 +127,6 @@ impl Client {
                         refetched_org_provider_keys.get(&provider);
 
                     app_state
-                        .0
-                        .provider_keys
                         .set_org_provider_keys(
                             org_id,
                             refetched_org_provider_keys.clone(),

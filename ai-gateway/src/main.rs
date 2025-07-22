@@ -139,6 +139,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
                 control_plane_state,
                 helicone_config,
                 config.control_plane.clone(),
+                app.state.clone(),
             )
             .await?,
         ));
