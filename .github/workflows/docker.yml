@@ -60,7 +60,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ vars.AWS_REGION }}
-          role-to-assume: arn:aws:iam::849596434884:user/github-actions-jawn-deployment
+          role-to-assume: ${{ secrets.AWS_ROLE }}
 
       - name: Login to Amazon ECR
         if: github.event_name != 'pull_request'
