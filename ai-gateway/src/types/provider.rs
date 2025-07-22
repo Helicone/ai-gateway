@@ -129,6 +129,11 @@ impl InferenceProvider {
             "AWS Bedrock" => Ok(InferenceProvider::Bedrock),
             "Ollama" => Ok(InferenceProvider::Ollama),
             "Google AI (Gemini)" => Ok(InferenceProvider::GoogleGemini),
+            "Groq" => Ok(InferenceProvider::Named("groq".into())),
+            "Mistral AI" => Ok(InferenceProvider::Named("mistral".into())),
+            "Hyperbolic" => Ok(InferenceProvider::Named("hyperbolic".into())),
+            "Deepseek" => Ok(InferenceProvider::Named("deepseek".into())),
+            "X.AI (Grok)" => Ok(InferenceProvider::Named("xai".into())),
             _ => Err(ProviderError::InvalidProviderName(provider_name.into())),
         }
     }
