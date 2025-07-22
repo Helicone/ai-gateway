@@ -27,6 +27,7 @@ jobs:
           images: |
             helicone/ai-gateway
             ghcr.io/helicone/ai-gateway
+            ${{ vars.ECR_REGISTRY }}/ai-gateway
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -50,6 +51,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS credentials
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name != 'pull_request'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
