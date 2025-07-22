@@ -58,17 +58,17 @@ resource "aws_security_group" "load_balancer_sg" {
   }
 }
 
-resource "aws_lb" "fargate_lb" {
-  name               = "fargate-lb-${var.environment}"
+resource "aws_lb" "ai_gateway_lb" {
+  name               = "ai-gateway-lb-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.load_balancer_sg.id]
   subnets            = local.subnets
 }
 
-resource "aws_lb_target_group" "fargate_tg" {
-  name     = "fargate-tg-${var.environment}"
-  port     = 5678
+resource "aws_lb_target_group" "ai_gateway_tg" {
+  name     = "ai-gateway-tg-${var.environment}"
+  port     = 8080
   protocol = "HTTP"
   vpc_id   = local.vpc_id
 
@@ -82,7 +82,7 @@ resource "aws_lb_target_group" "fargate_tg" {
     matcher             = "200"
   }
 
-  target_type = "ip"
+  target_type = "instance"
 
   lifecycle {
     create_before_destroy = true
