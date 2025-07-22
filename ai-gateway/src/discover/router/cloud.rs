@@ -50,13 +50,12 @@ impl CloudDiscovery {
             let router_id = RouterId::Named(CompactString::from(
                 db_router.router_hash.to_string(),
             ));
-            let router_config = serde_json::from_value::<RouterConfig>(
+            let Ok(router_config) = serde_json::from_value::<RouterConfig>(
                 db_router.config.clone(),
-            )
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to parse router config");
-                InitError::DefaultRouterNotFound
-            })?;
+            ) else {
+                tracing::error!(router_id = %router_id, "failed to parse router config");
+                continue;
+            };
 
             let router = Router::new(
                 router_id.clone(),

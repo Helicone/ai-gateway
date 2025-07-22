@@ -199,7 +199,7 @@ impl LoggerService {
                 LoggerError::ResponseError(e)
             })?;
 
-        tracing::trace!("successfully logged request");
+        tracing::debug!("successfully logged request");
         Ok(())
     }
 }

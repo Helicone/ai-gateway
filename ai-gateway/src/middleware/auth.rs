@@ -7,7 +7,10 @@ use crate::{
     app_state::AppState,
     config::DeploymentTarget,
     control_plane::types::hash_key,
-    error::auth::AuthError,
+    error::{
+        api::ApiError, auth::AuthError, internal::InternalError,
+        invalid_req::InvalidRequestError,
+    },
     types::{
         extensions::{AuthContext, RequestKind},
         router::RouterId,
@@ -31,56 +34,66 @@ impl AuthService {
         api_key: &str,
         request_kind: Option<&RequestKind>,
         router_id: Option<&RouterId>,
-    ) -> Result<AuthContext, AuthError> {
+    ) -> Result<AuthContext, ApiError> {
         let api_key_without_bearer = api_key.replace("Bearer ", "");
         let computed_hash = hash_key(&api_key_without_bearer);
 
         match app_state.0.config.deployment_target {
             DeploymentTarget::Cloud => {
-                if let Some(key) =
+                let Some(request_kind) = request_kind else {
+                    return Err(InternalError::ExtensionNotFound(
+                        "RequestKind",
+                    )
+                    .into());
+                };
+                let Some(key) =
                     app_state.check_helicone_api_key(&computed_hash).await
-                    && let Some(request_kind) = request_kind
-                {
-                    match request_kind {
-                        RequestKind::Router => {
-                            if let Some(router_id) = router_id
-                                && let Some(router_organization_id) = app_state
-                                    .get_router_organization(router_id)
-                                    .await
-                            {
-                                if key.organization_id == router_organization_id
-                                {
-                                    Ok(AuthContext {
-                                        api_key: Secret::from(
-                                            api_key_without_bearer,
-                                        ),
-                                        user_id: key.owner_id,
-                                        org_id: key.organization_id,
-                                    })
-                                } else {
-                                    Err(AuthError::InvalidCredentials)
-                                }
-                            } else {
-                                Err(AuthError::RouterNotFound)
-                            }
-                        }
-                        RequestKind::UnifiedApi | RequestKind::DirectProxy => {
+                else {
+                    return Err(AuthError::InvalidCredentials.into());
+                };
+
+                match request_kind {
+                    RequestKind::Router => {
+                        let Some(router_id) = router_id else {
+                            return Err(InternalError::ExtensionNotFound(
+                                "RouterId",
+                            )
+                            .into());
+                        };
+
+                        let Some(router_organization_id) =
+                            app_state.get_router_organization(router_id).await
+                        else {
+                            return Err(InvalidRequestError::NotFound(
+                                "router not found".to_string(),
+                            )
+                            .into());
+                        };
+
+                        if router_organization_id == key.organization_id {
                             Ok(AuthContext {
                                 api_key: Secret::from(api_key_without_bearer),
                                 user_id: key.owner_id,
                                 org_id: key.organization_id,
                             })
+                        } else {
+                            Err(AuthError::InvalidCredentials.into())
                         }
                     }
-                } else {
-                    Err(AuthError::InvalidCredentials)
+                    RequestKind::UnifiedApi | RequestKind::DirectProxy => {
+                        Ok(AuthContext {
+                            api_key: Secret::from(api_key_without_bearer),
+                            user_id: key.owner_id,
+                            org_id: key.organization_id,
+                        })
+                    }
                 }
             }
             DeploymentTarget::Sidecar => {
                 let Some(control_plane_state) =
                     &app_state.0.control_plane_state.read().await.state
                 else {
-                    return Err(AuthError::AuthDataNotReady);
+                    return Err(InternalError::AuthDataNotReady.into());
                 };
                 let key = control_plane_state.get_key_from_hash(&computed_hash);
                 if let Some(key) = key {
@@ -90,7 +103,7 @@ impl AuthService {
                         org_id: control_plane_state.auth.organization_id,
                     })
                 } else {
-                    Err(AuthError::InvalidCredentials)
+                    Err(AuthError::InvalidCredentials.into())
                 }
             }
         }
@@ -144,15 +157,13 @@ where
                     Ok(request)
                 }
                 Err(e) => {
-                    match &e {
-                        AuthError::MissingAuthorizationHeader
-                        | AuthError::InvalidCredentials
-                        | AuthError::ProviderKeyNotFound
-                        | AuthError::RouterNotFound => {
-                            app_state.0.metrics.auth_rejections.add(1, &[]);
-                        }
-                        AuthError::AuthDataNotReady => {
-                            tracing::warn!("auth data not ready");
+                    if let ApiError::Authentication(auth_error) = &e {
+                        match auth_error {
+                            AuthError::MissingAuthorizationHeader
+                            | AuthError::InvalidCredentials
+                            | AuthError::ProviderKeyNotFound => {
+                                app_state.0.metrics.auth_rejections.add(1, &[]);
+                            }
                         }
                     }
                     Err(e.into_response())

@@ -154,7 +154,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
             .ok_or(InitError::StoreNotConfigured("pg_pool"))?;
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(pg_pool.clone(), app.state.clone())?,
+            DatabaseListener::new(pg_pool, app.state.clone()).await?,
         ));
         tasks.push("database-listener");
     }

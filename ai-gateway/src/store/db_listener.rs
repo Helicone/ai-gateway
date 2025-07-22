@@ -19,10 +19,11 @@ use crate::{
 
 /// A database listener service that handles LISTEN/NOTIFY functionality.
 /// This service runs in the background and can be registered with meltdown.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DatabaseListener {
-    pg_pool: PgPool,
     app_state: AppState,
+    pg_listener: PgListener,
+    tx: Sender<Change<RouterId, Router>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -63,11 +64,38 @@ enum ConnectedCloudGatewaysNotification {
 }
 
 impl DatabaseListener {
-    pub fn new(
-        pg_pool: PgPool,
+    pub async fn new(
+        pg_pool: &PgPool,
         app_state: AppState,
     ) -> Result<Self, InitError> {
-        Ok(Self { pg_pool, app_state })
+        let listener =
+            PgListener::connect_with(pg_pool).await.map_err(|e| {
+                error!(error = %e, "failed to create database listener");
+                InitError::DatabaseConnection(e)
+            })?;
+
+        // Retry getting router_tx for up to 5 seconds
+        let start = tokio::time::Instant::now();
+        let timeout = tokio::time::Duration::from_secs(1);
+        let tx = loop {
+            if let Some(tx) = app_state.get_router_tx().await {
+                break tx;
+            }
+
+            if start.elapsed() >= timeout {
+                error!("failed to get router_tx after 5 seconds");
+                return Err(InitError::RouterTxNotSet);
+            }
+
+            debug!("router_tx not available, retrying...");
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        };
+
+        Ok(Self {
+            app_state,
+            pg_listener: listener,
+            tx,
+        })
     }
 
     /// Runs the database listener service.
@@ -77,26 +105,13 @@ impl DatabaseListener {
         info!("starting database listener service");
 
         // Create listener for LISTEN/NOTIFY
-        let mut listener =
-            PgListener::connect_with(&self.pg_pool).await.map_err(|e| {
-                error!(error = %e, "failed to create database listener");
-                RuntimeError::Internal(
-                    crate::error::internal::InternalError::Internal,
-                )
-            })?;
+        let listener = &mut self.pg_listener;
 
         // Listen for notifications on a channel (you can customize this)
         listener.listen("connected_cloud_gateways").await.map_err(|e| {
             error!(error = %e, "failed to listen on database notification channel");
             RuntimeError::Internal(crate::error::internal::InternalError::Internal)
         })?;
-
-        let tx = self.app_state.get_router_tx().await;
-        if tx.is_none() {
-            return Err(RuntimeError::Internal(
-                crate::error::internal::InternalError::Internal,
-            ));
-        }
 
         // Process notifications
         loop {
@@ -111,7 +126,7 @@ impl DatabaseListener {
                     // Handle the notification here
                     Self::handle_notification(
                         &notification,
-                        tx.as_ref().unwrap().clone(),
+                        self.tx.clone(),
                         self.app_state.clone(),
                     )
                     .await?;
@@ -164,6 +179,7 @@ impl DatabaseListener {
     }
 
     /// Handles incoming database notifications.
+    #[allow(clippy::too_many_lines)]
     async fn handle_notification(
         notification: &sqlx::postgres::PgNotification,
         tx: Sender<Change<RouterId, Router>>,
@@ -177,8 +193,12 @@ impl DatabaseListener {
         );
 
         if notification.channel() == "connected_cloud_gateways" {
-            let payload: ConnectedCloudGatewaysNotification =
-                serde_json::from_str(notification.payload()).unwrap();
+            let Ok(payload) = serde_json::from_str::<
+                ConnectedCloudGatewaysNotification,
+            >(notification.payload()) else {
+                error!("failed to parse db_listener notification payload");
+                return Ok(());
+            };
 
             match payload {
                 ConnectedCloudGatewaysNotification::RouterConfigUpdated {
@@ -193,6 +213,11 @@ impl DatabaseListener {
                     debug!("Router configuration updated");
                     match op {
                         Op::Insert => {
+                            app_state.increment_router_metrics(
+                                &router_hash,
+                                &config,
+                                Some(organization_id),
+                            );
                             Self::handle_router_config_insert(
                                 router_hash,
                                 *config,
@@ -203,8 +228,18 @@ impl DatabaseListener {
                             .await
                         }
                         Op::Delete => {
-                            let _ = tx.send(Change::Remove(router_hash)).await;
-                            debug!("router removed");
+                            app_state.decrement_router_metrics(
+                                &router_hash,
+                                &config,
+                                Some(organization_id),
+                            );
+                            if let Err(e) =
+                                tx.send(Change::Remove(router_hash)).await
+                            {
+                                error!(error = %e, "failed to send router remove to tx");
+                            } else {
+                                debug!("router removed");
+                            }
                             Ok(())
                         }
                         _ => {

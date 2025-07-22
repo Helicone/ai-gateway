@@ -130,7 +130,10 @@ impl BalanceConfig {
 /// [`RoutingStrategyService`](crate::router::strategy::RoutingStrategyService).
 ///
 /// See the rustdocs there for more details.
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    Debug, Clone, Deserialize, Serialize, Eq, PartialEq, strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 #[serde(rename_all = "kebab-case", tag = "strategy")]
 pub enum BalanceConfigInner {
     /// Distributes and load balances requests among a set of providers.

@@ -1,5 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
+use opentelemetry::KeyValue;
 use rustc_hash::FxHashMap as HashMap;
 use sqlx::PgPool;
 use tokio::sync::{
@@ -12,7 +13,7 @@ use crate::{
     cache::CacheClient,
     config::{
         Config, rate_limit::RateLimiterConfig,
-        response_headers::ResponseHeadersConfig,
+        response_headers::ResponseHeadersConfig, router::RouterConfig,
     },
     control_plane::{control_plane_state::StateWithMetadata, types::Key},
     discover::monitor::{
@@ -194,5 +195,125 @@ impl AppState {
         let router_organization_map =
             self.0.router_organization_map.read().await;
         router_organization_map.get(router_id).copied()
+    }
+
+    pub fn increment_router_metrics(
+        &self,
+        router_id: &RouterId,
+        router_config: &RouterConfig,
+        organization_id: Option<OrgId>,
+    ) {
+        let metrics = &self.0.metrics;
+        let org_id = organization_id
+            .as_ref()
+            .map_or_else(|| "unknown".to_string(), ToString::to_string);
+        metrics.routers.routers.add(
+            1,
+            &[
+                KeyValue::new("organization_id", org_id.clone()),
+                KeyValue::new("router_id", router_id.to_string()),
+            ],
+        );
+        for (endpoint_type, balance_config) in &router_config.load_balance.0 {
+            metrics.routers.router_strategies.add(
+                1,
+                &[
+                    KeyValue::new("organization_id", org_id.clone()),
+                    KeyValue::new("router_id", router_id.to_string()),
+                    KeyValue::new(
+                        "endpoint_type",
+                        endpoint_type.as_ref().to_string(),
+                    ),
+                    KeyValue::new(
+                        "balance_config",
+                        balance_config.as_ref().to_string(),
+                    ),
+                ],
+            );
+        }
+        if router_config.model_mappings.is_some() {
+            metrics
+                .routers
+                .model_mappings
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.cache.is_some() {
+            metrics
+                .routers
+                .cache_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.retries.is_some() {
+            metrics
+                .routers
+                .retries_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.rate_limit.is_some() {
+            metrics
+                .routers
+                .rate_limit_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+    }
+
+    pub fn decrement_router_metrics(
+        &self,
+        router_id: &RouterId,
+        router_config: &RouterConfig,
+        organization_id: Option<OrgId>,
+    ) {
+        let metrics = &self.0.metrics;
+        let org_id = organization_id
+            .as_ref()
+            .map_or_else(|| "unknown".to_string(), ToString::to_string);
+        metrics.routers.routers.add(
+            -1,
+            &[
+                KeyValue::new("organization_id", org_id.clone()),
+                KeyValue::new("router_id", router_id.to_string()),
+            ],
+        );
+        for (endpoint_type, balance_config) in &router_config.load_balance.0 {
+            metrics.routers.router_strategies.add(
+                1,
+                &[
+                    KeyValue::new("organization_id", org_id.clone()),
+                    KeyValue::new("router_id", router_id.to_string()),
+                    KeyValue::new(
+                        "endpoint_type",
+                        endpoint_type.as_ref().to_string(),
+                    ),
+                    KeyValue::new(
+                        "balance_config",
+                        balance_config.as_ref().to_string(),
+                    ),
+                ],
+            );
+        }
+        if router_config.model_mappings.is_some() {
+            metrics
+                .routers
+                .model_mappings
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.cache.is_some() {
+            metrics
+                .routers
+                .cache_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.retries.is_some() {
+            metrics
+                .routers
+                .retries_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
+        if router_config.rate_limit.is_some() {
+            metrics
+                .routers
+                .rate_limit_enabled
+                .add(1, &[KeyValue::new("router_id", router_id.to_string())]);
+        }
     }
 }

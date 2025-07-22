@@ -74,4 +74,6 @@ pub enum InitError {
     RouterApiKeysNotInitialized,
     /// Invalid organization id: {0}
     InvalidOrganizationId(String),
+    /// Router tx not set
+    RouterTxNotSet,
 }

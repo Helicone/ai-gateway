@@ -39,6 +39,7 @@ type InnerRouterService = BoxCloneService<
 #[derive(Debug)]
 pub struct Router {
     inner: HashMap<EndpointType, InnerRouterService>,
+    pub(crate) router_config: Arc<RouterConfig>,
 }
 
 impl Router {
@@ -86,7 +87,10 @@ impl Router {
 
         tracing::info!(id = %id, "router created");
 
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            router_config,
+        })
     }
 }
 

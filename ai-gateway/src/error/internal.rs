@@ -79,6 +79,8 @@ pub enum InternalError {
     PromptError(#[from] crate::error::prompts::PromptError),
     /// Failed to complete prompt task: {0}
     PromptTaskError(tokio::task::JoinError),
+    /// Auth data not ready
+    AuthDataNotReady,
 }
 
 impl IntoResponse for InternalError {
@@ -158,6 +160,8 @@ pub enum InternalErrorMetric {
     PoolError,
     /// Prompt error
     PromptError,
+    /// Auth data not ready
+    AuthDataNotReady,
 }
 
 impl From<&InternalError> for InternalErrorMetric {
@@ -200,6 +204,7 @@ impl From<&InternalError> for InternalErrorMetric {
             InternalError::DynamicRouterDiscoveryError(_) => {
                 Self::DynamicRouterDiscoveryError
             }
+            InternalError::AuthDataNotReady => Self::AuthDataNotReady,
         }
     }
 }

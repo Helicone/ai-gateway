@@ -23,7 +23,7 @@ pub struct OrgId(Uuid);
 
 impl OrgId {
     #[must_use]
-    pub fn new(id: Uuid) -> Self {
+    pub const fn new(id: Uuid) -> Self {
         Self(id)
     }
 }

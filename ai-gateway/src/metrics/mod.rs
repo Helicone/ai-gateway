@@ -4,7 +4,7 @@ pub mod rolling_counter;
 pub mod system;
 pub mod tfft;
 
-use opentelemetry::metrics::{Counter, Gauge, Histogram, Meter};
+use opentelemetry::metrics::{Counter, Gauge, Histogram, Meter, UpDownCounter};
 
 pub use self::rolling_counter::RollingCounter;
 
@@ -20,13 +20,7 @@ pub struct Metrics {
     pub response_count: Counter<u64>,
     pub tfft_duration: Histogram<f64>,
     pub cache: CacheMetrics,
-}
-
-#[derive(Debug, Clone)]
-pub struct CacheMetrics {
-    pub hits: Counter<u64>,
-    pub misses: Counter<u64>,
-    pub evictions: Counter<u64>,
+    pub routers: RouterMetrics,
 }
 
 impl Metrics {
@@ -61,23 +55,8 @@ impl Metrics {
             .with_unit("ms")
             .with_description("Time to first token duration")
             .build();
-        let cache_hits = meter
-            .u64_counter("cache_hits")
-            .with_description("Number of cache hits")
-            .build();
-        let cache_misses = meter
-            .u64_counter("cache_misses")
-            .with_description("Number of cache misses")
-            .build();
-        let cache_evictions = meter
-            .u64_counter("cache_evictions")
-            .with_description("Number of cache evictions")
-            .build();
-        let cache = CacheMetrics {
-            hits: cache_hits,
-            misses: cache_misses,
-            evictions: cache_evictions,
-        };
+        let cache = CacheMetrics::new(meter);
+        let routers = RouterMetrics::new(meter);
         Self {
             error_count,
             provider_health,
@@ -87,6 +66,99 @@ impl Metrics {
             response_count,
             tfft_duration,
             cache,
+            routers,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheMetrics {
+    pub hits: Counter<u64>,
+    pub misses: Counter<u64>,
+    pub evictions: Counter<u64>,
+}
+
+impl CacheMetrics {
+    #[must_use]
+    pub fn new(meter: &Meter) -> Self {
+        let hits = meter
+            .u64_counter("cache_hits")
+            .with_description("Number of cache hits")
+            .build();
+        let misses = meter
+            .u64_counter("cache_misses")
+            .with_description("Number of cache misses")
+            .build();
+        let evictions = meter
+            .u64_counter("cache_evictions")
+            .with_description("Number of cache evictions")
+            .build();
+        Self {
+            hits,
+            misses,
+            evictions,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RouterMetrics {
+    /// labels:
+    /// - `router_id`
+    /// - `org_id`
+    pub routers: UpDownCounter<i64>,
+    /// labels:
+    /// - `router_id`
+    /// - `endpoint_type`
+    pub router_strategies: UpDownCounter<i64>,
+    /// labels:
+    /// - `router_id`
+    pub model_mappings: UpDownCounter<i64>,
+    /// labels:
+    /// - `router_id`
+    pub cache_enabled: UpDownCounter<i64>,
+    /// labels:
+    /// - `router_id`
+    pub retries_enabled: UpDownCounter<i64>,
+    /// labels:
+    /// - `router_id`
+    pub rate_limit_enabled: UpDownCounter<i64>,
+}
+
+impl RouterMetrics {
+    #[must_use]
+    pub fn new(meter: &Meter) -> Self {
+        let routers = meter
+            .i64_up_down_counter("routers")
+            .with_description("Number of routers")
+            .build();
+        let router_strategies = meter
+            .i64_up_down_counter("router_strategies")
+            .with_description("Number of router strategies")
+            .build();
+        let model_mappings = meter
+            .i64_up_down_counter("model_mappings")
+            .with_description("Number of model mappings")
+            .build();
+        let cache_enabled = meter
+            .i64_up_down_counter("cache_enabled")
+            .with_description("Number of routers with cache enabled")
+            .build();
+        let retries_enabled = meter
+            .i64_up_down_counter("retries_enabled")
+            .with_description("Number of routers with retries enabled")
+            .build();
+        let rate_limit_enabled = meter
+            .i64_up_down_counter("rate_limit_enabled")
+            .with_description("Number of routers with rate limit enabled")
+            .build();
+        Self {
+            routers,
+            router_strategies,
+            model_mappings,
+            cache_enabled,
+            retries_enabled,
+            rate_limit_enabled,
         }
     }
 }
