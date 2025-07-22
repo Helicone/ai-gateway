@@ -152,6 +152,7 @@ impl DatabaseListener {
         tx: Sender<Change<RouterId, Router>>,
         app_state: AppState,
     ) -> Result<(), RuntimeError> {
+        tracing::info!("resetting state");
         let routers = router_store.get_all_routers().await?;
         for router in routers {
             let _ = tx
@@ -168,6 +169,7 @@ impl DatabaseListener {
             .await;
         let api_keys = router_store.get_all_router_keys().await?;
         app_state.set_router_api_keys(Some(api_keys)).await;
+        tracing::info!("done resetting state");
         Ok(())
     }
 
