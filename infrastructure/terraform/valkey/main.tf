@@ -24,20 +24,12 @@ resource "aws_security_group" "valkey_sg" {
   vpc_id      = var.vpc_id != "" ? var.vpc_id : data.aws_vpc.default[0].id
 
   ingress {
-    description     = "Valkey/Redis traffic"
+    description     = "Valkey traffic"
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    cidr_blocks     = var.allowed_cidr_blocks
+    cidr_blocks     = length(var.allowed_cidr_blocks) > 0 ? var.allowed_cidr_blocks : null
     security_groups = var.allowed_security_group_ids
-  }
-
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(var.common_tags, {

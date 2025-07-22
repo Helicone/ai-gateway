@@ -16,7 +16,6 @@ common_tags = {
 # Valkey Cache Configuration
 valkey_cache_name        = "helicone-valkey-cache"
 engine                   = "valkey"
-major_engine_version     = "7"
 description              = "Helicone Valkey serverless cache for high-performance data storage"
 
 # Capacity Configuration
@@ -35,27 +34,21 @@ create_security_group    = true
 vpc_id     = ""
 subnet_ids = []
 
-# Security Configuration
-allowed_cidr_blocks = [
-  "10.0.0.0/8",      # Private Class A
-  "172.16.0.0/12",   # Private Class B  
-  "192.168.0.0/16"   # Private Class C
-]
-
+# Security groups allowed to access the cache (typically ECS cluster)
 allowed_security_group_ids = [
-  # Add security group IDs that should have access to the cache
-  # Example: "sg-0123456789abcdef0"
+  "sg-0123456789abcdef0",  # Replace with your ECS cluster security group ID
+  # Add any additional security group IDs that should have access to the cache
+  # "sg-0987654321fedcba0"  # Example: Management/bastion host security group
 ]
 
-# Example for specific VPC setup:
-# vpc_id = "vpc-0123456789abcdef0"
+# ECS-Only VPC Setup (Recommended for production):
+# Use the same VPC and private subnets as your ECS cluster
+# vpc_id = "vpc-0123456789abcdef0"  # Same VPC as ECS cluster
 # subnet_ids = [
-#   "subnet-0123456789abcdef0",
-#   "subnet-0123456789abcdef1", 
-#   "subnet-0123456789abcdef2"
+#   "subnet-0123456789abcdef0",  # Private subnet 1 (same AZ as ECS tasks)
+#   "subnet-0123456789abcdef1",  # Private subnet 2 (different AZ for HA)
+#   "subnet-0123456789abcdef2"   # Private subnet 3 (optional third AZ)
 # ]
 
-# Example for production with higher capacity:
-# max_storage_gb = 10
-# max_ecpu_per_second = 5000
-# snapshot_retention_limit = 7 
+# To find your ECS security group ID:
+# aws ecs describe-services --cluster your-cluster-name --services your-service-name --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' 

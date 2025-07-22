@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region"
   type        = string
-  default     = "us-east-1"
+  default     = "us-west-1"
 }
 
 variable "project_name" {
@@ -45,13 +45,13 @@ variable "engine" {
 variable "major_engine_version" {
   description = "Major engine version"
   type        = string
-  default     = "7"
+  default     = "8"
 }
 
 variable "max_storage_gb" {
   description = "Maximum storage in GB for the serverless cache"
   type        = number
-  default     = 1
+  default     = 20
   validation {
     condition     = var.max_storage_gb >= 1 && var.max_storage_gb <= 5000
     error_message = "Max storage must be between 1 and 5000 GB."
@@ -61,7 +61,7 @@ variable "max_storage_gb" {
 variable "max_ecpu_per_second" {
   description = "Maximum ECPU per second for the serverless cache"
   type        = number
-  default     = 1000
+  default     = 100000
   validation {
     condition     = var.max_ecpu_per_second >= 1000 && var.max_ecpu_per_second <= 15000000
     error_message = "Max ECPU per second must be between 1000 and 15000000."
@@ -109,13 +109,13 @@ variable "vpc_id" {
 }
 
 variable "allowed_cidr_blocks" {
-  description = "List of CIDR blocks allowed to access the cache"
+  description = "List of CIDR blocks allowed to access the cache (leave empty for ECS-only access)"
   type        = list(string)
-  default     = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+  default     = []
 }
 
 variable "allowed_security_group_ids" {
-  description = "List of security group IDs allowed to access the cache"
+  description = "List of security group IDs allowed to access the cache (typically ECS cluster security group)"
   type        = list(string)
   default     = []
 }
