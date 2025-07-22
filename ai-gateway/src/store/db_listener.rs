@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::future::BoxFuture;
 use meltdown::Token;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, postgres::PgListener};
+use sqlx::postgres::PgListener;
 use tokio::sync::mpsc::Sender;
 use tower::discover::Change;
 use tracing::{debug, error, info};
@@ -14,6 +14,7 @@ use crate::{
     control_plane::types::Key,
     error::{init::InitError, runtime::RuntimeError},
     router::service::Router,
+    store::router::RouterStore,
     types::{org::OrgId, router::RouterId, user::UserId},
 };
 
@@ -65,11 +66,11 @@ enum ConnectedCloudGatewaysNotification {
 
 impl DatabaseListener {
     pub async fn new(
-        pg_pool: &PgPool,
+        database_url: &str,
         app_state: AppState,
     ) -> Result<Self, InitError> {
         let listener =
-            PgListener::connect_with(pg_pool).await.map_err(|e| {
+            PgListener::connect(database_url).await.map_err(|e| {
                 error!(error = %e, "failed to create database listener");
                 InitError::DatabaseConnection(e)
             })?;
@@ -106,6 +107,12 @@ impl DatabaseListener {
 
         // Create listener for LISTEN/NOTIFY
         let listener = &mut self.pg_listener;
+        let router_store = self
+            .app_state
+            .0
+            .router_store
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("router_store"))?;
 
         // Listen for notifications on a channel (you can customize this)
         listener.listen("connected_cloud_gateways").await.map_err(|e| {
@@ -115,29 +122,52 @@ impl DatabaseListener {
 
         // Process notifications
         loop {
-            match listener.recv().await {
-                Ok(notification) => {
-                    debug!(
-                        channel = notification.channel(),
-                        payload = notification.payload(),
-                        "received database notification"
-                    );
-
-                    // Handle the notification here
-                    Self::handle_notification(
-                        &notification,
-                        self.tx.clone(),
-                        self.app_state.clone(),
-                    )
-                    .await?;
-                }
-                Err(e) => {
-                    error!(error = %e, "error receiving database notification");
-                    break;
-                }
+            while let Ok(Some(notification)) = listener.try_recv().await {
+                debug!(
+                    channel = notification.channel(),
+                    payload = notification.payload(),
+                    "received database notification"
+                );
+                // Handle the notification here
+                Self::handle_notification(
+                    &notification,
+                    self.tx.clone(),
+                    self.app_state.clone(),
+                )
+                .await?;
             }
-        }
 
+            // connection lost, reset the api keys and router state
+            Self::reset_state(
+                router_store,
+                self.tx.clone(),
+                self.app_state.clone(),
+            )
+            .await?;
+        }
+    }
+
+    async fn reset_state(
+        router_store: &RouterStore,
+        tx: Sender<Change<RouterId, Router>>,
+        app_state: AppState,
+    ) -> Result<(), RuntimeError> {
+        let routers = router_store.get_all_routers().await?;
+        for router in routers {
+            let _ = tx
+                .send(Change::Remove(RouterId::Named(
+                    router.router_hash.into(),
+                )))
+                .await;
+        }
+        let provider_keys = router_store.get_all_provider_keys().await?;
+        app_state
+            .0
+            .provider_keys
+            .set_all_provider_keys(provider_keys)
+            .await;
+        let api_keys = router_store.get_all_router_keys().await?;
+        app_state.set_router_api_keys(Some(api_keys)).await;
         Ok(())
     }
 

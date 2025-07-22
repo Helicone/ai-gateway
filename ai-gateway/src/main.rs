@@ -146,15 +146,10 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     }
 
     if config.deployment_target == DeploymentTarget::Cloud {
-        let pg_pool = app
-            .state
-            .0
-            .pg_pool
-            .as_ref()
-            .ok_or(InitError::StoreNotConfigured("pg_pool"))?;
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(pg_pool, app.state.clone()).await?,
+            DatabaseListener::new(&config.database.url, app.state.clone())
+                .await?,
         ));
         tasks.push("database-listener");
     }

@@ -2,7 +2,6 @@ use std::{collections::HashSet, sync::Arc};
 
 use opentelemetry::KeyValue;
 use rustc_hash::FxHashMap as HashMap;
-use sqlx::PgPool;
 use tokio::sync::{
     RwLock,
     mpsc::{Receiver, Sender},
@@ -55,7 +54,6 @@ pub struct InnerAppState {
     pub config: Config,
     pub minio: BaseMinioClient,
     pub router_store: Option<RouterStore>,
-    pub pg_pool: Option<PgPool>,
     pub jawn_http_client: JawnClient,
     pub cache_manager: Option<CacheClient>,
     pub global_rate_limit: Option<Arc<RateLimiterConfig>>,

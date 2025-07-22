@@ -199,13 +199,13 @@ impl App {
     /// metrics, monitoring, caching, and API keys.
     async fn build_app_state(config: Config) -> Result<AppState, InitError> {
         let minio = BaseMinioClient::new(config.minio.clone())?;
-        let (pg_pool, router_store) =
+        let router_store =
             if config.deployment_target == DeploymentTarget::Cloud {
                 let pg_pool = connect(&config.database).await?;
                 let router_store = RouterStore::new(pg_pool.clone())?;
-                (Some(pg_pool), Some(router_store))
+                Some(router_store)
             } else {
-                (None, None)
+                None
             };
         let jawn_http_client = JawnClient::new()?;
 
@@ -244,7 +244,6 @@ impl App {
             config,
             minio,
             router_store,
-            pg_pool,
             jawn_http_client,
             control_plane_state: Arc::new(RwLock::new(
                 StateWithMetadata::default(),
