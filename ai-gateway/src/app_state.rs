@@ -124,8 +124,8 @@ impl AppState {
         &self,
         api_key_hash: &str,
     ) -> Option<Key> {
-        let router_api_keys = self.0.helicone_api_keys.read().await;
-        router_api_keys
+        let helicone_api_keys = self.0.helicone_api_keys.read().await;
+        helicone_api_keys
             .as_ref()?
             .iter()
             .find(|k| k.key_hash == api_key_hash)
@@ -137,26 +137,31 @@ impl AppState {
         api_key: Key,
     ) -> Result<Option<HashSet<Key>>, InitError> {
         tracing::debug!("setting router api key");
-        let mut router_api_keys = self.0.helicone_api_keys.write().await;
-        router_api_keys
+        let mut helicone_api_keys = self.0.helicone_api_keys.write().await;
+        helicone_api_keys
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
             .insert(api_key.clone());
         self.0.metrics.routers.helicone_api_keys.add(1, &[]);
-        Ok(router_api_keys.clone())
+        Ok(helicone_api_keys.clone())
+    }
+
+    pub async fn set_helicone_api_keys(&self, keys: HashSet<Key>) {
+        let mut helicone_api_keys = self.0.helicone_api_keys.write().await;
+        *helicone_api_keys = Some(keys);
     }
 
     pub async fn remove_helicone_api_key(
         &self,
         api_key_hash: String,
     ) -> Result<Option<HashSet<Key>>, InitError> {
-        let mut router_api_keys = self.0.helicone_api_keys.write().await;
-        router_api_keys
+        let mut helicone_api_keys = self.0.helicone_api_keys.write().await;
+        helicone_api_keys
             .as_mut()
             .ok_or_else(|| InitError::RouterApiKeysNotInitialized)?
             .retain(|k| k.key_hash != api_key_hash);
         self.0.metrics.routers.helicone_api_keys.add(-1, &[]);
-        Ok(router_api_keys.clone())
+        Ok(helicone_api_keys.clone())
     }
 
     pub async fn set_router_organization_map(

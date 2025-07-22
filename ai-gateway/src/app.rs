@@ -227,14 +227,14 @@ impl App {
 
         let cache_manager = setup_cache(&config, metrics.clone())?;
 
-        let router_api_keys = if config.deployment_target
+        let helicone_api_keys = if config.deployment_target
             == DeploymentTarget::Cloud
             && let Some(router_store_ref) = router_store.as_ref()
         {
-            let router_api_keys =
-                router_store_ref.get_all_router_keys().await?;
+            let helicone_api_keys =
+                router_store_ref.get_all_helicone_api_keys().await?;
 
-            Some(router_api_keys)
+            Some(helicone_api_keys)
         } else {
             None
         };
@@ -259,7 +259,7 @@ impl App {
             rate_limit_receivers: RwLock::new(HashMap::default()),
             cache_manager,
             router_tx: RwLock::new(None),
-            helicone_api_keys: RwLock::new(router_api_keys),
+            helicone_api_keys: RwLock::new(helicone_api_keys),
             router_organization_map: RwLock::new(HashMap::default()),
         }));
 

@@ -167,8 +167,8 @@ impl DatabaseListener {
             .provider_keys
             .set_all_provider_keys(provider_keys)
             .await;
-        let api_keys = router_store.get_all_router_keys().await?;
-        app_state.set_router_api_keys(Some(api_keys)).await;
+        let api_keys = router_store.get_all_helicone_api_keys().await?;
+        app_state.set_helicone_api_keys(api_keys).await;
         tracing::info!("done resetting state");
         Ok(())
     }

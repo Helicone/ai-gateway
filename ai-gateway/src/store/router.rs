@@ -67,7 +67,9 @@ impl RouterStore {
         Ok(res)
     }
 
-    pub async fn get_all_router_keys(&self) -> Result<HashSet<Key>, InitError> {
+    pub async fn get_all_helicone_api_keys(
+        &self,
+    ) -> Result<HashSet<Key>, InitError> {
         let res = sqlx::query_as::<_, DBApiKey>(
             "SELECT helicone_api_keys.api_key_hash as key_hash, \
              helicone_api_keys.user_id as owner_id, \
