@@ -15,6 +15,9 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
