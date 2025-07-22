@@ -5,14 +5,6 @@ terraform {
       version = "5.4.0"
     }
   }
-
-  cloud {
-    organization = "helicone"
-
-    workspaces {
-      name = "ai-gateway-ecs"
-    }
-  }
 }
 
 provider "aws" {

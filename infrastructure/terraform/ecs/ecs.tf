@@ -35,16 +35,6 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
           hostPort      = 8080
         }
       ]
-      environment = [
-        {
-          name  = "AI_GATEWAY__SERVER__PORT"
-          value = "8080"
-        },
-        {
-          name  = "AI_GATEWAY__SERVER__ADDRESS"
-          value = "0.0.0.0"
-        }
-      ]
 
       logConfiguration = {
         logDriver = "awslogs"
