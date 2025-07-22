@@ -295,7 +295,7 @@ fn process_prompt_variables(
         return Ok(body);
     };
 
-    let variable_regex = Regex::new(r"\{\{\s*hc\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+    let variable_regex = Regex::new(r"\{\{\s*hc\s*:\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\s*:\s*([a-zA-Z_-][a-zA-Z0-9_-]*)\s*\}\}")
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
 
     if let Some(messages_value) = body_obj.get_mut("messages")
