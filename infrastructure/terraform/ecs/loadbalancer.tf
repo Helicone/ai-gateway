@@ -22,7 +22,7 @@ locals {
 
 # Security group for the load balancer with inbound rules for HTTP and HTTPS
 resource "aws_security_group" "load_balancer_sg" {
-  name        = "load-balancer-wizard-1-${var.environment}"
+  name        = "ai-gateway-load-balancer-sg-1-${var.environment}"
   description = "Security group for ALB in ${var.environment} environment"
   vpc_id      = local.vpc_id
 
@@ -59,7 +59,7 @@ resource "aws_security_group" "load_balancer_sg" {
 }
 
 resource "aws_lb" "fargate_lb" {
-  name               = "fargate-lb-${var.environment}"
+  name               = "ai-gateway-lb-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.load_balancer_sg.id]
@@ -67,8 +67,8 @@ resource "aws_lb" "fargate_lb" {
 }
 
 resource "aws_lb_target_group" "fargate_tg" {
-  name     = "fargate-tg-${var.environment}"
-  port     = 5678
+  name     = "ai-gateway-tg-${var.environment}"
+  port     = var.container_port
   protocol = "HTTP"
   vpc_id   = local.vpc_id
 

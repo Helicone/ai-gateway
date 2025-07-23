@@ -1,3 +1,23 @@
+# ECR Repository for AI Gateway
+resource "aws_ecr_repository" "ai_gateway" {
+  name                 = "helicone/ai-gateway"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name        = "ai-gateway-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+# Note: Using existing ECR repository from us-east-2 for now
+# Cross-region ECR access is supported and works fine for ECS
+
+# ECR Repository Policy is not needed - ECS execution role already has ECR access via attached policies
+
 # ECS Cluster
 resource "aws_ecs_cluster" "ai-gateway_service_cluster" {
   name = "ai-gateway-cluster-${var.environment}"
@@ -15,8 +35,6 @@ resource "aws_cloudwatch_log_group" "ecs_log_group" {
 }
 
 # ECS Task Definition
-# NOTE: ECR repository is in us-east-2, but ECS is in us-east-1
-# Cross-region ECR access is allowed but may have performance implications
 resource "aws_ecs_task_definition" "ai-gateway_task" {
   family                   = "ai-gateway-${var.environment}"
   network_mode             = "awsvpc"
@@ -28,21 +46,11 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
   container_definitions = jsonencode([
     {
       name  = "ai-gateway-${var.environment}"
-      image = "849596434884.dkr.ecr.us-east-2.amazonaws.com/helicone/ai-gateway:latest"
+      image = "${var.ecr_repository_url}:${var.image_tag}"
       portMappings = [
         {
-          containerPort = 8080
-          hostPort      = 8080
-        }
-      ]
-      environment = [
-        {
-          name  = "AI_GATEWAY__SERVER__PORT"
-          value = "8080"
-        },
-        {
-          name  = "AI_GATEWAY__SERVER__ADDRESS"
-          value = "0.0.0.0"
+          containerPort = var.container_port
+          hostPort      = var.container_port
         }
       ]
 
@@ -76,7 +84,7 @@ resource "aws_ecs_service" "ai-gateway_service" {
   load_balancer {
     target_group_arn = aws_lb_target_group.fargate_tg.arn
     container_name   = "ai-gateway-${var.environment}"
-    container_port   = 5678
+    container_port   = var.container_port
   }
 
   depends_on = [aws_lb_listener.http_listener]

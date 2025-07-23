@@ -1,0 +1,40 @@
+# Cloudflare API Configuration
+cloudflare_api_token = "your_cloudflare_api_token_here"
+
+# Helicone Test Domain Configuration (optional)
+enable_helicone_test_domain = false
+cloudflare_zone_name = "helicone-test.com"
+cloudflare_subdomain = "filevine"
+create_root_domain_record = false
+cloudflare_helicone_test_zone_id = ""  # Set this to the zone ID if you have access to helicone-test.com zone
+
+# Helicone.ai Domain Configuration
+# Set to false if you don't have access to the helicone.ai zone
+enable_helicone_ai_domain = true
+cloudflare_helicone_ai_zone_name = "helicone.ai"
+cloudflare_helicone_ai_subdomain = "filevine"  # Change this to your desired subdomain
+create_helicone_ai_root_domain_record = false
+
+
+
+# EKS Remote State Configuration
+# For local backend (default)
+eks_terraform_state_path = "../eks/terraform.tfstate"
+remote_state_backend = "local"
+
+# For S3 backend (uncomment and modify if using S3)
+# remote_state_backend = "s3"
+# remote_state_config = {
+#   bucket = "your-terraform-state-bucket"
+#   key    = "eks/terraform.tfstate"
+#   region = "us-west-2"
+# }
+
+# For remote backend (uncomment and modify if using Terraform Cloud)
+# remote_state_backend = "remote"
+# remote_state_config = {
+#   organization = "your-org"
+#   workspaces = {
+#     name = "eks-workspace"
+#   }
+# } 

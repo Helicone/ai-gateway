@@ -1,0 +1,15 @@
+# AWS Region
+region = "us-west-2"
+
+# Common tags for all resources
+tags = {
+  Environment = "production"
+  Project     = "helicone"
+  ManagedBy   = "terraform"
+}
+
+# Domain Configuration
+enable_helicone_test_domain = false
+heliconetest_domain         = "heliconetest.com"
+helicone_test_domain        = "helicone-test.com"
+helicone_ai_domain          = "helicone.ai" 

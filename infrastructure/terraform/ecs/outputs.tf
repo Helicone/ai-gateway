@@ -4,7 +4,7 @@ output "load_balancer_dns_name" {
 }
 
 output "load_balancer_zone_id" {
-  description = "Hosted zone ID of the load balancer"
+  description = "Zone ID of the load balancer"
   value       = aws_lb.fargate_lb.zone_id
 }
 
@@ -34,7 +34,7 @@ output "target_group_arn" {
 }
 
 output "security_group_id" {
-  description = "ID of the security group"
+  description = "Security group ID for the load balancer"
   value       = aws_security_group.load_balancer_sg.id
 }
 
@@ -46,4 +46,14 @@ output "endpoint_url" {
 output "health_check_url" {
   description = "Health check endpoint URL"
   value       = "http://${aws_lb.fargate_lb.dns_name}/health"
+} 
+
+output "ecr_repository_url" {
+  description = "URL of the ECR repository"
+  value       = aws_ecr_repository.ai_gateway.repository_url
+}
+
+output "ecr_repository_arn" {
+  description = "ARN of the ECR repository"
+  value       = aws_ecr_repository.ai_gateway.arn
 } 

@@ -1,0 +1,24 @@
+# AWS Region
+region = "us-west-2"
+
+# Common tags for all resources
+tags = {
+  Environment = "production"
+  Project     = "helicone"
+  ManagedBy   = "terraform"
+}
+
+# Domain Configuration
+heliconetest_domain = "heliconetest.com"
+
+# Remote state configuration
+terraform_organization   = "helicone"
+eks_terraform_workspace = "helicone"
+acm_terraform_workspace = "helicone-acm"
+
+# Subdomain configuration
+enable_grafana_subdomain = true
+enable_argocd_subdomain  = true
+
+# Additional subdomains (e.g., ["api", "staging", "dev"])
+additional_subdomains = [] 
