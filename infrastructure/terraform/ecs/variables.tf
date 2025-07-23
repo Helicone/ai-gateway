@@ -25,3 +25,15 @@ variable "container_port" {
   type        = number
   default     = 8080
 }
+
+variable "secrets_manager_secret_name" {
+  description = "Name of the AWS Secrets Manager secret containing application configuration"
+  type        = string
+  default     = "helicone/ai-gateway-cloud-secrets"
+}
+
+variable "secrets_region" {
+  description = "AWS region where the secrets manager secret is stored"
+  type        = string
+  default     = "us-west-2"
+}

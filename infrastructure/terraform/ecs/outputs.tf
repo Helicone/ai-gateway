@@ -56,4 +56,19 @@ output "ecr_repository_url" {
 output "ecr_repository_arn" {
   description = "ARN of the ECR repository"
   value       = aws_ecr_repository.ai_gateway.arn
+}
+
+output "secrets_manager_secret_arn" {
+  description = "ARN of the AWS Secrets Manager secret being used"
+  value       = data.aws_secretsmanager_secret.cloud_secrets.arn
+}
+
+output "secrets_manager_secret_name" {
+  description = "Name of the AWS Secrets Manager secret being used"
+  value       = var.secrets_manager_secret_name
+}
+
+output "secrets_manager_region" {
+  description = "AWS region where the secrets manager secret is stored"
+  value       = var.secrets_region
 } 

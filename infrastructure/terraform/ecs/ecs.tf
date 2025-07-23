@@ -54,6 +54,26 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
         }
       ]
 
+      # Add secrets here using the data source ARNs
+      secrets = [
+        {
+          name      = "AI_GATEWAY__DATABASE__URL"
+          valueFrom = "${data.aws_secretsmanager_secret.cloud_secrets.arn}:AI_GATEWAY__DATABASE__URL::"
+        },
+        {
+          name      = "PGSSLROOTCERT"
+          valueFrom = "${data.aws_secretsmanager_secret.cloud_secrets.arn}:PGSSLROOTCERT::"
+        },
+        {
+          name      = "AI_GATEWAY__MINIO__ACCESS_KEY"
+          valueFrom = "${data.aws_secretsmanager_secret.cloud_secrets.arn}:AI_GATEWAY__MINIO__ACCESS_KEY::"
+        },
+        {
+          name      = "AI_GATEWAY__MINIO__SECRET_KEY"
+          valueFrom = "${data.aws_secretsmanager_secret.cloud_secrets.arn}:AI_GATEWAY__MINIO__SECRET_KEY::"
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -196,6 +216,24 @@ resource "aws_iam_policy" "ecs_cloudwatch_policy" {
   })
 }
 
+resource "aws_iam_policy" "ecs_secrets_manager_policy" {
+  name        = "ecs_secrets_manager_policy_${var.environment}"
+  description = "Allows ECS tasks to access AWS Secrets Manager"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ],
+        Resource = "arn:aws:secretsmanager:${var.secrets_region}:${data.aws_caller_identity.current.account_id}:secret:${var.secrets_manager_secret_name}*"
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "ecs_ecr_policy_attach" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = aws_iam_policy.ecs_ecr_policy.arn
@@ -204,6 +242,11 @@ resource "aws_iam_role_policy_attachment" "ecs_ecr_policy_attach" {
 resource "aws_iam_role_policy_attachment" "ecs_cloudwatch_policy_attach" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = aws_iam_policy.ecs_cloudwatch_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_secrets_manager_policy_attach" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = aws_iam_policy.ecs_secrets_manager_policy.arn
 }
 
 # Attach the AWS managed ECS task execution role policy
