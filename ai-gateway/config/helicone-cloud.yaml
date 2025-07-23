@@ -1,0 +1,18 @@
+telemetry:
+  level: "info,ai_gateway=debug"
+  format: "compact"
+  exporter: both
+
+helicone:
+  features: all
+
+minio:
+  bucket-name: "request-response-storage"
+
+cache-store:
+  type: redis
+
+rate-limit-store:
+  type: redis
+
+deployment-target: cloud

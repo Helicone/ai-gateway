@@ -153,7 +153,20 @@ impl DatabaseListener {
         app_state: AppState,
     ) -> Result<(), RuntimeError> {
         tracing::info!("resetting state");
-        let routers = router_store.get_all_routers().await?;
+        let routers_fut = router_store.get_all_routers();
+        let provider_keys_fut = router_store.get_all_provider_keys();
+        let api_keys_fut = router_store.get_all_helicone_api_keys();
+        let (routers, provider_keys, api_keys) =
+            futures::join!(routers_fut, provider_keys_fut, api_keys_fut);
+        let (routers, provider_keys, api_keys) =
+            (routers?, provider_keys?, api_keys?);
+        tracing::info!(
+            num_routers = routers.len(),
+            num_provider_keys = provider_keys.len(),
+            num_api_keys = api_keys.len(),
+            "done fetching data from db, setting state in AppState..."
+        );
+
         for router in routers {
             let _ = tx
                 .send(Change::Remove(RouterId::Named(
@@ -161,13 +174,11 @@ impl DatabaseListener {
                 )))
                 .await;
         }
-        let provider_keys = router_store.get_all_provider_keys().await?;
         app_state
             .0
             .provider_keys
             .set_all_provider_keys(provider_keys)
             .await;
-        let api_keys = router_store.get_all_helicone_api_keys().await?;
         app_state.set_helicone_api_keys(api_keys).await;
         tracing::info!("done resetting state");
         Ok(())

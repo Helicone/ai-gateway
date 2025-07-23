@@ -20,4 +20,8 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/ai-gateway /usr/local/bin
+
+# for ease of deployment in AWS
+COPY ai-gateway/config/helicone-cloud.yaml /etc/ai-gateway/helicone-cloud.yaml
+
 CMD ["/usr/local/bin/ai-gateway"]

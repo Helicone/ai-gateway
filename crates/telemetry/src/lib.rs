@@ -40,6 +40,8 @@ pub struct Config {
     pub otlp_endpoint: String,
     #[serde(default = "default_true")]
     pub propagate: bool,
+    #[serde(default)]
+    pub format: Format,
 }
 
 impl Default for Config {
@@ -50,6 +52,7 @@ impl Default for Config {
             exporter: Exporter::default(),
             otlp_endpoint: default_otlp_endpoint(),
             propagate: default_true(),
+            format: Format::default(),
         }
     }
 }
@@ -61,6 +64,15 @@ pub enum Exporter {
     Stdout,
     Otlp,
     Both,
+}
+
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub enum Format {
+    #[default]
+    Pretty,
+    Compact,
+    Json,
 }
 
 fn default_service_name() -> String {
@@ -195,13 +207,27 @@ fn init_otlp_pipeline(
         .with_filter(env_filter(config)?);
 
     let stdout_layer = if with_stdout {
-        Some(
-            tracing_subscriber::fmt::layer()
+        let layer = match config.format {
+            Format::Pretty => tracing_subscriber::fmt::layer()
                 .pretty()
                 .with_file(true)
                 .with_line_number(true)
-                .with_filter(env_filter(config)?),
-        )
+                .with_filter(env_filter(config)?)
+                .boxed(),
+            Format::Compact => tracing_subscriber::fmt::layer()
+                .compact()
+                .with_file(true)
+                .with_line_number(true)
+                .with_filter(env_filter(config)?)
+                .boxed(),
+            Format::Json => tracing_subscriber::fmt::layer()
+                .json()
+                .with_file(true)
+                .with_line_number(true)
+                .with_filter(env_filter(config)?)
+                .boxed(),
+        };
+        Some(layer)
     } else {
         None
     };
@@ -229,11 +255,26 @@ fn init_stdout(
     config: &Config,
 ) -> Result<SdkTracerProvider, TelemetryError> {
     // logging
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .pretty()
-        .with_file(true)
-        .with_line_number(true)
-        .with_filter(env_filter(config)?);
+    let fmt_layer = match config.format {
+        Format::Pretty => tracing_subscriber::fmt::layer()
+            .pretty()
+            .with_file(true)
+            .with_line_number(true)
+            .with_filter(env_filter(config)?)
+            .boxed(),
+        Format::Compact => tracing_subscriber::fmt::layer()
+            .compact()
+            .with_file(true)
+            .with_line_number(true)
+            .with_filter(env_filter(config)?)
+            .boxed(),
+        Format::Json => tracing_subscriber::fmt::layer()
+            .json()
+            .with_file(true)
+            .with_line_number(true)
+            .with_filter(env_filter(config)?)
+            .boxed(),
+    };
     let registry = tracing_subscriber::registry().with(fmt_layer);
 
     // tracing
