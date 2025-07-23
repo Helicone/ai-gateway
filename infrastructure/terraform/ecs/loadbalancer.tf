@@ -8,7 +8,7 @@ data "aws_subnets" "default" {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
-  
+
   filter {
     name   = "default-for-az"
     values = ["true"]
@@ -16,17 +16,25 @@ data "aws_subnets" "default" {
 }
 
 locals {
-  vpc_id = data.aws_vpc.default.id
+  vpc_id  = data.aws_vpc.default.id
   subnets = data.aws_subnets.default.ids
+}
+
+# Data source to find ACM certificate
+data "aws_acm_certificate" "cert" {
+  count       = var.certificate_domain != "" ? 1 : 0
+  domain      = var.certificate_domain
+  statuses    = ["ISSUED"]
+  most_recent = true
 }
 
 # Security group for the load balancer with inbound rules for HTTP and HTTPS
 resource "aws_security_group" "load_balancer_sg" {
-  name        = "load-balancer-wizard-1-${var.environment}"
+  name        = "ai-gw-lb-sg-${var.environment}"
   description = "Security group for ALB in ${var.environment} environment"
   vpc_id      = local.vpc_id
 
-  # Allow HTTP from anywhere
+  # Allow HTTP from anywhere (for redirect to HTTPS)
   ingress {
     from_port        = 80
     to_port          = 80
@@ -59,7 +67,7 @@ resource "aws_security_group" "load_balancer_sg" {
 }
 
 resource "aws_lb" "fargate_lb" {
-  name               = "fargate-lb-${var.environment}"
+  name               = "ai-gateway-lb-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.load_balancer_sg.id]
@@ -67,8 +75,8 @@ resource "aws_lb" "fargate_lb" {
 }
 
 resource "aws_lb_target_group" "fargate_tg" {
-  name     = "fargate-tg-${var.environment}"
-  port     = 5678
+  name     = "ai-gateway-tg-${var.environment}"
+  port     = 8080
   protocol = "HTTP"
   vpc_id   = local.vpc_id
 

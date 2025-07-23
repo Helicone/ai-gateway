@@ -1,5 +1,5 @@
 # ECS Cluster
-resource "aws_ecs_cluster" "ai-gateway_service_cluster" {
+resource "aws_ecs_cluster" "ai-gateway-service-cluster" {
   name = "ai-gateway-cluster-${var.environment}"
 }
 
@@ -17,32 +17,22 @@ resource "aws_cloudwatch_log_group" "ecs_log_group" {
 # ECS Task Definition
 # NOTE: ECR repository is in us-east-2, but ECS is in us-east-1
 # Cross-region ECR access is allowed but may have performance implications
-resource "aws_ecs_task_definition" "ai-gateway_task" {
+resource "aws_ecs_task_definition" "ai-gateway-task" {
   family                   = "ai-gateway-${var.environment}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
-  cpu                      = "256"
-  memory                   = "1024"
+  cpu                      = var.cpu
+  memory                   = var.memory
 
   container_definitions = jsonencode([
     {
       name  = "ai-gateway-${var.environment}"
-      image = "849596434884.dkr.ecr.us-east-2.amazonaws.com/helicone/ai-gateway:latest"
+      image = "849596434884.dkr.ecr.us-east-2.amazonaws.com/helicone/ai-gateway:${var.gw_version}"
       portMappings = [
         {
           containerPort = 8080
           hostPort      = 8080
-        }
-      ]
-      environment = [
-        {
-          name  = "AI_GATEWAY__SERVER__PORT"
-          value = "8080"
-        },
-        {
-          name  = "AI_GATEWAY__SERVER__ADDRESS"
-          value = "0.0.0.0"
         }
       ]
 
@@ -59,27 +49,26 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
 }
 
 # ECS Service
-resource "aws_ecs_service" "ai-gateway_service" {
-  name                 = "ai-gateway-service-${var.environment}"
-  cluster              = aws_ecs_cluster.ai-gateway_service_cluster.id
-  task_definition      = aws_ecs_task_definition.ai-gateway_task.arn
-  launch_type          = "FARGATE"
-  desired_count        = 3
-  force_new_deployment = true
+resource "aws_ecs_service" "ai-gateway-service" {
+  name            = "ai-gateway-service-${var.environment}"
+  cluster         = aws_ecs_cluster.ai-gateway-service-cluster.id
+  task_definition = aws_ecs_task_definition.ai-gateway-task.arn
+  launch_type     = "FARGATE"
+  desired_count   = var.desired_count
 
   network_configuration {
     subnets          = local.subnets
     security_groups  = [aws_security_group.load_balancer_sg.id]
-    assign_public_ip = true
+    assign_public_ip = false
   }
 
   load_balancer {
     target_group_arn = aws_lb_target_group.fargate_tg.arn
     container_name   = "ai-gateway-${var.environment}"
-    container_port   = 5678
+    container_port   = 8080
   }
 
-  depends_on = [aws_lb_listener.http_listener]
+  depends_on = [aws_lb_listener.http_listener, aws_lb_listener.https_listener]
 
   lifecycle {
     ignore_changes = [desired_count]
@@ -88,25 +77,45 @@ resource "aws_ecs_service" "ai-gateway_service" {
 
 resource "null_resource" "scale_down_ecs_service" {
   triggers = {
-    service_name = aws_ecs_service.ai-gateway_service.name
+    service_name = aws_ecs_service.ai-gateway-service.name
   }
 
   provisioner "local-exec" {
-    command = "aws ecs update-service --region ${var.region} --cluster ${aws_ecs_cluster.ai-gateway_service_cluster.id} --service ${self.triggers.service_name} --desired-count 0"
+    command = "aws ecs update-service --region ${var.region} --cluster ${aws_ecs_cluster.ai-gateway-service-cluster.id} --service ${self.triggers.service_name} --desired-count 0"
   }
 }
 
-variable "use_remote_certificate" {
-  description = "Whether to use certificate from remote state or local data source"
-  type        = bool
-  default     = false
-}
-
-# HTTP Listener (temporary - use while resolving certificate issues)
+# HTTP Listener - Redirects to HTTPS
 resource "aws_lb_listener" "http_listener" {
   load_balancer_arn = aws_lb.fargate_lb.arn
   port              = 80
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+
+  depends_on = [aws_lb_target_group.fargate_tg]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# HTTPS Listener
+resource "aws_lb_listener" "https_listener" {
+  count             = var.certificate_domain != "" ? 1 : 0
+  load_balancer_arn = aws_lb.fargate_lb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = data.aws_acm_certificate.cert[0].arn
 
   default_action {
     type             = "forward"

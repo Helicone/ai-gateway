@@ -16,13 +16,13 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
 
 # Data source to get route53-acm state outputs
 data "terraform_remote_state" "route53_acm" {
   backend = "remote"
-  
+
   config = {
     organization = "helicone"
     workspaces = {
