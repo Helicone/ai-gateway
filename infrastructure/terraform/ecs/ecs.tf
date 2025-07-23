@@ -71,6 +71,22 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
         {
           name      = "AI_GATEWAY__MINIO__SECRET_KEY"
           valueFrom = "${data.aws_secretsmanager_secret.cloud_secrets.arn}:AI_GATEWAY__MINIO__SECRET_KEY::"
+        },
+        {
+          name      = "AI_GATEWAY__MINIO__HOST"
+          valueFrom = aws_ssm_parameter.minio_host.arn
+        },
+        {
+          name      = "AI_GATEWAY__MINIO__REGION"
+          valueFrom = aws_ssm_parameter.minio_region.arn
+        },
+        {
+          name      = "AI_GATEWAY__CACHE_STORE__HOST_URL"
+          valueFrom = aws_ssm_parameter.redis_host.arn
+        },
+        {
+          name      = "AI_GATEWAY__RATE_LIMIT_STORE__HOST_URL"
+          valueFrom = aws_ssm_parameter.redis_host.arn
         }
       ]
 
@@ -234,6 +250,27 @@ resource "aws_iam_policy" "ecs_secrets_manager_policy" {
   })
 }
 
+resource "aws_iam_policy" "ecs_parameter_store_policy" {
+  name        = "ecs_parameter_store_policy_${var.environment}"
+  description = "Allows ECS tasks to access AWS Systems Manager Parameter Store"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ],
+        Resource = [
+          "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/ai-gateway/${var.environment}/*"
+        ]
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "ecs_ecr_policy_attach" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = aws_iam_policy.ecs_ecr_policy.arn
@@ -247,6 +284,11 @@ resource "aws_iam_role_policy_attachment" "ecs_cloudwatch_policy_attach" {
 resource "aws_iam_role_policy_attachment" "ecs_secrets_manager_policy_attach" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = aws_iam_policy.ecs_secrets_manager_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_parameter_store_policy_attach" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = aws_iam_policy.ecs_parameter_store_policy.arn
 }
 
 # Attach the AWS managed ECS task execution role policy

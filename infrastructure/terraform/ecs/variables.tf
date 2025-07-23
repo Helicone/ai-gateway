@@ -37,3 +37,21 @@ variable "secrets_region" {
   type        = string
   default     = "us-west-2"
 }
+
+variable "minio_host" {
+  description = "MinIO host URL"
+  type        = string
+  default     = "https://s3.us-west-2.amazonaws.com"
+}
+
+variable "minio_region" {
+  description = "MinIO region"
+  type        = string
+  default     = "us-west-2"
+}
+
+variable "redis_host" {
+  description = "Redis host URL"
+  type        = string
+  default     = "rediss://helicone-cache.serverless.usw1.cache.amazonaws.com:5798"
+}
