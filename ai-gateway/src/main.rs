@@ -39,6 +39,10 @@ pub struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), RuntimeError> {
+    // Install the crypto provider before any TLS operations
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
     let config = load_and_validate_config()?;
     let (logger_provider, tracer_provider, metrics_provider) =
         init_telemetry(&config)?;

@@ -66,6 +66,7 @@ redis = { workspace = true, features = ["tls-rustls", "r2d2", "tokio-rustls-comp
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
+rustls = { workspace = true, features = ["ring"] }
 rust_decimal = { workspace = true }
 rustc-hash = { workspace = true }
 rusty-s3 = { workspace = true }
