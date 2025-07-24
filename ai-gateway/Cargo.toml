@@ -62,7 +62,7 @@ opentelemetry-system-metrics = { workspace = true }
 pin-project-lite = { workspace = true }
 r2d2 = { workspace = true }
 rand = { workspace = true }
-redis = { workspace = true, features = ["tls-rustls", "r2d2", "tokio-rustls-comp"] }
+redis = { workspace = true, features = ["tls-rustls", "r2d2", "tokio-rustls-comp", "tcp_nodelay", "tls-rustls-webpki-roots"] }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
