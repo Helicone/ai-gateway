@@ -37,7 +37,7 @@ data "aws_secretsmanager_secret" "cloud_secrets" {
 # Data source to get route53-acm state outputs
 data "terraform_remote_state" "route53_acm" {
   backend = "remote"
-  
+
   config = {
     organization = "helicone"
     workspaces = {

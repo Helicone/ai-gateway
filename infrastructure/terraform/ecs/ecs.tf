@@ -45,8 +45,9 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
 
   container_definitions = jsonencode([
     {
-      name  = "ai-gateway-${var.environment}"
-      image = "${var.ecr_repository_url}:${var.image_tag}"
+      name    = "ai-gateway-${var.environment}"
+      image   = "${var.ecr_repository_url}:${var.image_tag}"
+      command = ["/usr/local/bin/ai-gateway", "-c", "/etc/ai-gateway/helicone-cloud.yaml"]
       portMappings = [
         {
           containerPort = var.container_port
@@ -112,8 +113,8 @@ resource "aws_ecs_service" "ai-gateway_service" {
   force_new_deployment = true
 
   network_configuration {
-    subnets          = local.subnets
-    security_groups  = [aws_security_group.load_balancer_sg.id]
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.ecs_tasks_sg.id]
     assign_public_ip = true
   }
 
@@ -123,10 +124,38 @@ resource "aws_ecs_service" "ai-gateway_service" {
     container_port   = var.container_port
   }
 
-  depends_on = [aws_lb_listener.http_listener]
+  depends_on = [aws_lb_listener.https_listener]
 
   lifecycle {
     ignore_changes = [desired_count]
+  }
+}
+
+# Security group for ECS tasks
+resource "aws_security_group" "ecs_tasks_sg" {
+  name        = "ai-gateway-ecs-tasks-sg-${var.environment}"
+  description = "Security group for ECS tasks in ${var.environment} environment"
+  vpc_id      = data.aws_vpc.default.id
+
+  # Allow inbound from load balancer
+  ingress {
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer_sg.id]
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
+
+  tags = {
+    Name = "ai-gw-sg-${var.environment}"
   }
 }
 
@@ -138,39 +167,6 @@ resource "null_resource" "scale_down_ecs_service" {
   provisioner "local-exec" {
     command = "aws ecs update-service --region ${var.region} --cluster ${aws_ecs_cluster.ai-gateway_service_cluster.id} --service ${self.triggers.service_name} --desired-count 0"
   }
-}
-
-variable "use_remote_certificate" {
-  description = "Whether to use certificate from remote state or local data source"
-  type        = bool
-  default     = false
-}
-
-# HTTP Listener (temporary - use while resolving certificate issues)
-resource "aws_lb_listener" "http_listener" {
-  load_balancer_arn = aws_lb.fargate_lb.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.fargate_tg.arn
-  }
-
-  depends_on = [aws_lb_target_group.fargate_tg]
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_security_group_rule" "egress_https" {
-  type              = "egress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.load_balancer_sg.id
 }
 
 # IAM Role for ECS Task Execution

@@ -55,3 +55,9 @@ variable "redis_host" {
   type        = string
   default     = "rediss://helicone-cache.serverless.usw1.cache.amazonaws.com:5798"
 }
+
+variable "certificate_arn" {
+  description = "ARN of the SSL certificate for HTTPS listener"
+  type        = string
+  default     = ""
+}
