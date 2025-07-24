@@ -1,7 +1,7 @@
 telemetry:
-  level: "info,ai_gateway=debug"
+  level: "info,ai_gateway=trace"
   format: "compact"
-  exporter: both
+  exporter: stdout
 
 helicone:
   features: all
