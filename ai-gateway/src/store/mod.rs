@@ -13,7 +13,7 @@ pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, InitError> {
         .acquire_timeout(config.acquire_timeout)
         .idle_timeout(config.idle_timeout)
         .max_lifetime(config.max_lifetime)
-        .connect(&config.url)
+        .connect(config.url.expose())
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "failed to create database pool");

@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::types::secret::Secret;
+
 const DEFAULT_DATABASE_URL: &str =
     "postgres://postgres:postgres@localhost:54322/postgres";
 
@@ -11,7 +13,7 @@ pub struct DatabaseConfig {
     /// Database connection URL.
     /// set via env vars: `AI_GATEWAY__DATABASE__URL`
     #[serde(default = "default_url")]
-    pub url: String,
+    pub url: Secret<String>,
     /// Connection timeout for database operations.
     /// set via env vars: `AI_GATEWAY__DATABASE__CONNECTION_TIMEOUT`
     #[serde(with = "humantime_serde", default = "default_connection_timeout")]
@@ -52,8 +54,8 @@ impl Default for DatabaseConfig {
     }
 }
 
-fn default_url() -> String {
-    DEFAULT_DATABASE_URL.to_string()
+fn default_url() -> Secret<String> {
+    Secret::from(DEFAULT_DATABASE_URL.to_string())
 }
 
 fn default_connection_timeout() -> Duration {
@@ -83,8 +85,10 @@ fn default_max_lifetime() -> Duration {
 #[cfg(feature = "testing")]
 impl crate::tests::TestDefault for DatabaseConfig {
     fn test_default() -> Self {
+        use crate::types::secret::Secret;
+
         Self {
-            url: DEFAULT_DATABASE_URL.to_string(),
+            url: Secret::from(DEFAULT_DATABASE_URL.to_string()),
             connection_timeout: Duration::from_secs(5),
             max_connections: 5,
             min_connections: 0,

@@ -153,8 +153,11 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     if config.deployment_target == DeploymentTarget::Cloud {
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
-            DatabaseListener::new(&config.database.url, app.state.clone())
-                .await?,
+            DatabaseListener::new(
+                config.database.url.expose(),
+                app.state.clone(),
+            )
+            .await?,
         ));
         tasks.push("database-listener");
     }
