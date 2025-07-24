@@ -47,7 +47,7 @@ output "valkey_cache_status" {
 
 output "valkey_security_group_id" {
   description = "ID of the security group for the Valkey cache"
-  value       = var.create_security_group ? aws_security_group.valkey_sg[0].id : null
+  value       = aws_security_group.valkey_sg.id
 }
 
 output "valkey_subnet_group_name" {
@@ -62,8 +62,8 @@ output "valkey_cache_configuration" {
     max_ecpu_per_second = var.max_ecpu_per_second
     daily_snapshot_time = var.daily_snapshot_time
     snapshot_retention  = var.snapshot_retention_limit
-    engine             = var.engine
-    major_version      = var.major_engine_version
+    engine              = var.engine
+    major_version       = var.major_engine_version
   }
 }
 

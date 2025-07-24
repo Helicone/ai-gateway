@@ -18,7 +18,6 @@ data "aws_subnets" "default" {
 
 # Security Group for Valkey cache
 resource "aws_security_group" "valkey_sg" {
-  count       = var.create_security_group ? 1 : 0
   name        = "${var.valkey_cache_name}-sg"
   description = "Security group for Valkey serverless cache"
   vpc_id      = var.vpc_id != "" ? var.vpc_id : data.aws_vpc.default[0].id
@@ -32,6 +31,15 @@ resource "aws_security_group" "valkey_sg" {
     security_groups = var.allowed_security_group_ids
   }
 
+  ingress {
+    description     = "Valkey traffic on port 6380"
+    from_port       = 6380
+    to_port         = 6380
+    protocol        = "tcp"
+    cidr_blocks     = length(var.allowed_cidr_blocks) > 0 ? var.allowed_cidr_blocks : null
+    security_groups = var.allowed_security_group_ids
+  }
+
   tags = merge(var.common_tags, {
     Name = "${var.valkey_cache_name}-security-group"
   })
@@ -39,8 +47,8 @@ resource "aws_security_group" "valkey_sg" {
 
 # Subnet Group for Valkey cache
 resource "aws_elasticache_subnet_group" "valkey_subnet_group" {
-  count      = var.create_subnet_group ? 1 : 0
-  name       = "${var.valkey_cache_name}-subnet-group"
+  count = var.create_subnet_group ? 1 : 0
+  name  = "${var.valkey_cache_name}-subnet-group"
   # ElastiCache Serverless requires 2-3 subnets, so we take the first 3 available
   subnet_ids = length(var.subnet_ids) > 0 ? var.subnet_ids : slice(data.aws_subnets.default[0].ids, 0, min(3, length(data.aws_subnets.default[0].ids)))
 
@@ -66,11 +74,11 @@ resource "aws_elasticache_serverless_cache" "valkey" {
     }
   }
 
-  daily_snapshot_time       = var.daily_snapshot_time
-  snapshot_retention_limit  = var.snapshot_retention_limit
-  
-  security_group_ids = var.create_security_group ? [aws_security_group.valkey_sg[0].id] : var.allowed_security_group_ids
-  subnet_ids        = var.create_subnet_group ? aws_elasticache_subnet_group.valkey_subnet_group[0].subnet_ids : var.subnet_ids
+  daily_snapshot_time      = var.daily_snapshot_time
+  snapshot_retention_limit = var.snapshot_retention_limit
+
+  security_group_ids = [aws_security_group.valkey_sg.id]
+  subnet_ids         = var.create_subnet_group ? aws_elasticache_subnet_group.valkey_subnet_group[0].subnet_ids : var.subnet_ids
 
   tags = merge(var.common_tags, {
     Name = var.valkey_cache_name

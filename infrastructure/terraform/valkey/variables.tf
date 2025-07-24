@@ -96,12 +96,6 @@ variable "subnet_ids" {
   default     = []
 }
 
-variable "create_security_group" {
-  description = "Whether to create a security group for the cache"
-  type        = bool
-  default     = true
-}
-
 variable "vpc_id" {
   description = "VPC ID where the cache will be created"
   type        = string

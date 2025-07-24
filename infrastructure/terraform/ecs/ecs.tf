@@ -91,6 +91,14 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
         }
       ]
 
+      # For plain text environment variables
+      environment = [
+        {
+          name  = "NO_COLOR"
+          value = "true"
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -105,12 +113,13 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
 
 # ECS Service
 resource "aws_ecs_service" "ai-gateway_service" {
-  name                 = "ai-gateway-service-${var.environment}"
-  cluster              = aws_ecs_cluster.ai-gateway_service_cluster.id
-  task_definition      = aws_ecs_task_definition.ai-gateway_task.arn
-  launch_type          = "FARGATE"
-  desired_count        = 3
-  force_new_deployment = true
+  name                               = "ai-gateway-service-${var.environment}"
+  cluster                            = aws_ecs_cluster.ai-gateway_service_cluster.id
+  task_definition                    = aws_ecs_task_definition.ai-gateway_task.arn
+  launch_type                        = "FARGATE"
+  desired_count                      = 3
+  force_new_deployment               = true
+  health_check_grace_period_seconds  = 30
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids
