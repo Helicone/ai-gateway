@@ -17,7 +17,7 @@ RUN cargo build --release -p ai-gateway
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt install -y openssl ca-certificates curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/ai-gateway /usr/local/bin
 
