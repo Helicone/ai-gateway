@@ -111,7 +111,7 @@ pin-project-lite = "0.2.16"
 pretty_assertions = "1.4.1"
 r2d2 = "0.8.10"
 rand = "0.9.1"
-redis = { version = "0.32.3", features = ["r2d2"] }
+redis = { version = "0.32.3", features = ["tls-rustls", "r2d2"] }
 regex = "1.11.1"
 reqwest = { version = "0.12.21", features = ["json", "stream", "multipart", "native-tls", "charset", "gzip"], default-features = false }
 reqwest-eventsource = "0.6.0"
@@ -126,7 +126,7 @@ serde_yml = "0.0.12"
 serial_test = "3.2.0"
 strum = "0.27.1"
 stubr = { git = "https://github.com/Helicone/stubr" }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
+sqlx = { version = "0.8.6" }
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ['full'] }
 tokio-stream = "0.1.17"

@@ -4322,6 +4322,8 @@ dependencies = [
  "num-bigint",
  "percent-encoding",
  "r2d2",
+ "rustls 0.23.28",
+ "rustls-native-certs 0.8.1",
  "ryu",
  "sha1_smol",
  "socket2",
