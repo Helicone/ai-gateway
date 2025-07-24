@@ -61,3 +61,20 @@ variable "certificate_arn" {
   type        = string
   default     = ""
 }
+
+variable "vpc_id" {
+  description = "VPC ID where the Fargate containers will be created"
+  type        = string
+}
+
+variable "public_subnet_ids" {
+  description = "List of public subnet IDs for the load balancer"
+  type        = list(string)
+  default     = []
+}
+
+variable "private_subnet_ids" {
+  description = "List of private subnet IDs for the ECS tasks"
+  type        = list(string)
+  default     = []
+}

@@ -87,7 +87,9 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        if req.method() == Method::GET && req.uri().path() == "/health" {
+        if (req.method() == Method::GET || req.method() == Method::HEAD)
+            && req.uri().path() == "/health"
+        {
             Either::Left(ready(Ok(healthy_response())))
         } else {
             Either::Right(self.inner.call(req))

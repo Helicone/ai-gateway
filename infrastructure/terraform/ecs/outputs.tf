@@ -85,10 +85,35 @@ output "secrets_manager_region" {
 
 output "vpc_id" {
   description = "VPC ID where ECS is deployed"
-  value       = data.aws_vpc.default.id
+  value       = var.vpc_id
 }
 
 output "subnet_ids" {
   description = "Subnet IDs where ECS tasks run"
   value       = data.aws_subnets.default.ids
+}
+
+output "autoscaling_target_resource_id" {
+  description = "Resource ID of the autoscaling target"
+  value       = aws_appautoscaling_target.ecs_target.resource_id
+}
+
+output "autoscaling_policy_name" {
+  description = "Name of the autoscaling policy"
+  value       = aws_appautoscaling_policy.ecs_cpu_policy.name
+}
+
+output "autoscaling_min_capacity" {
+  description = "Minimum number of tasks for autoscaling"
+  value       = aws_appautoscaling_target.ecs_target.min_capacity
+}
+
+output "autoscaling_max_capacity" {
+  description = "Maximum number of tasks for autoscaling"
+  value       = aws_appautoscaling_target.ecs_target.max_capacity
+}
+
+output "autoscaling_target_cpu_utilization" {
+  description = "Target CPU utilization percentage for autoscaling"
+  value       = aws_appautoscaling_policy.ecs_cpu_policy.target_tracking_scaling_policy_configuration[0].target_value
 } 

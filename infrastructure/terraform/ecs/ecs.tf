@@ -99,6 +99,14 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
         }
       ]
 
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/health || exit 1"]
+        interval    = 15
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -113,16 +121,16 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
 
 # ECS Service
 resource "aws_ecs_service" "ai-gateway_service" {
-  name                               = "ai-gateway-service-${var.environment}"
-  cluster                            = aws_ecs_cluster.ai-gateway_service_cluster.id
-  task_definition                    = aws_ecs_task_definition.ai-gateway_task.arn
-  launch_type                        = "FARGATE"
-  desired_count                      = 3
-  force_new_deployment               = true
-  health_check_grace_period_seconds  = 30
+  name                              = "ai-gateway-service-${var.environment}"
+  cluster                           = aws_ecs_cluster.ai-gateway_service_cluster.id
+  task_definition                   = aws_ecs_task_definition.ai-gateway_task.arn
+  launch_type                       = "FARGATE"
+  desired_count                     = 2
+  force_new_deployment              = true
+  health_check_grace_period_seconds = 30
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : data.aws_subnets.default.ids
     security_groups  = [aws_security_group.ecs_tasks_sg.id]
     assign_public_ip = true
   }
@@ -142,17 +150,9 @@ resource "aws_ecs_service" "ai-gateway_service" {
 
 # Security group for ECS tasks
 resource "aws_security_group" "ecs_tasks_sg" {
-  name        = "ai-gateway-ecs-tasks-sg-${var.environment}"
+  name        = "ai-gateway-tasks-sg-${var.environment}"
   description = "Security group for ECS tasks in ${var.environment} environment"
-  vpc_id      = data.aws_vpc.default.id
-
-  # Allow inbound from load balancer
-  ingress {
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.load_balancer_sg.id]
-  }
+  vpc_id      = var.vpc_id
 
   # Allow all outbound traffic
   egress {
@@ -166,6 +166,17 @@ resource "aws_security_group" "ecs_tasks_sg" {
   tags = {
     Name = "ai-gw-sg-${var.environment}"
   }
+}
+
+# Separate ingress rule to avoid circular dependency
+resource "aws_security_group_rule" "ecs_from_lb_ingress" {
+  type                     = "ingress"
+  from_port                = var.container_port
+  to_port                  = var.container_port
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.load_balancer_sg.id
+  security_group_id        = aws_security_group.ecs_tasks_sg.id
+  description              = "Allow traffic from load balancer"
 }
 
 resource "null_resource" "scale_down_ecs_service" {
@@ -218,7 +229,7 @@ resource "aws_iam_policy" "ecs_ecr_policy" {
 }
 
 resource "aws_iam_policy" "ecs_cloudwatch_policy" {
-  name        = "ecs_cloudwatch_policy_${var.environment}"
+  name        = "ai_gw_ecs_cloudwatch_policy_${var.environment}"
   description = "Allows ECS tasks to write to CloudWatch Logs"
 
   policy = jsonencode({
@@ -300,4 +311,29 @@ resource "aws_iam_role_policy_attachment" "ecs_parameter_store_policy_attach" {
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# Application Auto Scaling target for ECS service
+resource "aws_appautoscaling_target" "ecs_target" {
+  max_capacity       = 10
+  min_capacity       = 1
+  resource_id        = "service/${aws_ecs_cluster.ai-gateway_service_cluster.name}/${aws_ecs_service.ai-gateway_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+# Auto Scaling policy based on CPU utilization
+resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
+  name               = "ai-gateway-cpu-autoscaling-${var.environment}"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value = 60.0
+  }
 }

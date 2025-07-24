@@ -2,3 +2,6 @@ environment = "dev"
 region      = "us-east-1"
 image_tag   = "latest"
 certificate_arn = ""
+vpc_id = "vpc-123.."
+private_subnet_ids = ["subnet-.."]
+public_subnet_ids = ["subnet-.."]
