@@ -14,6 +14,8 @@ _Built by the team at [Helicone](https://helicone.ai), open-sourced for the comm
 
 [🚀 Quick Start](https://docs.helicone.ai/ai-gateway/quickstart) • [📖 Docs](https://docs.helicone.ai/ai-gateway/introduction) • [💬 Discord](https://discord.gg/7aSCGCGUeu) • [🌐 Website](https://helicone.ai)
 
+_Talk to our up-to-date documentation in DeepWiki:_ [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Helicone/ai-gateway)
+
 ---
 
 ### 🚆 1 API. 100+ models.
@@ -256,6 +258,7 @@ const response = await client.chat.completions.create({
 - 📖 **[Full Documentation](https://docs.helicone.ai/ai-gateway/introduction)** - Complete guides and API reference
 - 🚀 **[Quickstart Guide](https://docs.helicone.ai/ai-gateway/quickstart)** - Get up and running in 1 minute
 - 🔬 **[Advanced Configurations](https://docs.helicone.ai/ai-gateway/config)** - Configuration reference & examples
+- 🧠 **[Ask DeepWiki](https://deepwiki.com/Helicone/ai-gateway)** - Talk to the repository. Ask any question.
 
 ### Community
 
