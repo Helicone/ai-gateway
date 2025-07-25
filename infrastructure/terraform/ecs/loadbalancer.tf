@@ -28,10 +28,7 @@ locals {
   lb_subnet_ids = [for az, subnets in local.subnet_by_az : subnets[0]]
 }
 
-# Data source for CloudFront managed prefix list
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
-}
+
 
 # Security group for the load balancer with inbound rules for HTTP and HTTPS
 resource "aws_security_group" "load_balancer_sg" {
@@ -39,22 +36,25 @@ resource "aws_security_group" "load_balancer_sg" {
   description = "Security group for ALB in ${var.environment} environment"
   vpc_id      = var.vpc_id
 
-  # Allow HTTP from CloudFront only
+  # Allow HTTP from anywhere - redirects to HTTPS
   ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    description = "Allow HTTP from anywhere"
   }
 
-  # Allow HTTPS from CloudFront only
+  # Allow HTTPS from anywhere
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    description = "Allow HTTPS from anywhere"
   }
-
 
   tags = {
     Name = "lb-sg-${var.environment}"
