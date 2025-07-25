@@ -123,7 +123,7 @@ async fn build_prompt_request(
         return Ok(req);
     }
 
-    let Ok(prompt_ctx) = get_prompt_params(&request_json) else {
+    let Ok(mut prompt_ctx) = get_prompt_params(&request_json) else {
         let req =
             Request::from_parts(parts, axum_core::body::Body::from(body_bytes));
         return Ok(req);
@@ -153,6 +153,7 @@ async fn build_prompt_request(
                 PromptError::UnexpectedResponse(e),
             ))
         })?;
+        prompt_ctx.prompt_version_id = Some(version_response.id.clone());
         version_response.id
     };
 
@@ -180,6 +181,9 @@ async fn build_prompt_request(
 
     let merged_bytes = serde_json::to_vec(&processed_body)
         .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+
+    let mut parts = parts;
+    parts.extensions.insert(prompt_ctx);
 
     let req =
         Request::from_parts(parts, axum_core::body::Body::from(merged_bytes));

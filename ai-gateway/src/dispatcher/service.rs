@@ -40,7 +40,9 @@ use crate::{
     },
     types::{
         body::BodyReader,
-        extensions::{MapperContext, RequestContext, RequestKind},
+        extensions::{
+            MapperContext, PromptContext, RequestContext, RequestKind,
+        },
         model_id::ModelId,
         provider::InferenceProvider,
         rate_limit::RateLimitEvent,
@@ -224,6 +226,7 @@ impl Dispatcher {
             start_instant,
             start_time,
             request_kind,
+            prompt_ctx,
         ) = Self::extract_request_context(&mut req)?;
 
         let auth_ctx = req_ctx.auth_context.as_ref();
@@ -368,6 +371,7 @@ impl Dispatcher {
             &mapper_ctx,
             router_id,
             helicone_request_id,
+            prompt_ctx,
         );
 
         Ok(client_response)
@@ -388,6 +392,7 @@ impl Dispatcher {
             Instant,
             DateTime<Utc>,
             RequestKind,
+            Option<PromptContext>,
         ),
         ApiError,
     > {
@@ -437,6 +442,7 @@ impl Dispatcher {
             .get::<RequestKind>()
             .copied()
             .ok_or(InternalError::ExtensionNotFound("RequestKind"))?;
+        let prompt_ctx = req.extensions_mut().remove::<PromptContext>();
 
         Ok((
             mapper_ctx,
@@ -448,6 +454,7 @@ impl Dispatcher {
             start_instant,
             start_time,
             request_kind,
+            prompt_ctx,
         ))
     }
 
@@ -509,6 +516,7 @@ impl Dispatcher {
         mapper_ctx: &MapperContext,
         router_id: Option<RouterId>,
         helicone_request_id: Uuid,
+        prompt_ctx: Option<PromptContext>,
     ) {
         let deployment_target =
             self.app_state.config().deployment_target.clone();
@@ -530,6 +538,7 @@ impl Dispatcher {
                     .router_id(router_id)
                     .deployment_target(deployment_target)
                     .request_id(helicone_request_id)
+                    .prompt_ctx(prompt_ctx)
                     .build();
 
                 let app_state = self.app_state.clone();

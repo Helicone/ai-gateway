@@ -8,8 +8,9 @@ use uuid::Uuid;
 
 use super::user::UserId;
 use crate::{
-    config::DeploymentTarget, error::logger::LoggerError,
-    types::router::RouterId,
+    config::DeploymentTarget,
+    error::logger::LoggerError,
+    types::{extensions::PromptContext, router::RouterId},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,6 +43,13 @@ pub struct HeliconeLogMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_router_id: Option<RouterId>,
     pub gateway_deployment_target: DeploymentTarget,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_version_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_inputs:
+        Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl HeliconeLogMetadata {
@@ -49,6 +57,7 @@ impl HeliconeLogMetadata {
         headers: &mut HeaderMap,
         router_id: Option<RouterId>,
         deployment_target: DeploymentTarget,
+        prompt_ctx: Option<PromptContext>,
     ) -> Result<Self, LoggerError> {
         let model_override = headers
             .remove("x-helicone-model-override")
@@ -70,6 +79,13 @@ impl HeliconeLogMetadata {
             .remove("x-helicone-lytix-key")
             .map(|v| v.to_str().map(std::borrow::ToOwned::to_owned))
             .transpose()?;
+        let (prompt_id, prompt_version_id, prompt_inputs) =
+            if let Some(ctx) = prompt_ctx {
+                (Some(ctx.prompt_id), ctx.prompt_version_id, ctx.inputs)
+            } else {
+                (None, None, None)
+            };
+
         Ok(Self {
             model_override,
             omit_request_log,
@@ -80,6 +96,9 @@ impl HeliconeLogMetadata {
             lytix_key,
             gateway_router_id: router_id,
             gateway_deployment_target: deployment_target,
+            prompt_id,
+            prompt_version_id,
+            prompt_inputs,
         })
     }
 }

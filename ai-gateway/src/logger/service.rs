@@ -20,7 +20,7 @@ use crate::{
     store::minio::MinioClient,
     types::{
         body::BodyReader,
-        extensions::{AuthContext, MapperContext},
+        extensions::{AuthContext, MapperContext, PromptContext},
         logger::{
             HeliconeLogMetadata, Log, LogMessage, RequestLog, ResponseLog,
         },
@@ -73,6 +73,8 @@ pub struct LoggerService {
     cache_control: Option<String>,
     #[builder(default)]
     cache_reference_id: Option<String>,
+    #[builder(default)]
+    prompt_ctx: Option<PromptContext>,
 }
 
 impl LoggerService {
@@ -133,6 +135,7 @@ impl LoggerService {
             &mut self.request_headers,
             self.router_id,
             self.deployment_target,
+            self.prompt_ctx,
         )?;
         let req_path = self.target_url.path().to_string();
         let provider = match self.provider {
