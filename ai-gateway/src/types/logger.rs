@@ -54,10 +54,8 @@ impl HeliconeLogMetadata {
             .remove("x-helicone-model-override")
             .map(|v| v.to_str().map(std::borrow::ToOwned::to_owned))
             .transpose()?;
-        let omit_request_log =
-            headers.get("x-helicone-omit-request-log").is_some();
-        let omit_response_log =
-            headers.get("x-helicone-omit-response-log").is_some();
+        let omit_request_log = headers.get("helicone-omit-request").is_some();
+        let omit_response_log = headers.get("helicone-omit-response").is_some();
         let webhook_enabled =
             headers.remove("x-helicone-webhook-enabled").is_some();
         let posthog_api_key = headers

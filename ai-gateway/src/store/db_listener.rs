@@ -69,11 +69,13 @@ impl DatabaseListener {
         database_url: &str,
         app_state: AppState,
     ) -> Result<Self, InitError> {
-        let listener =
+        let mut listener =
             PgListener::connect(database_url).await.map_err(|e| {
                 error!(error = %e, "failed to create database listener");
                 InitError::DatabaseConnection(e)
             })?;
+
+        listener.ignore_pool_close_event(false);
 
         // Retry getting router_tx for up to 5 seconds
         let start = tokio::time::Instant::now();
