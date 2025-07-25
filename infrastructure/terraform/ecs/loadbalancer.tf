@@ -28,28 +28,31 @@ locals {
   lb_subnet_ids = [for az, subnets in local.subnet_by_az : subnets[0]]
 }
 
+# Data source for CloudFront managed prefix list
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 # Security group for the load balancer with inbound rules for HTTP and HTTPS
 resource "aws_security_group" "load_balancer_sg" {
   name        = "ai-gateway-load-balancer-sg-${var.environment}"
   description = "Security group for ALB in ${var.environment} environment"
   vpc_id      = var.vpc_id
 
-  # Allow HTTP from anywhere
+  # Allow HTTP from CloudFront only
   ingress {
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
 
-  # Allow HTTPS from anywhere
+  # Allow HTTPS from CloudFront only
   ingress {
-    from_port        = 443
-    to_port          = 443
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
 
 

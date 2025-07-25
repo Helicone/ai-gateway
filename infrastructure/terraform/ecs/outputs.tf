@@ -8,6 +8,11 @@ output "load_balancer_zone_id" {
   value       = aws_lb.fargate_lb.zone_id
 }
 
+output "load_balancer_arn" {
+  description = "ARN of the load balancer"
+  value       = aws_lb.fargate_lb.arn
+}
+
 output "ecs_cluster_name" {
   description = "Name of the ECS cluster"
   value       = aws_ecs_cluster.ai-gateway_service_cluster.name
