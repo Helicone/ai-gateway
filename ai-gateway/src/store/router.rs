@@ -1,13 +1,14 @@
 use std::collections::HashSet;
 
+use chrono::{DateTime, Utc};
 use rustc_hash::FxHashMap;
 use sqlx::PgPool;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
     control_plane::types::Key,
-    error::init::InitError,
+    error::{init::InitError, internal::InternalError},
     types::{
         org::OrgId,
         provider::{InferenceProvider, ProviderKey, ProviderKeyMap},
@@ -16,27 +17,31 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RouterStore {
     pub pool: PgPool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct DBRouterConfig {
+pub struct DbRouterConfig {
     pub router_hash: String,
     pub organization_id: Uuid,
     pub config: serde_json::Value,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct DBApiKey {
+pub struct DbApiKey {
     pub key_hash: String,
     pub owner_id: Uuid,
     pub organization_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub soft_delete: Option<bool>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct DBProviderKey {
+pub struct DbProviderKey {
     pub provider_name: String,
     pub decrypted_provider_key: String,
     pub org_id: Uuid,
@@ -50,40 +55,53 @@ impl RouterStore {
 
     pub async fn get_all_routers(
         &self,
-    ) -> Result<Vec<DBRouterConfig>, InitError> {
-        let res = sqlx::query_as::<_, DBRouterConfig>(
-            "SELECT DISTINCT ON (routers.hash) routers.hash as router_hash, \
-             routers.organization_id as organization_id, config FROM \
-             router_config_versions INNER JOIN routers on \
-             router_config_versions.router_id = routers.id ORDER BY \
-             routers.hash, router_config_versions.created_at DESC",
+    ) -> Result<Vec<DbRouterConfig>, InternalError> {
+        let res = sqlx::query_as::<_, DbRouterConfig>(
+            r"SELECT DISTINCT ON (routers.id)
+                     routers.hash as router_hash,
+                     routers.organization_id as organization_id,
+                     router_config_versions.config,
+                     router_config_versions.created_at
+             FROM router_config_versions
+             INNER JOIN routers ON router_config_versions.router_id = routers.id
+             ORDER BY routers.id, router_config_versions.created_at DESC",
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| {
+        .inspect_err(|e| {
             error!(error = %e, "failed to get all routers");
-            InitError::DatabaseConnection(e)
+        })?;
+        Ok(res)
+    }
+
+    pub async fn get_routers_created_after(
+        &self,
+        created_at: DateTime<Utc>,
+    ) -> Result<Vec<DbRouterConfig>, InternalError> {
+        let res = sqlx::query_as::<_, DbRouterConfig>(
+            r"SELECT DISTINCT ON (routers.id)
+                     routers.hash as router_hash,
+                     routers.organization_id as organization_id,
+                     router_config_versions.config,
+                     router_config_versions.created_at
+             FROM router_config_versions
+             INNER JOIN routers ON router_config_versions.router_id = routers.id
+             WHERE router_config_versions.created_at > $1
+             ORDER BY routers.id, router_config_versions.created_at DESC",
+        )
+        .bind(created_at)
+        .fetch_all(&self.pool)
+        .await
+        .inspect_err(|e| {
+            error!(error = %e, "failed to get routers created after");
         })?;
         Ok(res)
     }
 
     pub async fn get_all_helicone_api_keys(
         &self,
-    ) -> Result<HashSet<Key>, InitError> {
-        let res = sqlx::query_as::<_, DBApiKey>(
-            "SELECT helicone_api_keys.api_key_hash as key_hash, \
-             helicone_api_keys.user_id as owner_id, \
-             helicone_api_keys.organization_id as organization_id FROM \
-             helicone_api_keys WHERE helicone_api_keys.soft_delete = false",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "failed to get all router keys");
-            InitError::DatabaseConnection(e)
-        })?;
-        info!("found {} router keys", res.len());
-
+    ) -> Result<HashSet<Key>, InternalError> {
+        let res = self.get_all_db_helicone_api_keys().await?;
         let keys = res
             .into_iter()
             .map(|k| Key {
@@ -96,44 +114,53 @@ impl RouterStore {
         Ok(keys)
     }
 
-    pub async fn get_organization_keys(
+    pub async fn get_all_db_helicone_api_keys(
         &self,
-        organization_id: &str,
-    ) -> Result<HashSet<Key>, InitError> {
-        let org_id = Uuid::parse_str(organization_id).map_err(|e| {
-            error!(error = %e, "failed to parse organization id");
-            InitError::InvalidOrganizationId(organization_id.to_string())
-        })?;
-        let res = sqlx::query_as::<_, DBApiKey>(
-            "SELECT helicone_api_keys.api_key_hash as key_hash, \
-             helicone_api_keys.user_id as owner_id, \
-             helicone_api_keys.organization_id as organization_id FROM \
-             helicone_api_keys WHERE helicone_api_keys.organization_id = $1 \
-             AND helicone_api_keys.soft_delete = false",
+    ) -> Result<Vec<DbApiKey>, InternalError> {
+        let res = sqlx::query_as::<_, DbApiKey>(
+            r"SELECT helicone_api_keys.api_key_hash as key_hash,
+             helicone_api_keys.user_id as owner_id,
+             helicone_api_keys.organization_id as organization_id,
+             helicone_api_keys.created_at as created_at
+             FROM helicone_api_keys
+             WHERE helicone_api_keys.soft_delete = false",
         )
-        .bind(org_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| {
-            error!(error = %e, "failed to get organization keys");
-            InitError::DatabaseConnection(e)
+        .inspect_err(|e| {
+            error!(error = %e, "failed to get all helicone api keys with timestamp");
         })?;
-        let keys = res
-            .into_iter()
-            .map(|k| Key {
-                key_hash: k.key_hash,
-                owner_id: UserId::new(k.owner_id),
-                organization_id: OrgId::new(k.organization_id),
-            })
-            .collect();
 
-        Ok(keys)
+        Ok(res)
+    }
+
+    pub async fn get_all_db_helicone_api_keys_created_after(
+        &self,
+        created_at: DateTime<Utc>,
+    ) -> Result<Vec<DbApiKey>, InternalError> {
+        let res = sqlx::query_as::<_, DbApiKey>(
+            r"SELECT helicone_api_keys.api_key_hash as key_hash,
+             helicone_api_keys.user_id as owner_id,
+             helicone_api_keys.organization_id as organization_id,
+             helicone_api_keys.created_at as created_at,
+             helicone_api_keys.soft_delete as soft_delete
+             FROM helicone_api_keys
+             WHERE helicone_api_keys.created_at > $1",
+        )
+        .bind(created_at)
+        .fetch_all(&self.pool)
+        .await
+        .inspect_err(|e| {
+            error!(error = %e, "failed to get all helicone api keys created after");
+        })?;
+
+        Ok(res)
     }
 
     pub async fn get_all_provider_keys(
         &self,
     ) -> Result<FxHashMap<OrgId, ProviderKeyMap>, InitError> {
-        let res = sqlx::query_as::<_, DBProviderKey>(
+        let res = sqlx::query_as::<_, DbProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
              decrypted_provider_keys.org_id, decrypted_provider_keys.config \
@@ -182,7 +209,7 @@ impl RouterStore {
         &self,
         org_id: OrgId,
     ) -> Result<ProviderKeyMap, InitError> {
-        let res = sqlx::query_as::<_, DBProviderKey>(
+        let res = sqlx::query_as::<_, DbProviderKey>(
             "SELECT decrypted_provider_keys.provider_name, \
              decrypted_provider_keys.decrypted_provider_key, \
              decrypted_provider_keys.org_id, decrypted_provider_keys.config \

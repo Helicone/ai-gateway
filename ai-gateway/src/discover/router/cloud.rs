@@ -44,7 +44,9 @@ impl CloudDiscovery {
             .router_store
             .as_ref()
             .ok_or(InitError::StoreNotConfigured("router_store"))?;
-        let routers = router_store.get_all_routers().await?;
+        let routers = router_store.get_all_routers().await.map_err(|e| {
+            InitError::InitHeliconeKeys(format!("Failed to get routers: {e}"))
+        })?;
         let mut router_organisation_map = FxHashMap::default();
         for db_router in routers {
             let router_id = RouterId::Named(CompactString::from(

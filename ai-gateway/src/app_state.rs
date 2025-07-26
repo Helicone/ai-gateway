@@ -136,7 +136,6 @@ impl AppState {
         &self,
         api_key: Key,
     ) -> Result<Option<HashSet<Key>>, InitError> {
-        tracing::debug!("setting router api key");
         let mut helicone_api_keys = self.0.helicone_api_keys.write().await;
         helicone_api_keys
             .as_mut()
@@ -144,11 +143,6 @@ impl AppState {
             .insert(api_key.clone());
         self.0.metrics.routers.helicone_api_keys.add(1, &[]);
         Ok(helicone_api_keys.clone())
-    }
-
-    pub async fn set_helicone_api_keys(&self, keys: HashSet<Key>) {
-        let mut helicone_api_keys = self.0.helicone_api_keys.write().await;
-        *helicone_api_keys = Some(keys);
     }
 
     pub async fn remove_helicone_api_key(

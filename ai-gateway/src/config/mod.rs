@@ -244,6 +244,7 @@ mod tests {
 
     #[test]
     fn deployment_target_round_trip() {
+        // Test Sidecar variant
         let config = DeploymentTarget::Sidecar;
         let serialized = serde_json::to_string(&config).unwrap();
         let deserialized =
@@ -253,6 +254,7 @@ mod tests {
         // Test Cloud variant
         let cloud_config = DeploymentTarget::Cloud {
             db_poll_interval: Duration::from_secs(60),
+            listener_reconnect_interval: Duration::from_secs(300),
         };
         let serialized = serde_json::to_string(&cloud_config).unwrap();
         let deserialized =

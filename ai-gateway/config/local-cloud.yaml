@@ -15,4 +15,5 @@ cache-store:
   type: redis
   host-url: "redis://localhost:6379"
 
-deployment-target: cloud
+deployment-target:
+  type: cloud

@@ -81,6 +81,8 @@ pub enum InternalError {
     PromptTaskError(tokio::task::JoinError),
     /// Auth data not ready
     AuthDataNotReady,
+    /// Database error: {0}
+    DatabaseError(#[from] sqlx::Error),
 }
 
 impl IntoResponse for InternalError {
@@ -162,6 +164,8 @@ pub enum InternalErrorMetric {
     PromptError,
     /// Auth data not ready
     AuthDataNotReady,
+    /// Database error
+    DatabaseError,
 }
 
 impl From<&InternalError> for InternalErrorMetric {
@@ -205,6 +209,7 @@ impl From<&InternalError> for InternalErrorMetric {
                 Self::DynamicRouterDiscoveryError
             }
             InternalError::AuthDataNotReady => Self::AuthDataNotReady,
+            InternalError::DatabaseError(_) => Self::DatabaseError,
         }
     }
 }

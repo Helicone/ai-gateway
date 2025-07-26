@@ -1,18 +1,23 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
 use meltdown::Token;
+use rustc_hash::FxHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgListener;
-use tokio::sync::mpsc::Sender;
+use tokio::{
+    sync::mpsc::Sender,
+    time::{Duration, MissedTickBehavior},
+};
 use tower::discover::Change;
 use tracing::{debug, error, info};
 
 use crate::{
     app_state::AppState,
-    config::router::RouterConfig,
+    config::{deployment_target::DeploymentTarget, router::RouterConfig},
     control_plane::types::Key,
-    error::{init::InitError, runtime::RuntimeError},
+    error::{init::InitError, internal::InternalError, runtime::RuntimeError},
     router::service::Router,
     store::router::RouterStore,
     types::{org::OrgId, router::RouterId, user::UserId},
@@ -24,7 +29,18 @@ use crate::{
 pub struct DatabaseListener {
     app_state: AppState,
     pg_listener: PgListener,
+    router_store: RouterStore,
     tx: Sender<Change<RouterId, Router>>,
+    /// Track last seen router config versions to detect missed events
+    last_router_config_versions: HashMap<String, DateTime<Utc>>,
+    /// Track last seen API key `created_at` timestamps to detect missed events
+    last_api_key_created_at: HashMap<String, DateTime<Utc>>,
+    /// Polling interval for database queries
+    poll_interval: Duration,
+    /// Last time we polled the database
+    last_poll_time: Option<DateTime<Utc>>,
+    /// Interval for reconnecting the listener
+    listener_reconnect_interval: Duration,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -64,41 +80,196 @@ enum ConnectedCloudGatewaysNotification {
     },
 }
 
+/// Service state to correctly handle cancellation safety
+enum ServiceState {
+    Idle,
+    PollingDatabase,
+    Reconnecting,
+    HandlingNotification(sqlx::postgres::PgNotification),
+}
+
 impl DatabaseListener {
     pub async fn new(
         database_url: &str,
         app_state: AppState,
     ) -> Result<Self, InitError> {
-        let mut listener =
+        let pg_listener =
             PgListener::connect(database_url).await.map_err(|e| {
                 error!(error = %e, "failed to create database listener");
                 InitError::DatabaseConnection(e)
             })?;
 
-        listener.ignore_pool_close_event(false);
-
-        // Retry getting router_tx for up to 5 seconds
-        let start = tokio::time::Instant::now();
-        let timeout = tokio::time::Duration::from_secs(1);
-        let tx = loop {
-            if let Some(tx) = app_state.get_router_tx().await {
-                break tx;
+        // Retry getting router_tx for up to 1 seconds
+        let tx = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if let Some(tx) = app_state.get_router_tx().await {
+                    break tx;
+                }
+                debug!("router_tx not available, retrying...");
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
+        })
+        .await
+        .map_err(|_| InitError::RouterTxNotSet)?;
 
-            if start.elapsed() >= timeout {
-                error!("failed to get router_tx after 5 seconds");
-                return Err(InitError::RouterTxNotSet);
-            }
-
-            debug!("router_tx not available, retrying...");
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        let DeploymentTarget::Cloud {
+            db_poll_interval,
+            listener_reconnect_interval,
+        } = app_state.config().deployment_target
+        else {
+            return Err(InitError::DatabaseListenerOnlyCloud);
         };
+
+        let router_store = app_state
+            .0
+            .router_store
+            .as_ref()
+            .ok_or(InitError::StoreNotConfigured("router_store"))?
+            .clone();
 
         Ok(Self {
             app_state,
-            pg_listener: listener,
+            pg_listener,
+            router_store,
             tx,
+            last_router_config_versions: HashMap::default(),
+            last_api_key_created_at: HashMap::default(),
+            poll_interval: db_poll_interval,
+            last_poll_time: None,
+            listener_reconnect_interval,
         })
+    }
+
+    /// Poll the database for changes since last poll
+    #[allow(clippy::too_many_lines)]
+    async fn poll_database(&mut self) -> Result<(), RuntimeError> {
+        info!("polling database for changes");
+
+        // Query for API key changes using RouterStore methods
+        let new_api_keys = if let Some(last_poll) = self.last_poll_time {
+            self.router_store
+                .get_all_db_helicone_api_keys_created_after(last_poll)
+                .await
+                .inspect(|keys| {
+                    debug!(
+                        "polling found {} new helicone api keys",
+                        keys.len()
+                    );
+                })
+                .inspect_err(|e| {
+                    error!(error = %e, "failed to poll api keys");
+                })?
+        } else {
+            // First poll - get all active API keys
+            self.router_store
+                .get_all_db_helicone_api_keys()
+                .await
+                .inspect(|keys| {
+                    info!(
+                        "polling initialized with {} helicone api keys",
+                        keys.len()
+                    );
+                })
+                .inspect_err(|e| {
+                    error!(error = %e, "failed to poll api keys");
+                })?
+        };
+
+        // Process API key changes
+        for api_key in new_api_keys {
+            let soft_delete = api_key.soft_delete.unwrap_or(false);
+            let should_process =
+                match self.last_api_key_created_at.get(&api_key.key_hash) {
+                    None => true,
+                    Some(last_seen) => {
+                        api_key.created_at > *last_seen || soft_delete
+                    }
+                };
+
+            if should_process {
+                if soft_delete {
+                    self.app_state
+                        .remove_helicone_api_key(api_key.key_hash.clone())
+                        .await?;
+                } else {
+                    self.app_state
+                        .set_helicone_api_key(Key {
+                            key_hash: api_key.key_hash.clone(),
+                            owner_id: UserId::new(api_key.owner_id),
+                            organization_id: OrgId::new(
+                                api_key.organization_id,
+                            ),
+                        })
+                        .await?;
+                }
+
+                self.last_api_key_created_at
+                    .insert(api_key.key_hash, api_key.created_at);
+            }
+        }
+
+        // Query for router config changes using RouterStore methods
+        let new_routers = if let Some(last_poll) = self.last_poll_time {
+            self.router_store
+                .get_routers_created_after(last_poll)
+                .await
+                .inspect(|routers| {
+                    debug!("polling found {} new routers", routers.len());
+                })
+                .inspect_err(|e| {
+                    error!(error = %e, "failed to poll router configs");
+                })?
+        } else {
+            // First poll - get all routers
+            self.router_store
+                .get_all_routers()
+                .await
+                .inspect(|routers| {
+                    info!("polling initialized with {} routers", routers.len());
+                })
+                .inspect_err(|e| {
+                    error!(error = %e, "failed to poll router configs");
+                })?
+        };
+
+        // Process router changes
+        for db_router in new_routers {
+            let should_process = match self
+                .last_router_config_versions
+                .get(&db_router.router_hash)
+            {
+                None => true,
+                Some(last_seen) => db_router.created_at > *last_seen,
+            };
+
+            if should_process {
+                match serde_json::from_value::<RouterConfig>(db_router.config) {
+                    Ok(config) => {
+                        info!(router_hash = %db_router.router_hash, "polling found new/updated router");
+                        self.handle_router_config_insert(
+                            RouterId::Named(
+                                db_router.router_hash.clone().into(),
+                            ),
+                            config,
+                            OrgId::new(db_router.organization_id),
+                            self.tx.clone(),
+                        )
+                        .await?;
+
+                        self.last_router_config_versions.insert(
+                            db_router.router_hash,
+                            db_router.created_at,
+                        );
+                    }
+                    Err(e) => {
+                        error!(error = %e, router_hash = %db_router.router_hash, "failed to parse router config");
+                    }
+                }
+            }
+        }
+
+        self.last_poll_time = Some(Utc::now());
+        Ok(())
     }
 
     /// Runs the database listener service.
@@ -107,114 +278,124 @@ impl DatabaseListener {
     async fn run_service(&mut self) -> Result<(), RuntimeError> {
         info!("starting database listener service");
 
-        // Create listener for LISTEN/NOTIFY
-        let listener = &mut self.pg_listener;
-        let router_store = self
-            .app_state
-            .0
-            .router_store
-            .as_ref()
-            .ok_or(InitError::StoreNotConfigured("router_store"))?;
+        self.pg_listener
+            .listen("connected_cloud_gateways")
+            .await
+            .map_err(|e| {
+                error!(error = %e, "failed to listen on database notification channel");
+                InitError::DatabaseConnection(e)
+            })?;
 
-        // Listen for notifications on a channel (you can customize this)
-        listener.listen("connected_cloud_gateways").await.map_err(|e| {
-            error!(error = %e, "failed to listen on database notification channel");
-            RuntimeError::Internal(crate::error::internal::InternalError::Internal)
-        })?;
+        let mut poll_interval = tokio::time::interval(self.poll_interval);
+        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut reconnect_interval =
+            tokio::time::interval(self.listener_reconnect_interval);
+        reconnect_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-        // Process notifications
+        let mut state = ServiceState::Idle;
+
+        // Process notifications and polls
         loop {
-            while let Ok(Some(notification)) = listener.try_recv().await {
-                debug!(
-                    channel = notification.channel(),
-                    payload = notification.payload(),
-                    "received database notification"
-                );
-                // Handle the notification here
-                Self::handle_notification(
-                    &notification,
-                    self.tx.clone(),
-                    self.app_state.clone(),
-                )
-                .await?;
+            match state {
+                ServiceState::Idle => {
+                    tokio::select! {
+                        _ = poll_interval.tick() => {
+                            info!("polling database for changes");
+                            state = ServiceState::PollingDatabase;
+                        }
+
+                        _ = reconnect_interval.tick() => {
+                            info!("periodic reconnection");
+                            state = ServiceState::Reconnecting;
+                        }
+
+                        notification_result = self.pg_listener.recv() => {
+                            match notification_result {
+                                Ok(notification) => {
+                                    state = ServiceState::HandlingNotification(notification);
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "error receiving from listener, continuing");
+                                    // we will continue to receive updates as the next call to recv() will
+                                    // reconnect for us eagerly, additionally we have the db polling and
+                                    // the periodic reconnection that will catch up on any missed events
+                                }
+                            }
+                        }
+                    }
+                }
+                ServiceState::PollingDatabase => {
+                    // This runs outside select!, so it can't be cancelled by
+                    // other branches
+                    if let Err(e) = self.poll_database().await {
+                        error!(error = %e, "error polling database");
+                    }
+                    state = ServiceState::Idle;
+                }
+                ServiceState::HandlingNotification(notification) => {
+                    // This runs outside select!, so it can't be cancelled by
+                    // other branches
+                    if let Err(e) = self
+                        .handle_notification(&notification, self.tx.clone())
+                        .await
+                    {
+                        error!(error = %e, "failed to handle db listener notification, continuing");
+                    }
+                    state = ServiceState::Idle;
+                }
+                ServiceState::Reconnecting => {
+                    // This runs outside select!, so it can't be cancelled by
+                    // other branches
+                    if let Err(e) = self.pg_listener.unlisten_all().await {
+                        error!(error = %e, "failed to unlisten all channels");
+                    }
+                    if let Err(e) = self
+                        .pg_listener
+                        .listen("connected_cloud_gateways")
+                        .await
+                    {
+                        error!(error = %e, "failed to listen on channel after reconnection");
+                    } else {
+                        info!(
+                            "successfully reconnected and listening on channel"
+                        );
+                    }
+                    state = ServiceState::Idle;
+                }
             }
-
-            // connection lost, reset the api keys and router state
-            Self::reset_state(
-                router_store,
-                self.tx.clone(),
-                self.app_state.clone(),
-            )
-            .await?;
         }
-    }
-
-    async fn reset_state(
-        router_store: &RouterStore,
-        tx: Sender<Change<RouterId, Router>>,
-        app_state: AppState,
-    ) -> Result<(), RuntimeError> {
-        tracing::info!("resetting state");
-        let routers_fut = router_store.get_all_routers();
-        let provider_keys_fut = router_store.get_all_provider_keys();
-        let api_keys_fut = router_store.get_all_helicone_api_keys();
-        let (routers, provider_keys, api_keys) =
-            futures::join!(routers_fut, provider_keys_fut, api_keys_fut);
-        let (routers, provider_keys, api_keys) =
-            (routers?, provider_keys?, api_keys?);
-        tracing::info!(
-            num_routers = routers.len(),
-            num_provider_keys = provider_keys.len(),
-            num_api_keys = api_keys.len(),
-            "done fetching data from db, setting state in AppState..."
-        );
-
-        for router in routers {
-            let _ = tx
-                .send(Change::Remove(RouterId::Named(
-                    router.router_hash.into(),
-                )))
-                .await;
-        }
-        app_state
-            .0
-            .provider_keys
-            .set_all_provider_keys(provider_keys)
-            .await;
-        app_state.set_helicone_api_keys(api_keys).await;
-        tracing::info!("done resetting state");
-        Ok(())
     }
 
     async fn handle_router_config_insert(
+        &self,
         router_hash: RouterId,
         router_config: RouterConfig,
-        app_state: AppState,
         organization_id: OrgId,
         tx: Sender<Change<RouterId, Router>>,
     ) -> Result<(), RuntimeError> {
         let router = Router::new(
             router_hash.clone(),
             Arc::new(router_config),
-            app_state.clone(),
+            self.app_state.clone(),
         )
         .await?;
 
-        debug!("sending router to tx");
-        let _ = tx.send(Change::Insert(router_hash.clone(), router)).await;
-        debug!("router inserted");
-        app_state
+        // TODO(eng-2471)
+        tx.send(Change::Insert(router_hash.clone(), router))
+            .await
+            .map_err(|e| {
+                error!(error = %e, "failed to send router insert to tx");
+                RuntimeError::Internal(InternalError::Internal)
+            })?;
+        self.app_state
             .set_router_organization(router_hash.clone(), organization_id)
             .await;
 
-        let router_store = app_state
-            .0
+        let provider_keys = self
             .router_store
-            .as_ref()
-            .ok_or(InitError::StoreNotConfigured("router_store"))?;
-        let provider_keys =
-            router_store.get_org_provider_keys(organization_id).await?;
-        app_state
+            .get_org_provider_keys(organization_id)
+            .await?;
+        self.app_state
             .0
             .provider_keys
             .set_org_provider_keys(organization_id, provider_keys)
@@ -226,24 +407,22 @@ impl DatabaseListener {
     /// Handles incoming database notifications.
     #[allow(clippy::too_many_lines)]
     async fn handle_notification(
+        &mut self,
         notification: &sqlx::postgres::PgNotification,
         tx: Sender<Change<RouterId, Router>>,
-        app_state: AppState,
     ) -> Result<(), RuntimeError> {
-        // Customize this method to handle different types of notifications
-        info!(
-            channel = notification.channel(),
-            payload = notification.payload(),
-            "processing notification"
-        );
+        info!(channel = notification.channel(), "processing notification");
 
         if notification.channel() == "connected_cloud_gateways" {
-            let Ok(payload) = serde_json::from_str::<
+            let payload = serde_json::from_str::<
                 ConnectedCloudGatewaysNotification,
-            >(notification.payload()) else {
-                error!("failed to parse db_listener notification payload");
-                return Ok(());
-            };
+            >(notification.payload()).map_err(|e| {
+                error!(error = %e, "failed to parse connected_cloud_gateways payload");
+                InternalError::Deserialize {
+                    ty: "ConnectedCloudGatewaysNotification",
+                    error: e,
+                }
+            })?;
 
             match payload {
                 ConnectedCloudGatewaysNotification::RouterConfigUpdated {
@@ -255,36 +434,58 @@ impl DatabaseListener {
                     op,
                     config,
                 } => {
-                    debug!("Router configuration updated");
+                    info!(
+                        router_hash = %router_hash,
+                        organization_id = %organization_id,
+                        "router configuration created/updated"
+                    );
                     match op {
                         Op::Insert => {
-                            app_state.increment_router_metrics(
+                            // TODO: metrics might be incorrect if this is just
+                            // a config update
+                            self.app_state.increment_router_metrics(
                                 &router_hash,
                                 &config,
                                 Some(organization_id),
                             );
-                            Self::handle_router_config_insert(
-                                router_hash,
+                            self.handle_router_config_insert(
+                                router_hash.clone(),
                                 *config,
-                                app_state,
                                 organization_id,
                                 tx,
                             )
                             .await
+                            .map_err(|e| {
+                                error!(error = %e, "failed to handle router config insert");
+                                e
+                            })?;
+
+                            self.last_router_config_versions
+                                .insert(router_hash.to_string(), Utc::now());
+
+                            Ok(())
                         }
                         Op::Delete => {
-                            app_state.decrement_router_metrics(
+                            self.app_state.decrement_router_metrics(
                                 &router_hash,
                                 &config,
                                 Some(organization_id),
                             );
-                            if let Err(e) =
-                                tx.send(Change::Remove(router_hash)).await
-                            {
-                                error!(error = %e, "failed to send router remove to tx");
-                            } else {
-                                debug!("router removed");
-                            }
+                            tx
+                                .send(Change::Remove(router_hash.clone()))
+                                .await
+                                .map_err(|e| {
+                                    error!(error = %e, "failed to send router remove to tx");
+                                    RuntimeError::Internal(InternalError::Internal)
+                                })?;
+                            info!(
+                                router_hash = %router_hash,
+                                organization_id = %organization_id,
+                                "router removed"
+                            );
+                            // Remove from state tracking
+                            self.last_router_config_versions
+                                .remove(&router_hash.to_string());
                             Ok(())
                         }
                         _ => {
@@ -301,36 +502,73 @@ impl DatabaseListener {
                     op,
                 } => match op {
                     Op::Insert => {
-                        let _ = app_state
+                        self.app_state
                             .set_helicone_api_key(Key {
-                                key_hash: api_key_hash,
+                                key_hash: api_key_hash.clone(),
                                 owner_id,
                                 organization_id,
                             })
-                            .await;
-                        debug!("router key inserted");
+                            .await
+                            .map_err(|e| {
+                                error!(error = %e, "failed to set helicone api key");
+                                e
+                            })?;
+                        info!(
+                            owner_id = %owner_id,
+                            organization_id = %organization_id,
+                            "helicone api key inserted"
+                        );
+                        // Update state tracking
+                        self.last_api_key_created_at
+                            .insert(api_key_hash, Utc::now());
                         Ok(())
                     }
                     Op::Delete => {
-                        // This case should never happen, since we update the
-                        // soft delete flag when we delete an api key.
-                        let _ = app_state
-                            .remove_helicone_api_key(api_key_hash)
-                            .await;
-                        debug!("router key removed");
+                        // This case should theoretically never happen, since we
+                        // update the soft delete flag when we delete an api
+                        // key. However, we'll handle it
+                        // just in case.
+                        self.app_state
+                            .remove_helicone_api_key(api_key_hash.clone())
+                            .await
+                            .map_err(|e| {
+                                error!(error = %e, "failed to remove helicone api key");
+                                e
+                            })?;
+                        info!(
+                            owner_id = %owner_id,
+                            organization_id = %organization_id,
+                            "helicone api key removed"
+                        );
+                        // Remove from state tracking
+                        self.last_api_key_created_at.remove(&api_key_hash);
                         Ok(())
                     }
                     Op::Update => {
                         if soft_delete {
-                            let _ = app_state
-                                .remove_helicone_api_key(api_key_hash)
-                                .await;
-                            debug!("router key removed");
+                            self.app_state
+                                .remove_helicone_api_key(api_key_hash.clone())
+                                .await
+                                .map_err(|e| {
+                                    error!(error = %e, "failed to remove helicone api key");
+                                    e
+                                })?;
+                            info!(
+                                owner_id = %owner_id,
+                                organization_id = %organization_id,
+                                "helicone api key soft deleted"
+                            );
+                            // Remove from state tracking when soft deleted
+                            self.last_api_key_created_at.remove(&api_key_hash);
+                        } else {
+                            // Update state tracking for non-soft-delete updates
+                            self.last_api_key_created_at
+                                .insert(api_key_hash, Utc::now());
                         }
                         Ok(())
                     }
                     Op::Truncate => {
-                        debug!("skipping router key truncate");
+                        debug!("skipping helicone api key truncate");
                         Ok(())
                     }
                 },
@@ -345,10 +583,6 @@ impl DatabaseListener {
             debug!("received unknown notification");
             Ok(())
         }
-
-        // Example: You could dispatch to different handlers based on the
-        // channel
-        // TODO: Implement handle db listener
     }
 }
 
@@ -358,6 +592,7 @@ impl meltdown::Service for DatabaseListener {
     fn run(mut self, mut token: Token) -> Self::Future {
         Box::pin(async move {
             tokio::select! {
+                biased;
                 result = self.run_service() => {
                     if let Err(e) = result {
                         error!(error = %e, "database listener service encountered error, shutting down");

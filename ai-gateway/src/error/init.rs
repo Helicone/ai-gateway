@@ -78,4 +78,6 @@ pub enum InitError {
     RouterTxNotSet,
     /// Database listener only compatible with cloud deployment target
     DatabaseListenerOnlyCloud,
+    /// Failed to load initial helicone api keys from db: {0}
+    InitHeliconeKeys(String),
 }

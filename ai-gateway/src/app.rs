@@ -229,8 +229,10 @@ impl App {
         let helicone_api_keys = if config.deployment_target.is_cloud()
             && let Some(router_store_ref) = router_store.as_ref()
         {
-            let helicone_api_keys =
-                router_store_ref.get_all_helicone_api_keys().await?;
+            let helicone_api_keys = router_store_ref
+                .get_all_helicone_api_keys()
+                .await
+                .map_err(|e| InitError::InitHeliconeKeys(e.to_string()))?;
 
             Some(helicone_api_keys)
         } else {
