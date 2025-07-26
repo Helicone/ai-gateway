@@ -225,6 +225,8 @@ impl crate::tests::TestDefault for Config {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::config::deployment_target::DeploymentTarget;
 
@@ -241,20 +243,21 @@ mod tests {
     }
 
     #[test]
-    fn default_config_round_trip() {
-        let config = Config::default();
-        let serialized = serde_json::to_string(&config).unwrap();
-        let deserialized = serde_json::from_str::<Config>(&serialized).unwrap();
-        assert_eq!(config, deserialized);
-    }
-
-    #[test]
     fn deployment_target_round_trip() {
         let config = DeploymentTarget::Sidecar;
         let serialized = serde_json::to_string(&config).unwrap();
         let deserialized =
             serde_json::from_str::<DeploymentTarget>(&serialized).unwrap();
         assert_eq!(config, deserialized);
+
+        // Test Cloud variant
+        let cloud_config = DeploymentTarget::Cloud {
+            db_poll_interval: Duration::from_secs(60),
+        };
+        let serialized = serde_json::to_string(&cloud_config).unwrap();
+        let deserialized =
+            serde_json::from_str::<DeploymentTarget>(&serialized).unwrap();
+        assert_eq!(cloud_config, deserialized);
     }
 
     #[test]
@@ -297,5 +300,196 @@ mod tests {
                 "expected '{id}' to be invalid according to ROUTER_ID_REGEX"
             );
         }
+    }
+
+    // Individual field round trip tests
+    #[test]
+    fn telemetry_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.telemetry).unwrap();
+        let deserialized =
+            serde_json::from_str::<telemetry::Config>(&serialized).unwrap();
+        assert_eq!(config.telemetry, deserialized);
+    }
+
+    #[test]
+    fn server_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.server).unwrap();
+        let deserialized =
+            serde_json::from_str::<self::server::ServerConfig>(&serialized)
+                .unwrap();
+        assert_eq!(config.server, deserialized);
+    }
+
+    #[test]
+    fn dispatcher_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.dispatcher).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::dispatcher::DispatcherConfig,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.dispatcher, deserialized);
+    }
+
+    #[test]
+    fn discover_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.discover).unwrap();
+        let deserialized =
+            serde_json::from_str::<self::discover::DiscoverConfig>(&serialized)
+                .unwrap();
+        assert_eq!(config.discover, deserialized);
+    }
+
+    #[test]
+    fn response_headers_round_trip() {
+        let config = Config::default();
+        let serialized =
+            serde_json::to_string(&config.response_headers).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::response_headers::ResponseHeadersConfig,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.response_headers, deserialized);
+    }
+
+    #[test]
+    fn deployment_target_field_round_trip() {
+        let config = Config::default();
+        let serialized =
+            serde_json::to_string(&config.deployment_target).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::deployment_target::DeploymentTarget,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.deployment_target, deserialized);
+    }
+
+    #[test]
+    fn control_plane_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.control_plane).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::control_plane::ControlPlaneConfig,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.control_plane, deserialized);
+    }
+
+    #[test]
+    fn default_model_mapping_round_trip() {
+        let config = Config::default();
+        let serialized =
+            serde_json::to_string(&config.default_model_mapping).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::model_mapping::ModelMappingConfig,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.default_model_mapping, deserialized);
+    }
+
+    #[test]
+    fn providers_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.providers).unwrap();
+        let deserialized = serde_json::from_str::<
+            self::providers::ProvidersConfig,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.providers, deserialized);
+    }
+
+    #[test]
+    fn cache_store_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.cache_store).unwrap();
+        let deserialized = serde_json::from_str::<
+            Option<self::cache::CacheStore>,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.cache_store, deserialized);
+    }
+
+    #[test]
+    fn rate_limit_store_round_trip() {
+        let config = Config::default();
+        let serialized =
+            serde_json::to_string(&config.rate_limit_store).unwrap();
+        let deserialized = serde_json::from_str::<
+            Option<self::rate_limit::RateLimitStore>,
+        >(&serialized)
+        .unwrap();
+        assert_eq!(config.rate_limit_store, deserialized);
+    }
+
+    #[test]
+    fn global_middleware_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.global).unwrap();
+        let deserialized =
+            serde_json::from_str::<MiddlewareConfig>(&serialized).unwrap();
+        assert_eq!(config.global, deserialized);
+    }
+
+    #[test]
+    fn unified_api_middleware_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.unified_api).unwrap();
+        let deserialized =
+            serde_json::from_str::<MiddlewareConfig>(&serialized).unwrap();
+        assert_eq!(config.unified_api, deserialized);
+    }
+
+    #[test]
+    fn routers_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.routers).unwrap();
+        let deserialized =
+            serde_json::from_str::<self::router::RouterConfigs>(&serialized)
+                .unwrap();
+        assert_eq!(config.routers, deserialized);
+    }
+
+    #[test]
+    fn secret_serialization_behavior() {
+        // This test demonstrates why configs with Secret fields fail round-trip
+        // serialization
+        use crate::types::secret::Secret;
+
+        #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+        struct TestConfig {
+            secret_field: Secret<String>,
+        }
+
+        let original = TestConfig {
+            secret_field: Secret::from("my-secret-value".to_string()),
+        };
+
+        // Serialize the config
+        let serialized = serde_json::to_string(&original).unwrap();
+        println!("Serialized: {}", serialized);
+
+        // The serialized form will be: {"secret_field":"*****"}
+        assert!(serialized.contains("*****"));
+
+        // Deserializing succeeds but with "*****" as the new value
+        let deserialized =
+            serde_json::from_str::<TestConfig>(&serialized).unwrap();
+
+        // The values won't be equal because the secret is now "*****" instead
+        // of "my-secret-value"
+        assert_ne!(
+            original, deserialized,
+            "Round-trip fails because secret value is lost"
+        );
+
+        // To verify, let's check the exposed value
+        assert_eq!(deserialized.secret_field.expose(), "*****");
+        assert_ne!(
+            original.secret_field.expose(),
+            deserialized.secret_field.expose()
+        );
     }
 }

@@ -21,7 +21,6 @@ pub enum DeploymentTarget {
             with = "humantime_serde",
             default = "default_db_poll_interval"
         )]
-
         #[serde(rename = "db-poll-interval")]
         db_poll_interval: Duration,
     },
