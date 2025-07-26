@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use super::secret::Secret;
 use crate::{
-    config::{Config, DeploymentTarget, providers::ProvidersConfig},
+    config::{Config, providers::ProvidersConfig},
     endpoints::ApiEndpoint,
     error::provider::ProviderError,
     metrics::Metrics,
@@ -249,7 +249,7 @@ pub enum ProviderKeys {
 impl ProviderKeys {
     #[must_use]
     pub fn new(config: &Config, metrics: &Metrics) -> Self {
-        if config.deployment_target == DeploymentTarget::Cloud {
+        if config.deployment_target.is_cloud() {
             Self::Cloud(RwLock::new(HashMap::default()))
         } else {
             let keys = ProviderKeyMap::from_env(&config.providers);

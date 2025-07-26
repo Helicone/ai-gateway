@@ -76,4 +76,6 @@ pub enum InitError {
     InvalidOrganizationId(String),
     /// Router tx not set
     RouterTxNotSet,
+    /// Database listener only compatible with cloud deployment target
+    DatabaseListenerOnlyCloud,
 }

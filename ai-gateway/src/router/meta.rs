@@ -13,7 +13,6 @@ use tower_http::auth::AsyncRequireAuthorizationLayer;
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
     discover::router::{
         discover::RouterDiscovery, factory::RouterDiscoverFactory,
     },
@@ -58,9 +57,10 @@ impl MetaRouter {
     pub async fn build(
         app_state: AppState,
     ) -> Result<MetaRouterService, InitError> {
-        let meta_router = match app_state.0.config.deployment_target {
-            DeploymentTarget::Sidecar => Self::sidecar(app_state.clone()).await,
-            DeploymentTarget::Cloud => Self::cloud(app_state.clone()).await,
+        let meta_router = if app_state.0.config.deployment_target.is_cloud() {
+            Self::cloud(app_state.clone()).await
+        } else {
+            Self::sidecar(app_state.clone()).await
         }?;
         let service_stack = ServiceBuilder::new()
             .layer(ErrorHandlerLayer::new(app_state.clone()))

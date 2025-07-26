@@ -26,7 +26,7 @@ use tracing_subscriber::{
 use utils::default_true;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
     /// Logging and tracing level in the env logger format.
@@ -57,7 +57,9 @@ impl Default for Config {
     }
 }
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash,
+)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub enum Exporter {
     #[default]
@@ -66,7 +68,9 @@ pub enum Exporter {
     Both,
 }
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash,
+)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub enum Format {
     #[default]

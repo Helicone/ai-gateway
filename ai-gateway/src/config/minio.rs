@@ -4,7 +4,9 @@ use url::Url;
 use crate::types::secret::Secret;
 
 /// The request url format of a S3 bucket.
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum UrlStyle {
     /// Requests will use "path-style" url: i.e:
@@ -29,7 +31,7 @@ impl From<UrlStyle> for rusty_s3::UrlStyle {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
     #[serde(default)]

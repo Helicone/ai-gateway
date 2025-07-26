@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_ERROR_THRESHOLD: f64 = 0.15;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(
+    Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize, Hash,
+)]
 #[serde(deny_unknown_fields, default, rename_all = "kebab-case")]
 pub struct MonitorConfig {
     pub health: HealthMonitorConfig,
@@ -41,7 +43,7 @@ impl MonitorConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
 #[serde(deny_unknown_fields, tag = "type", rename_all = "kebab-case")]
 pub enum HealthMonitorConfig {
     ErrorRatio {
@@ -65,7 +67,7 @@ pub enum HealthMonitorConfig {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
 #[serde(deny_unknown_fields, untagged, rename_all = "kebab-case")]
 pub enum GracePeriod {
     Requests {

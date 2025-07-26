@@ -5,7 +5,6 @@ use tower_http::auth::AsyncAuthorizeRequest;
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
     control_plane::types::hash_key,
     error::{
         api::ApiError, auth::AuthError, internal::InternalError,
@@ -38,73 +37,69 @@ impl AuthService {
         let api_key_without_bearer = api_key.replace("Bearer ", "");
         let computed_hash = hash_key(&api_key_without_bearer);
 
-        match app_state.0.config.deployment_target {
-            DeploymentTarget::Cloud => {
-                let Some(request_kind) = request_kind else {
-                    return Err(InternalError::ExtensionNotFound(
-                        "RequestKind",
-                    )
-                    .into());
-                };
-                let Some(key) =
-                    app_state.check_helicone_api_key(&computed_hash).await
-                else {
-                    return Err(AuthError::InvalidCredentials.into());
-                };
+        if app_state.0.config.deployment_target.is_cloud() {
+            let Some(request_kind) = request_kind else {
+                return Err(
+                    InternalError::ExtensionNotFound("RequestKind").into()
+                );
+            };
+            let Some(key) =
+                app_state.check_helicone_api_key(&computed_hash).await
+            else {
+                return Err(AuthError::InvalidCredentials.into());
+            };
 
-                match request_kind {
-                    RequestKind::Router => {
-                        let Some(router_id) = router_id else {
-                            return Err(InternalError::ExtensionNotFound(
-                                "RouterId",
-                            )
-                            .into());
-                        };
+            match request_kind {
+                RequestKind::Router => {
+                    let Some(router_id) = router_id else {
+                        return Err(InternalError::ExtensionNotFound(
+                            "RouterId",
+                        )
+                        .into());
+                    };
 
-                        let Some(router_organization_id) =
-                            app_state.get_router_organization(router_id).await
-                        else {
-                            return Err(InvalidRequestError::NotFound(
-                                "router not found".to_string(),
-                            )
-                            .into());
-                        };
+                    let Some(router_organization_id) =
+                        app_state.get_router_organization(router_id).await
+                    else {
+                        return Err(InvalidRequestError::NotFound(
+                            "router not found".to_string(),
+                        )
+                        .into());
+                    };
 
-                        if router_organization_id == key.organization_id {
-                            Ok(AuthContext {
-                                api_key: Secret::from(api_key_without_bearer),
-                                user_id: key.owner_id,
-                                org_id: key.organization_id,
-                            })
-                        } else {
-                            Err(AuthError::InvalidCredentials.into())
-                        }
-                    }
-                    RequestKind::UnifiedApi | RequestKind::DirectProxy => {
+                    if router_organization_id == key.organization_id {
                         Ok(AuthContext {
                             api_key: Secret::from(api_key_without_bearer),
                             user_id: key.owner_id,
                             org_id: key.organization_id,
                         })
+                    } else {
+                        Err(AuthError::InvalidCredentials.into())
                     }
                 }
-            }
-            DeploymentTarget::Sidecar => {
-                let Some(control_plane_state) =
-                    &app_state.0.control_plane_state.read().await.state
-                else {
-                    return Err(InternalError::AuthDataNotReady.into());
-                };
-                let key = control_plane_state.get_key_from_hash(&computed_hash);
-                if let Some(key) = key {
+                RequestKind::UnifiedApi | RequestKind::DirectProxy => {
                     Ok(AuthContext {
                         api_key: Secret::from(api_key_without_bearer),
                         user_id: key.owner_id,
-                        org_id: control_plane_state.auth.organization_id,
+                        org_id: key.organization_id,
                     })
-                } else {
-                    Err(AuthError::InvalidCredentials.into())
                 }
+            }
+        } else {
+            let Some(control_plane_state) =
+                &app_state.0.control_plane_state.read().await.state
+            else {
+                return Err(InternalError::AuthDataNotReady.into());
+            };
+            let key = control_plane_state.get_key_from_hash(&computed_hash);
+            if let Some(key) = key {
+                Ok(AuthContext {
+                    api_key: Secret::from(api_key_without_bearer),
+                    user_id: key.owner_id,
+                    org_id: control_plane_state.auth.organization_id,
+                })
+            } else {
+                Err(AuthError::InvalidCredentials.into())
             }
         }
     }

@@ -7,7 +7,6 @@ use tracing::{Instrument, info_span};
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
     discover::monitor::metrics::EndpointMetricsRegistry,
     dispatcher::{
         SSEStream, anthropic_client::Client as AnthropicClient,
@@ -79,87 +78,83 @@ impl Client {
         auth_ctx: Option<&AuthContext>,
         provider: InferenceProvider,
     ) -> Result<reqwest::RequestBuilder, ApiError> {
-        match app_state.0.config.deployment_target {
-            DeploymentTarget::Cloud => {
-                if let Some(auth_ctx) = auth_ctx {
-                    let org_id = auth_ctx.org_id;
+        if app_state.0.config.deployment_target.is_cloud() {
+            if let Some(auth_ctx) = auth_ctx {
+                let org_id = auth_ctx.org_id;
 
-                    let provider_key = app_state
-                        .0
-                        .provider_keys
-                        .get_provider_key(&provider, Some(&org_id))
-                        .await;
+                let provider_key = app_state
+                    .0
+                    .provider_keys
+                    .get_provider_key(&provider, Some(&org_id))
+                    .await;
 
-                    if let Some(ProviderKey::Secret(key)) = provider_key
-                        && key.expose() != ""
-                    {
-                        let request_builder = match self {
-                            Client::OpenAICompatible(_) => {
-                                OpenAICompatibleClient::set_auth_header(
-                                    request_builder,
-                                    &key,
-                                )
-                            }
-                            Client::Anthropic(_) => {
-                                AnthropicClient::set_auth_header(
-                                    request_builder,
-                                    &key,
-                                )
-                            }
-                            _ => request_builder,
-                        };
+                if let Some(ProviderKey::Secret(key)) = provider_key
+                    && key.expose() != ""
+                {
+                    let request_builder = match self {
+                        Client::OpenAICompatible(_) => {
+                            OpenAICompatibleClient::set_auth_header(
+                                request_builder,
+                                &key,
+                            )
+                        }
+                        Client::Anthropic(_) => {
+                            AnthropicClient::set_auth_header(
+                                request_builder,
+                                &key,
+                            )
+                        }
+                        _ => request_builder,
+                    };
 
-                        return Ok(request_builder);
-                    }
-
-                    let refetched_org_provider_keys = app_state
-                        .0
-                        .router_store
-                        .as_ref()
-                        .ok_or(ApiError::Internal(InternalError::Internal))?
-                        .get_org_provider_keys(org_id)
-                        .await
-                        .map_err(|_| {
-                            ApiError::Internal(InternalError::Internal)
-                        })?;
-
-                    let provider_key =
-                        refetched_org_provider_keys.get(&provider);
-
-                    app_state
-                        .set_org_provider_keys(
-                            org_id,
-                            refetched_org_provider_keys.clone(),
-                        )
-                        .await;
-
-                    if let Some(ProviderKey::Secret(key)) = provider_key {
-                        let request_builder = match self {
-                            Client::OpenAICompatible(_) => {
-                                OpenAICompatibleClient::set_auth_header(
-                                    request_builder,
-                                    key,
-                                )
-                            }
-                            Client::Anthropic(_) => {
-                                AnthropicClient::set_auth_header(
-                                    request_builder,
-                                    key,
-                                )
-                            }
-                            _ => request_builder,
-                        };
-
-                        return Ok(request_builder);
-                    }
-
-                    return Err(ApiError::Authentication(
-                        AuthError::ProviderKeyNotFound,
-                    ));
+                    return Ok(request_builder);
                 }
-                Err(ApiError::Authentication(AuthError::ProviderKeyNotFound))
+
+                let refetched_org_provider_keys = app_state
+                    .0
+                    .router_store
+                    .as_ref()
+                    .ok_or(ApiError::Internal(InternalError::Internal))?
+                    .get_org_provider_keys(org_id)
+                    .await
+                    .map_err(|_| ApiError::Internal(InternalError::Internal))?;
+
+                let provider_key = refetched_org_provider_keys.get(&provider);
+
+                app_state
+                    .set_org_provider_keys(
+                        org_id,
+                        refetched_org_provider_keys.clone(),
+                    )
+                    .await;
+
+                if let Some(ProviderKey::Secret(key)) = provider_key {
+                    let request_builder = match self {
+                        Client::OpenAICompatible(_) => {
+                            OpenAICompatibleClient::set_auth_header(
+                                request_builder,
+                                key,
+                            )
+                        }
+                        Client::Anthropic(_) => {
+                            AnthropicClient::set_auth_header(
+                                request_builder,
+                                key,
+                            )
+                        }
+                        _ => request_builder,
+                    };
+
+                    return Ok(request_builder);
+                }
+
+                return Err(ApiError::Authentication(
+                    AuthError::ProviderKeyNotFound,
+                ));
             }
-            DeploymentTarget::Sidecar => Ok(request_builder),
+            Err(ApiError::Authentication(AuthError::ProviderKeyNotFound))
+        } else {
+            Ok(request_builder)
         }
     }
 

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::user::UserId;
 use crate::{
-    config::DeploymentTarget,
+    config::deployment_target::DeploymentTarget,
     error::logger::LoggerError,
     types::{extensions::PromptContext, router::RouterId},
 };

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::default_true;
 
 /// Response headers useful for additional observability.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub struct ResponseHeadersConfig {
     #[serde(default = "default_true")]

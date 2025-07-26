@@ -78,7 +78,7 @@ serde_yml = { workspace = true }
 serial_test = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"] }
 stubr = { workspace = true, optional = true }
-sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "uuid", "tls-rustls"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "uuid", "tls-rustls", "chrono"] }
 telemetry = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -3,7 +3,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::monitor::MonitorConfig;
-use crate::types::discover::DiscoverMode;
 
 #[derive(
     Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize,
@@ -14,11 +13,9 @@ pub enum ProviderKeysSource {
     Env,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct DiscoverConfig {
-    #[serde(default = "default_discover_mode")]
-    pub discover_mode: DiscoverMode,
     #[serde(default = "default_discover_decay", with = "humantime_serde")]
     pub discover_decay: Duration,
     #[serde(default = "default_rtt", with = "humantime_serde")]
@@ -30,16 +27,11 @@ pub struct DiscoverConfig {
 impl Default for DiscoverConfig {
     fn default() -> Self {
         Self {
-            discover_mode: default_discover_mode(),
             discover_decay: default_discover_decay(),
             default_rtt: default_rtt(),
             monitor: MonitorConfig::default(),
         }
     }
-}
-
-fn default_discover_mode() -> DiscoverMode {
-    DiscoverMode::Config
 }
 
 fn default_discover_decay() -> Duration {
@@ -63,7 +55,6 @@ impl crate::tests::TestDefault for DiscoverConfig {
             std::env::set_var("AWS_SECRET_KEY", "");
         }
         Self {
-            discover_mode: DiscoverMode::Config,
             discover_decay: Duration::from_millis(100),
             default_rtt: Duration::from_millis(10),
             monitor: MonitorConfig::test_default(),

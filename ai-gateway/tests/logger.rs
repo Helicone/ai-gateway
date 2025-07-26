@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use ai_gateway::{
-    config::{Config, DeploymentTarget, helicone::HeliconeFeatures},
+    config::{
+        Config, deployment_target::DeploymentTarget, helicone::HeliconeFeatures,
+    },
     tests::{TestDefault, harness::Harness, mock::MockArgs},
 };
 use http::{Method, Request, StatusCode};

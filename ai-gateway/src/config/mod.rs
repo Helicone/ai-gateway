@@ -2,6 +2,7 @@ pub mod balance;
 pub mod cache;
 pub mod control_plane;
 pub mod database;
+pub mod deployment_target;
 pub mod discover;
 pub mod dispatcher;
 pub mod helicone;
@@ -23,7 +24,6 @@ use displaydoc::Display;
 use json_patch::merge;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use strum::IntoStaticStr;
 use thiserror::Error;
 use url::Url;
 
@@ -49,17 +49,7 @@ pub enum Error {
     UrlParse(#[from] url::ParseError),
 }
 
-#[derive(
-    Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize, IntoStaticStr,
-)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub enum DeploymentTarget {
-    Cloud,
-    #[default]
-    Sidecar,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct MiddlewareConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,7 +60,7 @@ pub struct MiddlewareConfig {
     pub retries: Option<self::retry::RetryConfig>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
     pub telemetry: telemetry::Config,
@@ -80,7 +70,7 @@ pub struct Config {
     pub dispatcher: self::dispatcher::DispatcherConfig,
     pub discover: self::discover::DiscoverConfig,
     pub response_headers: self::response_headers::ResponseHeadersConfig,
-    pub deployment_target: DeploymentTarget,
+    pub deployment_target: self::deployment_target::DeploymentTarget,
     pub control_plane: self::control_plane::ControlPlaneConfig,
 
     /// If a request is made with a model that is not in the `RouterConfig`
@@ -221,7 +211,8 @@ impl crate::tests::TestDefault for Config {
             unified_api: MiddlewareConfig::default(),
             providers: self::providers::ProvidersConfig::default(),
             helicone: self::helicone::HeliconeConfig::test_default(),
-            deployment_target: DeploymentTarget::Sidecar,
+            deployment_target:
+                self::deployment_target::DeploymentTarget::Sidecar,
             discover: self::discover::DiscoverConfig::test_default(),
             cache_store: Some(self::cache::CacheStore::default()),
             rate_limit_store: Some(self::rate_limit::RateLimitStore::default()),
@@ -235,6 +226,7 @@ impl crate::tests::TestDefault for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::deployment_target::DeploymentTarget;
 
     #[test]
     fn router_id_regex_is_valid() {
@@ -246,6 +238,14 @@ mod tests {
         // if it doesn't panic, it's good
         let _config = serde_json::to_string(&Config::default())
             .expect("default config is serializable");
+    }
+
+    #[test]
+    fn default_config_round_trip() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config).unwrap();
+        let deserialized = serde_json::from_str::<Config>(&serialized).unwrap();
+        assert_eq!(config, deserialized);
     }
 
     #[test]

@@ -23,7 +23,9 @@ pub type RateLimiterConfig = GovernorConfig<
     governor::middleware::StateInformationMiddleware,
 >;
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq, Hash,
+)]
 #[serde(rename_all = "kebab-case")]
 pub struct RateLimitConfig {
     /// If not set, the store from the rate-limit-store config will be
@@ -112,7 +114,9 @@ pub(crate) fn limiter_config(
         ))
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq, Hash,
+)]
 #[serde(rename_all = "kebab-case", tag = "type")]
 pub enum RateLimitStore {
     #[default]
@@ -166,7 +170,9 @@ pub fn store_enabled_for_test_redis() -> RateLimitStore {
     })
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(
+    Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq, Hash,
+)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct LimitsConfig {
     pub per_api_key: GcraConfig,
@@ -181,7 +187,7 @@ impl crate::tests::TestDefault for LimitsConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct GcraConfig {
     /// The duration it takes to refill the entire rate limit quota.

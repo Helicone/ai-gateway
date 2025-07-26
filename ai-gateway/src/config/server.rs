@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ServerConfig {
     #[serde(default = "default_address")]
@@ -39,7 +39,9 @@ fn default_port() -> u16 {
     8080
 }
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(
+    Default, Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash,
+)]
 #[serde(deny_unknown_fields)]
 pub enum TlsConfig {
     Enabled {

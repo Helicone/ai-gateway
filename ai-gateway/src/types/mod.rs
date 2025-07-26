@@ -1,5 +1,4 @@
 pub mod body;
-pub mod discover;
 pub mod extensions;
 pub mod json;
 pub mod logger;

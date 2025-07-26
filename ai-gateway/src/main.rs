@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use ai_gateway::{
     app::App,
-    config::{Config, DeploymentTarget},
+    config::Config,
     control_plane::websocket::ControlPlaneClient,
     discover::monitor::{
         health::provider::HealthMonitor, rate_limit::RateLimitMonitor,
@@ -135,7 +135,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
     ));
 
     if config.helicone.is_auth_enabled()
-        && config.deployment_target == DeploymentTarget::Sidecar
+        && config.deployment_target.is_sidecar()
     {
         meltdown = meltdown.register(TaggedService::new(
             "control-plane-client",
@@ -150,7 +150,7 @@ async fn run_app(config: Config) -> Result<(), RuntimeError> {
         tasks.push("control-plane-client");
     }
 
-    if config.deployment_target == DeploymentTarget::Cloud {
+    if config.deployment_target.is_cloud() {
         meltdown = meltdown.register(TaggedService::new(
             "database-listener",
             DatabaseListener::new(

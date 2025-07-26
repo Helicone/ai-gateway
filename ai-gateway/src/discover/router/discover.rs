@@ -11,7 +11,7 @@ use tower::discover::Change;
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
+    config::deployment_target::DeploymentTarget,
     discover::router::{cloud::CloudDiscovery, config::ConfigDiscovery},
     error::init::InitError,
     router::service::Router,
@@ -43,7 +43,7 @@ impl RouterDiscovery {
             DeploymentTarget::Sidecar => Ok(Self::Config {
                 inner: ConfigDiscovery::new(app_state).await?,
             }),
-            DeploymentTarget::Cloud => {
+            DeploymentTarget::Cloud { .. } => {
                 let rx = rx.ok_or(InitError::RouterRxNotConfigured)?;
                 Ok(Self::Cloud {
                     inner: CloudDiscovery::new(app_state, rx).await?,

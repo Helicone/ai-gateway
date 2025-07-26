@@ -25,7 +25,7 @@ pub enum HeliconeFeatures {
     All,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct HeliconeConfig {
     /// The API key to authenticate the AI Gateway to the Helicone control

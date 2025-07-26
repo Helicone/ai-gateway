@@ -12,7 +12,6 @@ use tracing::{Instrument, info_span};
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
     error::{
         api::ApiError, internal::InternalError,
         invalid_req::InvalidRequestError, prompts::PromptError,
@@ -157,11 +156,10 @@ async fn build_prompt_request(
         version_response.id
     };
 
-    let s3_client = match app_state.config().deployment_target {
-        DeploymentTarget::Cloud => MinioClient::cloud(&app_state.0.minio),
-        DeploymentTarget::Sidecar => {
-            MinioClient::sidecar(&app_state.0.jawn_http_client)
-        }
+    let s3_client = if app_state.config().deployment_target.is_cloud() {
+        MinioClient::cloud(&app_state.0.minio)
+    } else {
+        MinioClient::sidecar(&app_state.0.jawn_http_client)
     };
 
     let prompt_body_json = s3_client

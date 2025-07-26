@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::retry::RetryConfig;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ControlPlaneConfig {
     pub retry: RetryConfig,

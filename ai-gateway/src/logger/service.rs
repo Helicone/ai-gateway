@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    config::DeploymentTarget,
+    config::deployment_target::DeploymentTarget,
     error::{init::InitError, logger::LoggerError},
     metrics::tfft::TFFTFuture,
     store::minio::MinioClient,
@@ -97,13 +97,11 @@ impl LoggerService {
         tracing::trace!(tfft_duration = ?tfft_duration, "tfft_duration");
         let req_body_len = self.request_body.len();
         let resp_body_len = response_body.len();
-        let s3_client = match self.app_state.config().deployment_target {
-            DeploymentTarget::Cloud => {
-                MinioClient::cloud(&self.app_state.0.minio)
-            }
-            DeploymentTarget::Sidecar => {
-                MinioClient::sidecar(&self.app_state.0.jawn_http_client)
-            }
+        let s3_client = if self.app_state.config().deployment_target.is_cloud()
+        {
+            MinioClient::cloud(&self.app_state.0.minio)
+        } else {
+            MinioClient::sidecar(&self.app_state.0.jawn_http_client)
         };
         s3_client
             .log_bodies(

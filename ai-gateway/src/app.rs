@@ -32,7 +32,7 @@ use crate::{
     app_state::{AppState, InnerAppState},
     cache::{CacheClient, RedisCacheManager},
     cli,
-    config::{Config, DeploymentTarget, cache::CacheStore, server::TlsConfig},
+    config::{Config, cache::CacheStore, server::TlsConfig},
     control_plane::control_plane_state::StateWithMetadata,
     discover::monitor::{
         health::provider::HealthMonitorMap, metrics::EndpointMetricsRegistry,
@@ -199,14 +199,13 @@ impl App {
     /// metrics, monitoring, caching, and API keys.
     async fn build_app_state(config: Config) -> Result<AppState, InitError> {
         let minio = BaseMinioClient::new(config.minio.clone())?;
-        let router_store =
-            if config.deployment_target == DeploymentTarget::Cloud {
-                let pg_pool = connect(&config.database).await?;
-                let router_store = RouterStore::new(pg_pool.clone())?;
-                Some(router_store)
-            } else {
-                None
-            };
+        let router_store = if config.deployment_target.is_cloud() {
+            let pg_pool = connect(&config.database).await?;
+            let router_store = RouterStore::new(pg_pool.clone())?;
+            Some(router_store)
+        } else {
+            None
+        };
         let jawn_http_client = JawnClient::new()?;
 
         let meter = global::meter(SERVICE_NAME);
@@ -227,8 +226,7 @@ impl App {
 
         let cache_manager = setup_cache(&config, metrics.clone())?;
 
-        let helicone_api_keys = if config.deployment_target
-            == DeploymentTarget::Cloud
+        let helicone_api_keys = if config.deployment_target.is_cloud()
             && let Some(router_store_ref) = router_store.as_ref()
         {
             let helicone_api_keys =

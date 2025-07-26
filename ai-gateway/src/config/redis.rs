@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::secret::Secret;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct RedisConfig {
     #[serde(default = "default_url")]
