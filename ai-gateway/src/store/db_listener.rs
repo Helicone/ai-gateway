@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgListener;
 use tokio::{
     sync::mpsc::Sender,
-    time::{Duration, Instant, MissedTickBehavior, interval_at},
+    time::{Duration, MissedTickBehavior, interval},
 };
 use tower::discover::Change;
 use tracing::{debug, error, info};
@@ -292,17 +292,6 @@ impl DatabaseListener {
             "starting database listener service"
         );
 
-        // Start intervals in the future to avoid immediate first tick
-        let poll_start = Instant::now() + self.poll_interval * 2;
-        let mut poll_interval = interval_at(poll_start, self.poll_interval);
-        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
-        let reconnect_start =
-            Instant::now() + self.listener_reconnect_interval * 2;
-        let mut reconnect_interval =
-            interval_at(reconnect_start, self.listener_reconnect_interval);
-        reconnect_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
         // Do an initial poll to populate the state
         info!("performing initial database poll");
         if let Err(e) = self.poll_database().await {
@@ -316,6 +305,12 @@ impl DatabaseListener {
                 error!(error = %e, "failed to listen on database notification channel");
                 InitError::DatabaseConnection(e)
             })?;
+
+        let mut poll_interval = interval(self.poll_interval);
+        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        let mut reconnect_interval = interval(self.listener_reconnect_interval);
+        reconnect_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         let mut state = ServiceState::Idle;
 
