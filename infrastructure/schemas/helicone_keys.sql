@@ -9,6 +9,7 @@ create table public.helicone_api_keys (
   key_permissions text null default 'w'::text,
   temp_key boolean not null default false,
   governance boolean not null default false,
+  updated_at timestamp with time zone not null default null,
   constraint helicone_api_keys_pkey primary key (api_key_hash, id),
   constraint helicone_api_keys_id_key unique (id),
   constraint helicone_api_keys_organization_id_fkey foreign KEY (organization_id) references organization (id)

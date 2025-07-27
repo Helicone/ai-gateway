@@ -143,16 +143,13 @@ impl DatabaseListener {
     /// Poll the database for changes since last poll
     #[allow(clippy::too_many_lines)]
     async fn poll_database(&mut self) -> Result<(), RuntimeError> {
-        let poll_start = Utc::now();
-        info!(
-            last_poll_time = ?self.last_poll_time,
-            "polling database for changes"
-        );
+        let start = Utc::now();
+        info!("polling database for changes");
 
         // Query for API key changes using RouterStore methods
         let new_api_keys = if let Some(last_poll) = self.last_poll_time {
             self.router_store
-                .get_all_db_helicone_api_keys_created_after(last_poll)
+                .get_all_db_helicone_api_keys_updated_after(last_poll)
                 .await
                 .inspect(|keys| {
                     debug!(
@@ -182,12 +179,14 @@ impl DatabaseListener {
         // Process API key changes
         for api_key in new_api_keys {
             let soft_delete = api_key.soft_delete.unwrap_or(false);
+            // Use updated_at if available, otherwise fall back to created_at
+            let key_timestamp =
+                api_key.updated_at.unwrap_or(api_key.created_at);
+
             let should_process =
                 match self.last_api_key_created_at.get(&api_key.key_hash) {
                     None => true,
-                    Some(last_seen) => {
-                        api_key.created_at > *last_seen || soft_delete
-                    }
+                    Some(last_seen) => key_timestamp > *last_seen,
                 };
 
             if should_process {
@@ -195,6 +194,8 @@ impl DatabaseListener {
                     self.app_state
                         .remove_helicone_api_key(api_key.key_hash.clone())
                         .await?;
+                    // Remove from tracking map when soft deleted
+                    self.last_api_key_created_at.remove(&api_key.key_hash);
                 } else {
                     self.app_state
                         .set_helicone_api_key(Key {
@@ -205,10 +206,9 @@ impl DatabaseListener {
                             ),
                         })
                         .await?;
+                    self.last_api_key_created_at
+                        .insert(api_key.key_hash, key_timestamp);
                 }
-
-                self.last_api_key_created_at
-                    .insert(api_key.key_hash, api_key.created_at);
             }
         }
 
@@ -272,10 +272,10 @@ impl DatabaseListener {
             }
         }
 
-        self.last_poll_time = Some(Utc::now());
-        let poll_duration = Utc::now() - poll_start;
+        let end = Utc::now();
+        self.last_poll_time = Some(end);
         info!(
-            poll_duration_ms = poll_duration.num_milliseconds(),
+            poll_duration_ms = (end - start).num_milliseconds(),
             "database polling complete"
         );
         Ok(())
@@ -285,15 +285,8 @@ impl DatabaseListener {
     /// This includes listening for notifications and handling
     /// connection health.
     async fn run_service(&mut self) -> Result<(), RuntimeError> {
-        info!(
-            poll_interval_secs = self.poll_interval.as_secs(),
-            reconnect_interval_secs =
-                self.listener_reconnect_interval.as_secs(),
-            "starting database listener service"
-        );
-
-        // Do an initial poll to populate the state
         info!("performing initial database poll");
+        // Do an initial poll to populate the state
         if let Err(e) = self.poll_database().await {
             error!(error = %e, "error during initial database poll");
         }
@@ -318,7 +311,6 @@ impl DatabaseListener {
         loop {
             match state {
                 ServiceState::Idle => {
-                    debug!("service in idle state, waiting for events");
                     tokio::select! {
                         biased;
                         notification_result = self.pg_listener.recv() => {
@@ -336,7 +328,6 @@ impl DatabaseListener {
                         }
 
                         _ = poll_interval.tick() => {
-                            debug!("poll interval tick fired");
                             state = ServiceState::PollingDatabase;
                         }
 
@@ -346,13 +337,11 @@ impl DatabaseListener {
                     }
                 }
                 ServiceState::PollingDatabase => {
-                    debug!("transitioning to polling database state");
                     // This runs outside select!, so it can't be cancelled by
                     // other branches
                     if let Err(e) = self.poll_database().await {
                         error!(error = %e, "error polling database");
                     }
-                    debug!("polling complete, returning to idle state");
                     state = ServiceState::Idle;
                 }
                 ServiceState::HandlingNotification(notification) => {
@@ -405,14 +394,12 @@ impl DatabaseListener {
         .await?;
 
         // TODO(eng-2471)
-        debug!(router_hash = %router_hash, "attempting to send router insert to channel");
         tx.send(Change::Insert(router_hash.clone(), router))
             .await
             .map_err(|e| {
                 error!(error = %e, "failed to send router insert to tx");
                 RuntimeError::Internal(InternalError::Internal)
             })?;
-        debug!(router_hash = %router_hash, "successfully sent router insert to channel");
         self.app_state
             .set_router_organization(router_hash.clone(), organization_id)
             .await;

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use rustc_hash::FxHashMap;
 use sqlx::PgPool;
-use tracing::{error, trace, warn};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -36,6 +36,8 @@ pub struct DbApiKey {
     pub owner_id: Uuid,
     pub organization_id: Uuid,
     pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub updated_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
     pub soft_delete: Option<bool>,
 }
@@ -121,7 +123,8 @@ impl RouterStore {
             r"SELECT helicone_api_keys.api_key_hash as key_hash,
              helicone_api_keys.user_id as owner_id,
              helicone_api_keys.organization_id as organization_id,
-             helicone_api_keys.created_at as created_at
+             helicone_api_keys.created_at as created_at,
+             helicone_api_keys.updated_at as updated_at
              FROM helicone_api_keys
              WHERE helicone_api_keys.soft_delete = false",
         )
@@ -134,20 +137,22 @@ impl RouterStore {
         Ok(res)
     }
 
-    pub async fn get_all_db_helicone_api_keys_created_after(
+    pub async fn get_all_db_helicone_api_keys_updated_after(
         &self,
-        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
     ) -> Result<Vec<DbApiKey>, InternalError> {
         let res = sqlx::query_as::<_, DbApiKey>(
             r"SELECT helicone_api_keys.api_key_hash as key_hash,
              helicone_api_keys.user_id as owner_id,
              helicone_api_keys.organization_id as organization_id,
              helicone_api_keys.created_at as created_at,
+             helicone_api_keys.updated_at as updated_at,
              helicone_api_keys.soft_delete as soft_delete
              FROM helicone_api_keys
-             WHERE helicone_api_keys.created_at > $1",
+             WHERE helicone_api_keys.updated_at > $1 
+             OR helicone_api_keys.created_at > $1",
         )
-        .bind(created_at)
+        .bind(updated_at)
         .fetch_all(&self.pool)
         .await
         .inspect_err(|e| {
@@ -180,16 +185,13 @@ impl RouterStore {
         for key in res {
             let provider_key =
                 ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
-            let inference_provider =
-                match InferenceProvider::from_helicone_provider_name(
+            let Ok(inference_provider) =
+                InferenceProvider::from_helicone_provider_name(
                     &key.provider_name,
-                ) {
-                    Ok(provider) => provider,
-                    Err(e) => {
-                        trace!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
-                        continue;
-                    }
-                };
+                )
+            else {
+                continue;
+            };
             let existing_provider_keys =
                 provider_keys.entry(OrgId::new(key.org_id)).or_default();
             existing_provider_keys.insert(inference_provider, provider_key);
