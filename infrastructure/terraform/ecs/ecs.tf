@@ -101,7 +101,7 @@ resource "aws_ecs_task_definition" "ai-gateway_task" {
 
       healthCheck = {
         command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/health || exit 1"]
-        interval    = 15
+        interval    = 20
         timeout     = 5
         retries     = 3
         startPeriod = 60
@@ -127,7 +127,7 @@ resource "aws_ecs_service" "ai-gateway_service" {
   launch_type                       = "FARGATE"
   desired_count                     = 2
   force_new_deployment              = true
-  health_check_grace_period_seconds = 30
+  health_check_grace_period_seconds = 45
 
   network_configuration {
     subnets          = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : data.aws_subnets.default.ids
@@ -143,9 +143,6 @@ resource "aws_ecs_service" "ai-gateway_service" {
 
   depends_on = [aws_lb_listener.https_listener]
 
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
 }
 
 # Security group for ECS tasks
@@ -313,27 +310,3 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Application Auto Scaling target for ECS service
-resource "aws_appautoscaling_target" "ecs_target" {
-  max_capacity       = 10
-  min_capacity       = 1
-  resource_id        = "service/${aws_ecs_cluster.ai-gateway_service_cluster.name}/${aws_ecs_service.ai-gateway_service.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
-# Auto Scaling policy based on CPU utilization
-resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
-  name               = "ai-gateway-cpu-autoscaling-${var.environment}"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-    target_value = 60.0
-  }
-}

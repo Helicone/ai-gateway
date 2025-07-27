@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgListener;
 use tokio::{
     sync::mpsc::Sender,
-    time::{Duration, MissedTickBehavior},
+    time::{Duration, Instant, MissedTickBehavior, interval_at},
 };
 use tower::discover::Change;
 use tracing::{debug, error, info};
@@ -143,7 +143,11 @@ impl DatabaseListener {
     /// Poll the database for changes since last poll
     #[allow(clippy::too_many_lines)]
     async fn poll_database(&mut self) -> Result<(), RuntimeError> {
-        info!("polling database for changes");
+        let poll_start = Utc::now();
+        info!(
+            last_poll_time = ?self.last_poll_time,
+            "polling database for changes"
+        );
 
         // Query for API key changes using RouterStore methods
         let new_api_keys = if let Some(last_poll) = self.last_poll_time {
@@ -269,6 +273,11 @@ impl DatabaseListener {
         }
 
         self.last_poll_time = Some(Utc::now());
+        let poll_duration = Utc::now() - poll_start;
+        info!(
+            poll_duration_ms = poll_duration.num_milliseconds(),
+            "database polling complete"
+        );
         Ok(())
     }
 
@@ -276,7 +285,29 @@ impl DatabaseListener {
     /// This includes listening for notifications and handling
     /// connection health.
     async fn run_service(&mut self) -> Result<(), RuntimeError> {
-        info!("starting database listener service");
+        info!(
+            poll_interval_secs = self.poll_interval.as_secs(),
+            reconnect_interval_secs =
+                self.listener_reconnect_interval.as_secs(),
+            "starting database listener service"
+        );
+
+        // Start intervals in the future to avoid immediate first tick
+        let poll_start = Instant::now() + self.poll_interval * 2;
+        let mut poll_interval = interval_at(poll_start, self.poll_interval);
+        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        let reconnect_start =
+            Instant::now() + self.listener_reconnect_interval * 2;
+        let mut reconnect_interval =
+            interval_at(reconnect_start, self.listener_reconnect_interval);
+        reconnect_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        // Do an initial poll to populate the state
+        info!("performing initial database poll");
+        if let Err(e) = self.poll_database().await {
+            error!(error = %e, "error during initial database poll");
+        }
 
         self.pg_listener
             .listen("connected_cloud_gateways")
@@ -286,29 +317,15 @@ impl DatabaseListener {
                 InitError::DatabaseConnection(e)
             })?;
 
-        let mut poll_interval = tokio::time::interval(self.poll_interval);
-        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let mut reconnect_interval =
-            tokio::time::interval(self.listener_reconnect_interval);
-        reconnect_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
         let mut state = ServiceState::Idle;
 
         // Process notifications and polls
         loop {
             match state {
                 ServiceState::Idle => {
+                    debug!("service in idle state, waiting for events");
                     tokio::select! {
-                        _ = poll_interval.tick() => {
-                            info!("polling database for changes");
-                            state = ServiceState::PollingDatabase;
-                        }
-
-                        _ = reconnect_interval.tick() => {
-                            info!("periodic reconnection");
-                            state = ServiceState::Reconnecting;
-                        }
-
+                        biased;
                         notification_result = self.pg_listener.recv() => {
                             match notification_result {
                                 Ok(notification) => {
@@ -322,14 +339,25 @@ impl DatabaseListener {
                                 }
                             }
                         }
+
+                        _ = poll_interval.tick() => {
+                            debug!("poll interval tick fired");
+                            state = ServiceState::PollingDatabase;
+                        }
+
+                        _ = reconnect_interval.tick() => {
+                            state = ServiceState::Reconnecting;
+                        }
                     }
                 }
                 ServiceState::PollingDatabase => {
+                    debug!("transitioning to polling database state");
                     // This runs outside select!, so it can't be cancelled by
                     // other branches
                     if let Err(e) = self.poll_database().await {
                         error!(error = %e, "error polling database");
                     }
+                    debug!("polling complete, returning to idle state");
                     state = ServiceState::Idle;
                 }
                 ServiceState::HandlingNotification(notification) => {
@@ -344,6 +372,7 @@ impl DatabaseListener {
                     state = ServiceState::Idle;
                 }
                 ServiceState::Reconnecting => {
+                    info!("periodic reconnection");
                     // This runs outside select!, so it can't be cancelled by
                     // other branches
                     if let Err(e) = self.pg_listener.unlisten_all().await {
@@ -381,12 +410,14 @@ impl DatabaseListener {
         .await?;
 
         // TODO(eng-2471)
+        debug!(router_hash = %router_hash, "attempting to send router insert to channel");
         tx.send(Change::Insert(router_hash.clone(), router))
             .await
             .map_err(|e| {
                 error!(error = %e, "failed to send router insert to tx");
                 RuntimeError::Internal(InternalError::Internal)
             })?;
+        debug!(router_hash = %router_hash, "successfully sent router insert to channel");
         self.app_state
             .set_router_organization(router_hash.clone(), organization_id)
             .await;

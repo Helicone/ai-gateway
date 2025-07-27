@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use rustc_hash::FxHashMap;
 use sqlx::PgPool;
-use tracing::{error, warn};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -186,7 +186,7 @@ impl RouterStore {
                 ) {
                     Ok(provider) => provider,
                     Err(e) => {
-                        warn!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                        trace!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
                         continue;
                     }
                 };
