@@ -15,4 +15,5 @@ cache-store:
 rate-limit-store:
   type: redis
 
-deployment-target: cloud
+deployment-target:
+  type: cloud
