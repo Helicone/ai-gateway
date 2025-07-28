@@ -161,19 +161,7 @@ impl DatabaseListener {
                     error!(error = %e, "failed to poll api keys");
                 })?
         } else {
-            // First poll - get all active API keys
-            self.router_store
-                .get_all_db_helicone_api_keys()
-                .await
-                .inspect(|keys| {
-                    info!(
-                        "polling initialized with {} helicone api keys",
-                        keys.len()
-                    );
-                })
-                .inspect_err(|e| {
-                    error!(error = %e, "failed to poll api keys");
-                })?
+            Vec::new()
         };
 
         // Process API key changes

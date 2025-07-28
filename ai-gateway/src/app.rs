@@ -233,6 +233,14 @@ impl App {
                 .get_all_helicone_api_keys()
                 .await
                 .map_err(|e| InitError::InitHeliconeKeys(e.to_string()))?;
+            tracing::info!(
+                "loaded initial {} helicone api keys",
+                helicone_api_keys.len()
+            );
+            metrics.routers.helicone_api_keys.add(
+                i64::try_from(helicone_api_keys.len()).unwrap_or(i64::MAX),
+                &[],
+            );
 
             Some(helicone_api_keys)
         } else {
