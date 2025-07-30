@@ -16,6 +16,7 @@ use crate::{
         api::ApiError, internal::InternalError,
         invalid_req::InvalidRequestError,
     },
+    types::json::Json,
 };
 
 #[derive(Debug, Clone)]
@@ -126,28 +127,20 @@ where
                         }
                     };
 
-                let is_config_valid = config.validate();
-                let response_body =
-                    serde_json::to_vec(&ValidateRouterConfigResponse {
-                        valid: is_config_valid.is_ok(),
-                        error: if !is_config_valid.is_ok() {
-                            is_config_valid.err().map(|e| e.to_string())
-                        } else {
-                            None
-                        },
-                    })
-                    .expect(
-                        "can always serialize a ValidateRouterConfigResponse",
-                    );
-
-                Ok(http::Response::builder()
-                    .status(http::StatusCode::OK)
-                    .header(http::header::CONTENT_TYPE, "application/json")
-                    .body(axum_core::body::Body::from(response_body))
-                    .expect(
-                        "serialized ValidateRouterConfigResponse is always a \
-                         valid axum body",
-                    ))
+                let validate_result = config.validate();
+                if let Err(e) = validate_result {
+                    let body = Json(ValidateRouterConfigResponse {
+                        valid: false,
+                        error: Some(e.to_string()),
+                    });
+                    return Ok(body.into_response());
+                } else {
+                    let body = Json(ValidateRouterConfigResponse {
+                        valid: true,
+                        error: None,
+                    });
+                    return Ok(body.into_response());
+                }
             };
             Either::Left(Box::pin(fut))
         } else {
