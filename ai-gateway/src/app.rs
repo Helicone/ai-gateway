@@ -224,7 +224,7 @@ impl App {
             })
             .transpose()?;
 
-        let cache_manager = setup_cache(&config, metrics.clone())?;
+        let cache_manager = setup_cache(&config, metrics.clone());
 
         let helicone_api_keys = if config.deployment_target.is_cloud()
             && let Some(router_store_ref) = router_store.as_ref()
@@ -513,21 +513,30 @@ fn setup_redis_cache(
     RedisCacheManager::new(host_url)
 }
 
-fn setup_cache(
-    config: &Config,
-    metrics: Metrics,
-) -> std::result::Result<Option<CacheClient>, InitError> {
+fn setup_cache(config: &Config, metrics: Metrics) -> Option<CacheClient> {
     match &config.cache_store {
         Some(CacheStore::InMemory { max_size }) => {
             tracing::debug!("Using in-memory cache");
             let moka_manager = setup_moka_cache(*max_size, metrics);
-            Ok(Some(CacheClient::Moka(moka_manager)))
+            Some(CacheClient::Moka(moka_manager))
         }
         Some(CacheStore::Redis { host_url }) => {
             tracing::debug!("Using redis cache");
-            let redis_manager = setup_redis_cache(host_url.clone())?;
-            Ok(Some(CacheClient::Redis(redis_manager)))
+            match setup_redis_cache(host_url.clone()) {
+                Ok(redis_manager) => {
+                    tracing::info!("Successfully connected to Redis cache");
+                    Some(CacheClient::Redis(redis_manager))
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to connect to Redis cache at {}: {}",
+                        host_url,
+                        e
+                    );
+                    None
+                }
+            }
         }
-        None => Ok(None),
+        None => None,
     }
 }
