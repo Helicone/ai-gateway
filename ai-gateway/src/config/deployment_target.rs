@@ -35,6 +35,38 @@ pub enum DeploymentTarget {
     Sidecar,
 }
 
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Deserialize,
+    Serialize,
+    IntoStaticStr,
+    Hash,
+)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub enum DeploymentTargetDiscriminants {
+    Cloud,
+    #[default]
+    Sidecar,
+}
+
+impl AsRef<DeploymentTargetDiscriminants> for DeploymentTarget {
+    fn as_ref(&self) -> &DeploymentTargetDiscriminants {
+        match self {
+            DeploymentTarget::Cloud { .. } => {
+                &DeploymentTargetDiscriminants::Cloud
+            }
+            DeploymentTarget::Sidecar => {
+                &DeploymentTargetDiscriminants::Sidecar
+            }
+        }
+    }
+}
+
 impl DeploymentTarget {
     #[must_use]
     pub fn is_cloud(&self) -> bool {

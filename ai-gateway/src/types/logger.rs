@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use super::user::UserId;
 use crate::{
-    config::deployment_target::DeploymentTarget,
+    config::deployment_target::{
+        DeploymentTarget, DeploymentTargetDiscriminants,
+    },
     error::logger::LoggerError,
     types::{extensions::PromptContext, router::RouterId},
 };
@@ -42,7 +44,7 @@ pub struct HeliconeLogMetadata {
     pub lytix_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_router_id: Option<RouterId>,
-    pub gateway_deployment_target: DeploymentTarget,
+    pub gateway_deployment_target: DeploymentTargetDiscriminants,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,7 +58,7 @@ impl HeliconeLogMetadata {
     pub fn from_headers(
         headers: &mut HeaderMap,
         router_id: Option<RouterId>,
-        deployment_target: DeploymentTarget,
+        deployment_target: &DeploymentTarget,
         prompt_ctx: Option<PromptContext>,
     ) -> Result<Self, LoggerError> {
         let model_override = headers
@@ -95,7 +97,7 @@ impl HeliconeLogMetadata {
             posthog_host,
             lytix_key,
             gateway_router_id: router_id,
-            gateway_deployment_target: deployment_target,
+            gateway_deployment_target: *(deployment_target.as_ref()),
             prompt_id,
             prompt_version_id,
             prompt_inputs,

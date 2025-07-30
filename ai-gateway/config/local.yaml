@@ -5,9 +5,16 @@ telemetry:
 helicone:
   base-url: "http://localhost:8585"
   websocket-url: "ws://localhost:8585/ws/v1/router/control-plane"
-  features: none
+  features: all
 
 routers:
+  latency:
+    load-balance:
+      chat:
+        strategy: model-latency
+        models:
+          - openai/gpt-4o-mini
+          - anthropic/claude-3-7-sonnet
   my-router:
     load-balance:
       chat:

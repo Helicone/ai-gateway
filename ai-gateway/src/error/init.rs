@@ -80,4 +80,6 @@ pub enum InitError {
     DatabaseListenerOnlyCloud,
     /// Failed to load initial helicone api keys from db: {0}
     InitHeliconeKeys(String),
+    /// Failed to load initial routers from db: {0}
+    InitRouters(String),
 }

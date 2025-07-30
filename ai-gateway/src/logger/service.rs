@@ -132,7 +132,7 @@ impl LoggerService {
         let helicone_metadata = HeliconeLogMetadata::from_headers(
             &mut self.request_headers,
             self.router_id,
-            self.deployment_target,
+            &self.deployment_target,
             self.prompt_ctx,
         )?;
         let req_path = self.target_url.path().to_string();
@@ -141,10 +141,21 @@ impl LoggerService {
             InferenceProvider::GoogleGemini => "GOOGLE".to_string(),
             provider => provider.to_string().to_uppercase(),
         };
+
+        // Extract helicone-properties-* headers
+        let mut properties = IndexMap::new();
+        for (name, value) in &self.request_headers {
+            if name.as_str().starts_with("helicone-property-") {
+                if let Ok(value_str) = value.to_str() {
+                    properties.insert(name.to_string(), value_str.to_string());
+                }
+            }
+        }
+
         let request_log = RequestLog::builder()
             .id(self.request_id)
             .user_id(self.auth_ctx.user_id)
-            .properties(IndexMap::new())
+            .properties(properties)
             .target_url(self.target_url)
             .provider(provider)
             .body_size(req_body_len as f64)

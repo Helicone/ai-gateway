@@ -226,6 +226,8 @@ impl RouterStore {
             InitError::DatabaseConnection(e)
         })?;
         let mut provider_keys = FxHashMap::default();
+        let mut unknown_providers = HashSet::new();
+
         for key in res {
             let provider_key =
                 ProviderKey::Secret(Secret::from(key.decrypted_provider_key));
@@ -234,12 +236,15 @@ impl RouterStore {
                     &key.provider_name,
                 ) {
                     Ok(provider) => provider,
-                    Err(e) => {
-                        warn!(error = %e, provider_name = %key.provider_name, "Failed to parse inference provider, skipping");
+                    Err(_e) => {
+                        unknown_providers.insert(key.provider_name);
                         continue;
                     }
                 };
             provider_keys.insert(inference_provider, provider_key);
+        }
+        if !unknown_providers.is_empty() {
+            warn!(unknown_providers = ?unknown_providers, "unknown providers found in organization provider keys");
         }
         Ok(ProviderKeyMap::from_db(provider_keys))
     }
