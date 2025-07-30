@@ -79,6 +79,7 @@ where
 #[derive(Serialize)]
 pub struct ValidateRouterConfigResponse {
     pub valid: bool,
+    pub error: Option<String>,
 }
 
 impl<S, ReqBody> Service<Request<ReqBody>> for ValidateRouterConfig<S, ReqBody>
@@ -127,11 +128,17 @@ where
 
                 let valid = config.validate().is_ok();
                 let response_body =
-                    serde_json::to_vec(&ValidateRouterConfigResponse { valid })
-                        .expect(
-                            "can always serialize a \
-                             ValidateRouterConfigResponse",
-                        );
+                    serde_json::to_vec(&ValidateRouterConfigResponse {
+                        valid,
+                        error: if !valid {
+                            config.validate().err().map(|e| e.to_string())
+                        } else {
+                            None
+                        },
+                    })
+                    .expect(
+                        "can always serialize a ValidateRouterConfigResponse",
+                    );
 
                 Ok(http::Response::builder()
                     .status(http::StatusCode::OK)
