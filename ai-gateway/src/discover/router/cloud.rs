@@ -75,7 +75,6 @@ impl CloudDiscovery {
             .set_router_organization_map(router_organisation_map)
             .await;
 
-        tracing::debug!("Created cloud router discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             events: ReceiverStream::new(rx),

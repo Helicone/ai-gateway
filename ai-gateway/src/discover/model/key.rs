@@ -88,7 +88,6 @@ impl DispatcherDiscovery<Key> {
             }
         }
 
-        tracing::debug!("created model discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             events,

@@ -38,7 +38,6 @@ impl ConfigDiscovery {
             service_map.insert(key, router);
         }
 
-        tracing::debug!("created config router discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             app_state: app_state.clone(),

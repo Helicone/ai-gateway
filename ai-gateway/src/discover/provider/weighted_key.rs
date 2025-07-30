@@ -102,7 +102,6 @@ impl DispatcherDiscovery<WeightedKey> {
         }
         let events = ReceiverStream::new(rx);
 
-        tracing::debug!("created weighted provider discoverer");
         Ok(Self {
             initial: ServiceMap::new(service_map),
             events,

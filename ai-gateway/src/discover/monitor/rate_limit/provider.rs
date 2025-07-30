@@ -304,7 +304,7 @@ impl ProviderMonitorInner<ProviderWeightedKey> {
         self,
         mut rx: Receiver<RateLimitEvent>,
     ) -> Result<(), RuntimeError> {
-        info!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
+        debug!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
 
         let mut rate_limited_providers: HashMap<ProviderWeightedKey, Instant> =
             HashMap::default();
@@ -449,7 +449,7 @@ impl ProviderMonitorInner<ModelWeightedKey> {
         self,
         mut rx: Receiver<RateLimitEvent>,
     ) -> Result<(), RuntimeError> {
-        info!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
+        debug!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
 
         let mut rate_limited_providers: HashMap<ModelWeightedKey, Instant> =
             HashMap::default();
@@ -567,7 +567,7 @@ impl ProviderMonitorInner<ModelKey> {
         self,
         mut rx: Receiver<RateLimitEvent>,
     ) -> Result<(), RuntimeError> {
-        info!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
+        debug!(router_id = ?self.router_id, "starting rate limit monitor for weighted strategy LB");
 
         let mut rate_limited_providers: HashMap<ModelKey, Instant> =
             HashMap::default();
