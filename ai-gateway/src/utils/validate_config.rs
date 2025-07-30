@@ -12,10 +12,7 @@ use tower::{Layer, Service};
 
 use crate::{
     config::router::RouterConfig,
-    error::{
-        api::ApiError, internal::InternalError,
-        invalid_req::InvalidRequestError,
-    },
+    error::{api::ApiError, internal::InternalError},
     types::json::Json,
 };
 
@@ -120,10 +117,11 @@ where
                     match serde_json::from_slice::<RouterConfig>(&config) {
                         Ok(config) => config,
                         Err(e) => {
-                            let error = ApiError::InvalidRequest(
-                                InvalidRequestError::InvalidRequestBody(e),
-                            );
-                            return Ok(error.into_response());
+                            let body = Json(ValidateRouterConfigResponse {
+                                valid: false,
+                                error: Some(e.to_string()),
+                            });
+                            return Ok(body.into_response());
                         }
                     };
 
@@ -133,13 +131,13 @@ where
                         valid: false,
                         error: Some(e.to_string()),
                     });
-                    return Ok(body.into_response());
+                    Ok(body.into_response())
                 } else {
                     let body = Json(ValidateRouterConfigResponse {
                         valid: true,
                         error: None,
                     });
-                    return Ok(body.into_response());
+                    Ok(body.into_response())
                 }
             };
             Either::Left(Box::pin(fut))
