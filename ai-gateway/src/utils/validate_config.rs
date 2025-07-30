@@ -126,12 +126,12 @@ where
                         }
                     };
 
-                let valid = config.validate().is_ok();
+                let is_config_valid = config.validate();
                 let response_body =
                     serde_json::to_vec(&ValidateRouterConfigResponse {
-                        valid,
-                        error: if !valid {
-                            config.validate().err().map(|e| e.to_string())
+                        valid: is_config_valid.is_ok(),
+                        error: if !is_config_valid.is_ok() {
+                            is_config_valid.err().map(|e| e.to_string())
                         } else {
                             None
                         },
