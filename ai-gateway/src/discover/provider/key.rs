@@ -57,7 +57,7 @@ impl DispatcherDiscovery<Key> {
         for (endpoint_type, balance_config) in
             router_config.load_balance.as_ref()
         {
-            let providers = balance_config.providers();
+            let providers = balance_config.providers()?;
             for provider in providers {
                 let key = Key::new(provider.clone(), *endpoint_type);
                 let dispatcher = Dispatcher::new(

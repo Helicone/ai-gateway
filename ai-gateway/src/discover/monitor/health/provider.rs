@@ -30,6 +30,7 @@ use crate::{
         },
     },
     dispatcher::{Dispatcher, DispatcherService},
+    endpoints::EndpointType,
     error::{
         init::InitError,
         internal::InternalError,
@@ -466,73 +467,50 @@ async fn check_model_latency_monitor(
     for (endpoint_type, balance_config) in
         inner.router_config.load_balance.as_ref()
     {
+        let providers = balance_config.providers()?;
         match balance_config {
             BalanceConfigInner::ModelLatency { models } => {
-                for model in models {
-                    let provider =
-                        model.inference_provider().ok_or_else(|| {
-                            InitError::ModelIdNotRecognized(model.to_string())
-                        })?;
-                    let key = ModelKey::new(model.clone(), *endpoint_type);
+                let mut provider_health = HashMap::default();
+                for provider in providers {
                     let is_healthy = inner.check_health(&provider)?;
-                    let was_unhealthy = inner.unhealthy_keys.contains(&key);
+                    provider_health.insert(
+                        provider.clone(),
+                        ProviderHealth::new(
+                            provider,
+                            *endpoint_type,
+                            is_healthy,
+                        ),
+                    );
+                }
 
-                    if !is_healthy && !was_unhealthy {
-                        trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became unhealthy, removing");
-                        let all_models_of_unhealthy_provider = models
-                            .iter()
-                            .filter(|m| {
-                                m.inference_provider().as_ref()
-                                    == Some(&provider)
-                            })
-                            .collect::<Vec<_>>();
+                for (model_name, model_ids) in models {
+                    for model_id in model_ids {
+                        let provider =
+                            model_id.inference_provider().ok_or_else(|| {
+                                InitError::ModelIdNotRecognized(
+                                    model_id.to_string(),
+                                )
+                            })?;
+                        let key = ModelKey::new(
+                            model_name.clone(),
+                            model_id.clone(),
+                            *endpoint_type,
+                        );
+                        let was_unhealthy = inner.unhealthy_keys.contains(&key);
+                        let provider_health = provider_health
+                            .get_mut(&provider)
+                            .ok_or_else(|| InternalError::Internal)?;
 
-                        // Send removal changes for all models of the unhealthy
-                        // provider concurrently
-                        let mut join_set = JoinSet::new();
-                        for unhealthy_model in all_models_of_unhealthy_provider
-                        {
-                            let unhealthy_key = ModelKey::new(
-                                unhealthy_model.clone(),
-                                *endpoint_type,
-                            );
+                        if !provider_health.is_healthy && !was_unhealthy {
+                            trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became unhealthy, removing");
                             let tx = inner.tx.clone();
-
-                            inner.unhealthy_keys.insert(unhealthy_key.clone());
-                            join_set.spawn(async move {
-                                tx.send(Change::Remove(unhealthy_key)).await
-                            });
-                        }
-
-                        // we can't use join_all because we want to avoid panics
-                        while let Some(task_result) = join_set.join_next().await
-                        {
-                            match task_result {
-                                Ok(send_result) => {
-                                    if let Err(e) = send_result {
-                                        error!(error = ?e, model = ?model, "Failed to send remove event for unhealthy provider model");
-                                    }
-                                }
-                                Err(e) => {
-                                    error!(error = ?e, "Task failed while sending remove event for unhealthy provider model");
-                                    return Err(e.into());
-                                }
+                            let send_result =
+                                tx.send(Change::Remove(key)).await;
+                            if let Err(e) = send_result {
+                                error!(error = ?e, model = ?model_id, "Failed to send remove event for unhealthy provider model");
                             }
-                        }
-                    } else if is_healthy && was_unhealthy {
-                        trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became healthy, adding back");
-                        let all_models_of_now_healthy_provider = models
-                            .iter()
-                            .filter(|m| {
-                                m.inference_provider().as_ref()
-                                    == Some(&provider)
-                            })
-                            .collect::<Vec<_>>();
-                        inner.unhealthy_keys.remove(&key);
-
-                        for model in all_models_of_now_healthy_provider {
-                            let key =
-                                ModelKey::new(model.clone(), *endpoint_type);
+                        } else if provider_health.is_healthy && was_unhealthy {
+                            trace!(provider = ?provider, endpoint_type = ?endpoint_type, "Provider became healthy, adding back");
                             let service = Dispatcher::new(
                                 inner.app_state.clone(),
                                 &inner.router_id,
@@ -548,24 +526,24 @@ async fn check_model_latency_monitor(
                                 error!(error = ?e, "Failed to send insert event for healthy provider");
                             }
                         }
-                    }
 
-                    let metric_attributes =
-                        [KeyValue::new("provider", provider.to_string())];
-                    if is_healthy {
-                        inner
-                            .app_state
-                            .0
-                            .metrics
-                            .provider_health
-                            .record(1, &metric_attributes);
-                    } else {
-                        inner
-                            .app_state
-                            .0
-                            .metrics
-                            .provider_health
-                            .record(0, &metric_attributes);
+                        let metric_attributes =
+                            [KeyValue::new("provider", provider.to_string())];
+                        if provider_health.is_healthy {
+                            inner
+                                .app_state
+                                .0
+                                .metrics
+                                .provider_health
+                                .record(1, &metric_attributes);
+                        } else {
+                            inner
+                                .app_state
+                                .0
+                                .metrics
+                                .provider_health
+                                .record(0, &metric_attributes);
+                        }
                     }
                 }
             }
@@ -781,5 +759,25 @@ impl AppState {
                 self.clone(),
             ),
         );
+    }
+}
+
+struct ProviderHealth {
+    provider: InferenceProvider,
+    endpoint_type: EndpointType,
+    is_healthy: bool,
+}
+
+impl ProviderHealth {
+    fn new(
+        provider: InferenceProvider,
+        endpoint_type: EndpointType,
+        is_healthy: bool,
+    ) -> Self {
+        Self {
+            provider,
+            endpoint_type,
+            is_healthy,
+        }
     }
 }

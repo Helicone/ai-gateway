@@ -73,8 +73,18 @@ impl RouterConfig {
                         )));
                     }
                 }
-                BalanceConfigInner::BalancedLatency { .. }
-                | BalanceConfigInner::ModelLatency { .. } => {}
+                BalanceConfigInner::ModelLatency { models } => {
+                    for (_model_name, model_ids) in models {
+                        for model_id in model_ids {
+                            if model_id.inference_provider().is_none() {
+                                return Err(InitError::ModelIdNotRecognized(
+                                    model_id.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+                BalanceConfigInner::BalancedLatency { .. } => {}
             }
         }
 

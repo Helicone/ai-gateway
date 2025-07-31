@@ -31,14 +31,20 @@ use crate::{
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Key {
+    pub model_name: ModelName<'static>,
     pub model_id: ModelId,
     pub endpoint_type: EndpointType,
 }
 
 impl Key {
     #[must_use]
-    pub fn new(model_id: ModelId, endpoint_type: EndpointType) -> Self {
+    pub fn new(
+        model_name: ModelName<'static>,
+        model_id: ModelId,
+        endpoint_type: EndpointType,
+    ) -> Self {
         Self {
+            model_name,
             model_id,
             endpoint_type,
         }
@@ -71,20 +77,29 @@ impl DispatcherDiscovery<Key> {
                         .to_string(),
                 ));
             };
-            for model in models {
-                let key = Key::new(model.clone(), *endpoint_type);
-                let provider = model.inference_provider().ok_or_else(|| {
-                    InitError::ModelIdNotRecognized(model.to_string())
-                })?;
-                let dispatcher = Dispatcher::new_with_model_id(
-                    app_state.clone(),
-                    router_id,
-                    router_config,
-                    provider,
-                    model.clone(),
-                )
-                .await?;
-                service_map.insert(key, dispatcher);
+            for (model_name, model_ids) in models {
+                for model_id in model_ids {
+                    let key = Key::new(
+                        model_name.clone(),
+                        model_id.clone(),
+                        *endpoint_type,
+                    );
+                    let provider =
+                        model_id.inference_provider().ok_or_else(|| {
+                            InitError::ModelIdNotRecognized(
+                                model_id.to_string(),
+                            )
+                        })?;
+                    let dispatcher = Dispatcher::new_with_model_id(
+                        app_state.clone(),
+                        router_id,
+                        router_config,
+                        provider,
+                        model_id.clone(),
+                    )
+                    .await?;
+                    service_map.insert(key, dispatcher);
+                }
             }
         }
 

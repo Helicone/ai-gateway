@@ -559,8 +559,16 @@ impl ProviderMonitorInner<ModelKey> {
             );
             return Err(InternalError::Internal);
         };
+        let Some(model_name) = event.model_name.clone() else {
+            tracing::error!(
+                router_id = ?self.router_id,
+                api_endpoint = ?event.api_endpoint,
+                "No model name found in rate limit event"
+            );
+            return Err(InternalError::Internal);
+        };
         let endpoint_type = event.api_endpoint.endpoint_type();
-        Ok(ModelKey::new(model_id, endpoint_type))
+        Ok(ModelKey::new(model_name, model_id, endpoint_type))
     }
 
     async fn monitor(

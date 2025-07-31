@@ -2,13 +2,17 @@ use std::collections::HashMap;
 
 use derive_more::{AsRef, From};
 use indexmap::IndexSet;
-use nonempty_collections::{NESet, nes};
+use nonempty_collections::{NEMap, NESet, nes};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     endpoints::EndpointType,
-    types::{model_id::ModelId, provider::InferenceProvider},
+    error::init::InitError,
+    types::{
+        model_id::{ModelId, ModelName},
+        provider::InferenceProvider,
+    },
 };
 
 /// A registry of balance configs for each endpoint type,
@@ -117,11 +121,13 @@ impl BalanceConfig {
     }
 
     #[must_use]
-    pub fn providers(&self) -> IndexSet<InferenceProvider> {
-        self.0
-            .values()
-            .flat_map(BalanceConfigInner::providers)
-            .collect()
+    pub fn providers(&self) -> Result<IndexSet<InferenceProvider>, InitError> {
+        let mut all_providers = IndexSet::new();
+        for config in self.0.values() {
+            let providers = config.providers()?;
+            all_providers.extend(providers);
+        }
+        Ok(all_providers)
     }
 }
 
@@ -148,37 +154,49 @@ pub enum BalanceConfigInner {
     /// Distributes and load balances requests among a set of (providers,model).
     ModelWeighted { models: NESet<WeightedModel> },
     /// Distributes and load balances requests among a set of (providers,model).
-    ModelLatency { models: NESet<ModelId> },
+    ModelLatency {
+        models: NEMap<ModelName<'static>, NESet<ModelId>>,
+    },
 }
 
 impl BalanceConfigInner {
     #[must_use]
-    pub fn providers(&self) -> IndexSet<InferenceProvider> {
+    pub fn providers(&self) -> Result<IndexSet<InferenceProvider>, InitError> {
         match self {
             Self::ProviderWeighted { providers } => {
-                providers.iter().map(|t| t.provider.clone()).collect()
+                Ok(providers.iter().map(|t| t.provider.clone()).collect())
             }
             Self::BalancedLatency { providers } => {
-                providers.iter().cloned().collect()
+                Ok(providers.iter().cloned().collect())
             }
-            Self::ModelWeighted { models } => models
-                .iter()
-                .filter_map(|model| {
-                    if let Some(provider) = model.model.inference_provider() { Some(provider) } else {
-                        tracing::warn!(model = ?model.model, "Model has no inference provider");
-                        None
+            Self::ModelWeighted { models } => {
+                let mut providers = IndexSet::new();
+                for model in models {
+                    if let Some(provider) = model.model.inference_provider() {
+                        providers.insert(provider);
+                    } else {
+                        return Err(InitError::ModelIdNotRecognized(
+                            model.model.to_string(),
+                        ));
                     }
-                })
-                .collect(),
-            Self::ModelLatency { models } => models
-                .iter()
-                .filter_map(|model| {
-                    if let Some(provider) = model.inference_provider() { Some(provider) } else {
-                        tracing::warn!(model = ?model, "Model has no inference provider");
-                        None
+                }
+                Ok(providers)
+            }
+            Self::ModelLatency { models } => {
+                let mut providers = IndexSet::new();
+                for (_model_name, model_ids) in models {
+                    for model_id in model_ids {
+                        if let Some(provider) = model_id.inference_provider() {
+                            providers.insert(provider);
+                        } else {
+                            return Err(InitError::ModelIdNotRecognized(
+                                model_id.to_string(),
+                            ));
+                        }
                     }
-                })
-                .collect(),
+                }
+                Ok(providers)
+            }
         }
     }
 }

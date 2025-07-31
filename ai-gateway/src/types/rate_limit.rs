@@ -13,7 +13,10 @@ use tokio::sync::{
 
 use crate::{
     endpoints::ApiEndpoint,
-    types::{model_id::ModelId, router::RouterId},
+    types::{
+        model_id::{ModelId, ModelName},
+        router::RouterId,
+    },
 };
 
 pub type RateLimitEventSenders =
@@ -24,6 +27,7 @@ pub type RateLimitEventReceivers =
 #[derive(Debug, Clone)]
 pub struct RateLimitEvent {
     pub api_endpoint: ApiEndpoint,
+    pub model_name: Option<ModelName<'static>>,
     pub model_id: Option<ModelId>,
     pub retry_after_seconds: Option<u64>,
 }
@@ -36,14 +40,20 @@ impl RateLimitEvent {
     ) -> Self {
         Self {
             api_endpoint,
+            model_name: None,
             model_id: None,
             retry_after_seconds,
         }
     }
 
     #[must_use]
-    pub fn with_model_id(self, model_id: ModelId) -> Self {
+    pub fn with_model(
+        self,
+        model_name: ModelName<'static>,
+        model_id: ModelId,
+    ) -> Self {
         Self {
+            model_name: Some(model_name),
             model_id: Some(model_id),
             ..self
         }

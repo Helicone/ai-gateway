@@ -34,8 +34,11 @@ pub enum ModelMappingValidationError {
     #[error("Model {model} in mapping config does not exist in any provider")]
     ModelNotFound { model: String },
 
-    #[error("Model {model} in mapping config cannot be parsed as a model id")]
+    #[error("Model {model} cannot be parsed as a model id")]
     ModelIdParseError { model: String },
+
+    #[error("Unknown provider: {0}")]
+    UnknownProvider(String),
 }
 
 impl Config {
@@ -47,7 +50,10 @@ impl Config {
         // Validate each router
         for (router_id, router_config) in self.routers.as_ref() {
             // Get all providers this router might use
-            let router_providers = router_config.load_balance.providers();
+            let router_providers =
+                router_config.load_balance.providers().map_err(|e| {
+                    ModelMappingValidationError::UnknownProvider(e.to_string())
+                })?;
 
             // Validate each provider exists in global config
             for provider in &router_providers {
