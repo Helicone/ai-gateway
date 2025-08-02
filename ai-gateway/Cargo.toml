@@ -99,6 +99,7 @@ uuid = { workspace = true, features = ["serde", "v7"] }
 weighted-balance = { workspace = true }
 workspace_root = { workspace = true, optional = true }
 ts-rs = { workspace = true, features = ["uuid-impl"] }
+dashmap = "6.1.0"
 
 [dev-dependencies]
 cargo-husky = { workspace = true, features = ["user-hooks"] }
