@@ -9,6 +9,7 @@ gpt-4:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 gpt-4-turbo:
   - "anthropic/claude-3-7-sonnet"
   - "gemini/gemini-2.5-pro"
@@ -19,6 +20,7 @@ gpt-4-turbo:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/amazon.nova-sonic-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 gpt-4o:
   - "anthropic/claude-3-7-sonnet"
   - "gemini/gemini-2.5-pro"
@@ -29,6 +31,7 @@ gpt-4o:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 gpt-4o-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
@@ -39,6 +42,7 @@ gpt-4o-mini:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gpt-4.1:
   - "anthropic/claude-3-7-sonnet"
   - "gemini/gemini-2.5-pro"
@@ -49,6 +53,7 @@ gpt-4.1:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 gpt-4.1-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
@@ -59,6 +64,7 @@ gpt-4.1-mini:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gpt-4.1-nano:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-1.5-flash-8b"
@@ -69,6 +75,7 @@ gpt-4.1-nano:
   - "hyperbolic/meta-llama/Llama-3.2-3B-Instruct"
   - "bedrock/amazon.nova-micro-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-Guard-3-8B"
 gpt-4.5:
   - "anthropic/claude-opus-4-0"
   - "gemini/gemini-2.5-pro"
@@ -79,6 +86,7 @@ gpt-4.5:
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/deepseek-ai/DeepSeek-R1-0528"
 o1:
   - "anthropic/claude-sonnet-4-0"
   - "gemini/gemini-2.5-pro"
@@ -89,6 +97,7 @@ o1:
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/deepseek-ai/DeepSeek-R1-0528"
 o1-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
@@ -99,6 +108,7 @@ o1-mini:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-32B"
 o1-pro:
   - "anthropic/claude-opus-4-0"
   - "gemini/gemini-2.5-pro"
@@ -109,6 +119,7 @@ o1-pro:
   - "hyperbolic/meta-llama/Meta-Llama-3.1-405B-Instruct"
   - "groq/moonshotai/kimi-k2-instruct"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
 o3:
   - "anthropic/claude-opus-4-0"
   - "gemini/gemini-2.5-pro"
@@ -119,6 +130,7 @@ o3:
   - "groq/moonshotai/kimi-k2-instruct"
   - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
 o3-mini:
   - "anthropic/claude-3-5-haiku"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
@@ -129,6 +141,7 @@ o3-mini:
   - "hyperbolic/Qwen/QwQ-32B"
   - "groq/qwen/qwen3-32b"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-32B"
 o4-mini:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-2.0-flash"
@@ -140,6 +153,7 @@ o4-mini:
   - "groq/qwen/qwen3-32b"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-32B"
 codex-mini:
   - "anthropic/claude-3-7-sonnet"
   - "gemini/gemini-2.0-flash"
@@ -150,6 +164,7 @@ codex-mini:
   - "groq/meta-llama/llama-4-scout-17b-16e-instruct"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen2.5-Coder-7B-fast"
 gpt-4o-mini-search:
   - "anthropic/claude-3-5-haiku"
   - "gemini/gemini-1.5-flash"
@@ -160,6 +175,7 @@ gpt-4o-mini-search:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gpt-4o-search:
   - "anthropic/claude-3-7-sonnet"
   - "gemini/gemini-2.5-pro"
@@ -170,6 +186,7 @@ gpt-4o-search:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 
 # Anthropic Models
 claude-opus-4-0:
@@ -182,6 +199,7 @@ claude-opus-4-0:
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
 claude-sonnet-4-0:
   - "openai/o4-mini"
   - "gemini/gemini-2.0-flash"
@@ -192,6 +210,7 @@ claude-sonnet-4-0:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 claude-3-7-sonnet:
   - "openai/o4-mini"
   - "gemini/gemini-2.0-flash"
@@ -202,6 +221,7 @@ claude-3-7-sonnet:
   - "groq/moonshotai/kimi-k2-instruct"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 claude-3-5-haiku:
   - "gemini/gemini-2.0-flash"
   - "openai/gpt-4o-mini"
@@ -212,6 +232,7 @@ claude-3-5-haiku:
   - "groq/gemma2-9b-it"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 claude-3-5-sonnet:
   - "openai/o3-mini"
   - "gemini/gemini-2.0-flash"
@@ -222,6 +243,7 @@ claude-3-5-sonnet:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 claude-3-opus:
   - "openai/gpt-4.5"
   - "gemini/gemini-2.5-pro"
@@ -232,6 +254,7 @@ claude-3-opus:
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.anthropic.claude-3-opus-20240229-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
 
 # Gemini Models
 gemini-2.5-flash:
@@ -244,6 +267,7 @@ gemini-2.5-flash:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gemini-2.5-pro:
   - "openai/gpt-4.5"
   - "anthropic/claude-sonnet-4-0"
@@ -254,6 +278,7 @@ gemini-2.5-pro:
   - "groq/moonshotai/kimi-k2-instruct"
   - "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/deepseek-ai/DeepSeek-V3-0324"
 gemini-2.0-flash:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -264,6 +289,7 @@ gemini-2.0-flash:
   - "groq/gemma2-9b-it"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gemini-2.0-flash-lite:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -272,8 +298,9 @@ gemini-2.0-flash-lite:
   - "xai/grok-3-mini-fast"
   - "hyperbolic/meta-llama/Meta-Llama-3.1-8B-Instruct"
   - "groq/llama-3.1-8b-instant"
-  - "bedrock/amazon.nova-sonic-v1:0"
+  - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gemini-1.5-flash:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -284,6 +311,7 @@ gemini-1.5-flash:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/amazon.nova-sonic-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gemini-1.5-flash-8b:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -294,6 +322,7 @@ gemini-1.5-flash-8b:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/amazon.nova-sonic-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-Guard-3-8B"
 gemini-1.5-pro:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -304,6 +333,7 @@ gemini-1.5-pro:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 
 # mistral models
 ministral-8b:
@@ -316,6 +346,7 @@ ministral-8b:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 ministral-3b:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -326,6 +357,7 @@ ministral-3b:
   - "groq/meta-llama/llama-prompt-guard-2-22m"
   - "bedrock/amazon.nova-micro-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-Guard-3-8B"
 mistral-small:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -336,6 +368,7 @@ mistral-small:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 mistral-medium:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -346,6 +379,7 @@ mistral-medium:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 mistral-large:
   - "openai/o3"
   - "anthropic/claude-sonnet-4-0"
@@ -356,6 +390,7 @@ mistral-large:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 mistral-saba:
   - "openai/o3"
   - "anthropic/claude-opus-4-0"
@@ -366,6 +401,7 @@ mistral-saba:
   - "groq/mistral-saba-24b"
   - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/deepseek-ai/DeepSeek-R1-0528"
 magistral-small:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -376,6 +412,7 @@ magistral-small:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 magistral-medium:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -386,6 +423,7 @@ magistral-medium:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 ministral-small:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -396,6 +434,7 @@ ministral-small:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 devstral-small:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -406,6 +445,7 @@ devstral-small:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 codestral:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -416,6 +456,7 @@ codestral:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen2.5-Coder-7B-fast"
 open-mistral-nemo:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -426,6 +467,7 @@ open-mistral-nemo:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 mistral-ocr:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -436,6 +478,7 @@ mistral-ocr:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 
 # Ollama Models
@@ -449,6 +492,7 @@ deepseek-r1:
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/deepseek-ai/DeepSeek-R1-0528"
 llama4:
   - "openai/gpt-4o"
   - "anthropic/claude-3-5-sonnet"
@@ -460,6 +504,7 @@ llama4:
   # bedrock doesn't have fullsize llama4
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 llama3.3:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -470,6 +515,7 @@ llama3.3:
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/meta.llama3-8b-instruct-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 llama3:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -480,6 +526,7 @@ llama3:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/meta.llama3-8b-instruct-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 gemma3:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -490,6 +537,7 @@ gemma3:
   - "groq/gemma2-9b-it"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/google/gemma-3-27b-it"
 qwen3:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -500,6 +548,7 @@ qwen3:
   - "groq/qwen/qwen3-32b"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen3-32B"
 phi4:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -510,6 +559,7 @@ phi4:
   - "groq/meta-llama/llama-prompt-guard-2-22m"
   - "bedrock/amazon.nova-lite-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Llama-Guard-3-8B"
 llava:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -520,6 +570,7 @@ llava:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.deepseek.r1-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/Qwen/Qwen2.5-VL-72B-Instruct"
 llama3.2:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -530,6 +581,7 @@ llama3.2:
   - "groq/llama-3.1-8b-instant"
   - "bedrock/meta.llama3-8b-instruct-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # Deepseek Models
 deepseek-chat:
@@ -540,8 +592,9 @@ deepseek-chat:
   - "xai/grok-3"
   - "groq/llama-3.3-70b-versatile"
   - "ollama/llama4"
-  - "hyperbolic/deepseek-ai/DeepSeek-V3"
+  - "hyperbolic/meta-llama/Meta-Llama-3.1-70B-Instruct"
   - "bedrock/us.deepseek.r1-v1:0"
+  - "nebius/deepseek-ai/DeepSeek-V3-0324"
 deepseek-reasoner:
   - "openai/o3"
   - "anthropic/claude-opus-4-0"
@@ -552,6 +605,7 @@ deepseek-reasoner:
   - "hyperbolic/deepseek-ai/DeepSeek-R1"
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.deepseek.r1-v1:0"
+  - "nebius/deepseek-ai/DeepSeek-R1-0528"
 
 # xAI Models
 grok-4:
@@ -565,6 +619,7 @@ grok-4:
   - "hyperbolic/deepseek-ai/DeepSeek-R1"
   - "groq/deepseek-r1-distill-llama-70b"
   - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
+  - "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
 grok-3:
   - "openai/gpt-4o"
   - "anthropic/claude-3-7-sonnet"
@@ -575,6 +630,7 @@ grok-3:
   - "hyperbolic/meta-llama/Meta-Llama-3.1-70B-Instruct"
   - "groq/llama-3.3-70b-versatile"
   - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
 grok-3-mini:
   - "openai/gpt-4o-mini"
   - "anthropic/claude-3-5-haiku"
@@ -585,6 +641,7 @@ grok-3-mini:
   - "hyperbolic/meta-llama/Meta-Llama-3.1-8B-Instruct"
   - "groq/llama-3.1-8b-instant"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  - "nebius/meta-llama/Meta-Llama-3.1-8B-Instruct"
 grok-3-fast:
   - "openai/codex-mini"
   - "anthropic/claude-3-5-sonnet"
@@ -595,6 +652,7 @@ grok-3-fast:
   - "ollama/llama4"
   - "deepseek/deepseek-chat"
   - "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+  - "nebius/meta-llama/Llama-3.3-70B-Instruct"
   - "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
 grok-3-mini-fast:
   - "openai/gpt-4.1-nano"
@@ -882,6 +940,7 @@ moonshotai/kimi-k2-instruct:
   - "hyperbolic/moonshotai/Kimi-K2-Instruct"
   - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
   - "deepseek/deepseek-chat"
+  - "nebius/moonshotai/Kimi-K2-Instruct"
 qwen/qwen3-32b:
   - "openai/o3-mini"
   - "anthropic/claude-3-5-haiku"
@@ -890,5 +949,61 @@ qwen/qwen3-32b:
   - "xai/grok-3-mini"
   - "ollama/qwen3"
   - "hyperbolic/Qwen/QwQ-32B"
+  - "nebius/Qwen/Qwen3-32B"
   - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  - "deepseek/deepseek-chat"
+
+meta-llama/Meta-Llama-3.1-8B-Instruct:
+  - "openai/gpt-4o-mini"
+  - "anthropic/claude-3-5-haiku"
+  - "gemini/gemini-2.0-flash"
+  - "mistral/mistral-small"
+  - "xai/grok-3-mini"
+  - "hyperbolic/meta-llama/Meta-Llama-3.1-8B-Instruct"
+  - "groq/llama-3.1-8b-instant"
+  - "ollama/llama3"
+  - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  - "deepseek/deepseek-chat"
+meta-llama/Llama-3.3-70B-Instruct:
+  - "openai/gpt-4.1-mini"
+  - "anthropic/claude-3-5-haiku"
+  - "gemini/gemini-2.0-flash"
+  - "mistral/mistral-small"
+  - "xai/grok-3-mini"
+  - "hyperbolic/meta-llama/Llama-3.3-70B-Instruct"
+  - "groq/llama-3.3-70b-versatile"
+  - "ollama/llama3.3"
+  - "bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  - "deepseek/deepseek-chat"
+deepseek-ai/DeepSeek-V3-0324:
+  - "openai/gpt-4o"
+  - "anthropic/claude-3-7-sonnet"
+  - "gemini/gemini-2.5-pro"
+  - "mistral/mistral-large"
+  - "xai/grok-3"
+  - "hyperbolic/deepseek-ai/DeepSeek-V3"
+  - "groq/llama-3.3-70b-versatile"
+  - "ollama/llama4"
+  - "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  - "deepseek/deepseek-chat"
+deepseek-ai/DeepSeek-R1-0528:
+  - "openai/o1"
+  - "anthropic/claude-opus-4-0"
+  - "gemini/gemini-2.5-pro"
+  - "mistral/mistral-saba"
+  - "xai/grok-4"
+  - "ollama/deepseek-r1"
+  - "deepseek/deepseek-reasoner"
+  - "hyperbolic/deepseek-ai/DeepSeek-R1"
+  - "groq/deepseek-r1-distill-llama-70b"
+  - "bedrock/us.deepseek.r1-v1:0"
+Qwen/Qwen3-235B-A22B-Instruct-2507:
+  - "openai/gpt-4.5"
+  - "anthropic/claude-opus-4-0"
+  - "gemini/gemini-2.5-pro"
+  - "mistral/mistral-saba"
+  - "xai/grok-4"
+  - "groq/moonshotai/kimi-k2-instruct"
+  - "ollama/deepseek-r1"
+  - "bedrock/us.anthropic.claude-opus-4-20250514-v1:0"
   - "deepseek/deepseek-chat"

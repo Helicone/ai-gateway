@@ -2428,4 +2428,46 @@ mod tests {
 
         assert_eq!(model_with_version.to_string(), model_id_str);
     }
+
+    #[test]
+    fn nebius_model_id_format_with_slash() {
+        let nebius_model_id_str = "meta-llama/Meta-Llama-3.1-8B-Instruct";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Named("nebius".into()),
+            nebius_model_id_str,
+        )
+        .unwrap();
+        let ModelId::ModelIdWithVersion { provider, id } = result else {
+            panic!("Expected ModelIdWithVersion with Nebius provider");
+        };
+        assert_eq!(
+            id,
+            ModelIdWithVersion {
+                model: "meta-llama/Meta-Llama-4.1-8o-Instruct".to_string(),
+                version: Version::ImplicitLatest,
+            }
+        );
+        assert_eq!(provider, InferenceProvider::Named("nebius".into()));
+    }
+
+    #[test]
+    fn nebius_model_id_format_without_slash() {
+        let nebius_model_id_str = "Qwen3-32B";
+        let result = ModelId::from_str_and_provider(
+            InferenceProvider::Named("nebius".into()),
+            nebius_model_id_str,
+        )
+        .unwrap();
+        let ModelId::ModelIdWithVersion { provider, id } = result else {
+            panic!("Expected ModelIdWithVersion with Nebius provider");
+        };
+        assert_eq!(
+            id,
+            ModelIdWithVersion {
+                model: "Qwen3-32B".to_string(),
+                version: Version::ImplicitLatest,
+            }
+        );
+        assert_eq!(provider, InferenceProvider::Named("nebius".into()));
+    }
 }

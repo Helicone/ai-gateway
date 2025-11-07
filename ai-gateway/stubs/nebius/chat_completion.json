@@ -1,0 +1,48 @@
+{
+  "id": "success:nebius:chat_completion",
+  "request": {
+    "method": "POST",
+    "url": "/v1/chat/completions",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer test-token"
+    },
+    "jsonBody": {
+      "model": "meta-llama/Meta-Llama-4.1-8B-Instruct",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello, world!"
+        }
+      ],
+      "max_tokens": 100
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-nebius-test",
+      "object": "chat.completion",
+      "created": 1234567890,
+      "model": "meta-llama/Meta-Llama-4.1-8B-Instruct",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Hello! This is a test response from Nebius."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 10,
+        "total_tokens": 20
+      }
+    }
+  }
+}
