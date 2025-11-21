@@ -8,6 +8,7 @@ use compact_str::CompactString;
 use futures::future::Either;
 use http::uri::PathAndQuery;
 use regex::Regex;
+use tower::Service;
 
 use crate::{
     error::{
@@ -412,5 +413,30 @@ mod tests {
             extract_router_id_and_path(&url_regex, path_id_too_long),
             Err(ApiError::InvalidRequest(_))
         ));
+    }
+
+    #[test]
+    fn test_nebius_direct_proxy_routing() {
+        // Create a simple test request
+        let request = http::Request::builder()
+            .uri("/nebius/v1/chat/completions")
+            .body(axum_core::body::Body::empty())
+            .unwrap();
+
+        // Test the route parsing directly
+        let service = RouterDetailsService {
+            inner: (),
+            unified_url_regex: Regex::new(UNIFIED_URL_REGEX).unwrap(),
+            router_url_regex: Regex::new(ROUTER_URL_REGEX).unwrap(),
+        };
+
+        let route_type = service.parse_route(&request).unwrap();
+        match route_type {
+            RouteType::DirectProxy { provider, path } => {
+                assert_eq!(provider, InferenceProvider::Named("nebius".into()));
+                assert_eq!(path, "v1/chat/completions");
+            }
+            _ => panic!("Expected DirectProxy route type for Nebius"),
+        }
     }
 }

@@ -138,6 +138,7 @@ impl InferenceProvider {
             "Hyperbolic" => Ok(InferenceProvider::Named("hyperbolic".into())),
             "Deepseek" => Ok(InferenceProvider::Named("deepseek".into())),
             "X.AI (Grok)" => Ok(InferenceProvider::Named("xai".into())),
+            "Nebius" => Ok(InferenceProvider::Named("nebius".into())),
             _ => Err(ProviderError::InvalidProviderName(provider_name.into())),
         }
     }
