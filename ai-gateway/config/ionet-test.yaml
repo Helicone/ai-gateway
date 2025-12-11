@@ -1,0 +1,48 @@
+# IO.NET Intelligence Provider Test Configuration
+# This configuration file is for testing the IO.NET integration with the AI Gateway
+
+# Helicone features (set to 'none' for testing without auth)
+helicone:
+    features: none
+
+# Cache configuration (optional - in-memory for testing)
+cache-store:
+    type: in-memory
+
+# Rate limit store (required for rate limiting)
+rate-limit-store:
+    type: in-memory
+
+# Router configuration
+routers:
+    ionet-test:
+        # Load balancing configuration for IO.NET models
+        load-balance:
+            chat:
+                strategy: model-latency
+                models:
+                    # High-capacity reasoning models
+                    - ionet/deepseek-ai/DeepSeek-R1-0528
+                    - ionet/meta-llama/Llama-3.3-70B-Instruct
+                    - ionet/moonshotai/Kimi-K2-Thinking
+
+                    # Multimodal models
+                    - ionet/meta-llama/Llama-3.2-90B-Vision-Instruct
+
+                    # Efficient models for general use
+                    - ionet/openai/gpt-oss-20b
+                    - ionet/mistralai/Mistral-Nemo-Instruct-2407
+
+        # Optional: Enable caching for cost savings
+        cache:
+            directive: "max-age=3600" # Cache for 1 hour
+
+# Global settings (optional)
+global:
+    cache:
+        directive: "max-age=1800"
+# Logging configuration (optional)
+# telemetry:
+#   exporter: otlp
+#   level: info
+#   endpoint: http://localhost:4317

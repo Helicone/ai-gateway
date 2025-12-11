@@ -1,0 +1,42 @@
+{
+    "id": "success:ionet:chat_completion",
+    "request": {
+        "method": "POST",
+        "url": "/v1/chat/completions"
+    },
+    "response": {
+        "status": 200,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "id": "chatcmpl-ionet-12345",
+            "object": "chat.completion",
+            "created": 1741569952,
+            "model": "meta-llama/Llama-3.3-70B-Instruct",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello! I'm running on IO.NET's decentralized GPU infrastructure. How can I assist you today?",
+                        "refusal": null
+                    },
+                    "logprobs": null,
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 15,
+                "completion_tokens": 25,
+                "total_tokens": 40,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 0
+                }
+            }
+        }
+    }
+}

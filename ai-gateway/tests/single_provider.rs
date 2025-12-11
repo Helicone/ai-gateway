@@ -347,3 +347,54 @@ async fn mistral() {
     let response = harness.call(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+/// Sending a request to https://localhost/router should
+/// result in the proxied request targeting IO.NET Intelligence API
+#[tokio::test]
+#[serial_test::serial(default_mock)]
+async fn ionet() {
+    let mut config = Config::test_default();
+    // Disable auth for this test since we're testing basic provider
+    // functionality
+    config.helicone.features = HeliconeFeatures::None;
+    let router_config = RouterConfigs::new(HashMap::from([(
+        RouterId::Named(CompactString::new("my-router")),
+        RouterConfig {
+            load_balance: BalanceConfig::ionet_chat(),
+            ..Default::default()
+        },
+    )]));
+    config.routers = router_config;
+    let mock_args = MockArgs::builder()
+        .stubs(HashMap::from([
+            ("success:ionet:chat_completion", 1.into()),
+            ("success:minio:upload_request", 0.into()),
+            ("success:jawn:log_request", 0.into()),
+        ]))
+        .build();
+    let mut harness = Harness::builder()
+        .with_config(config)
+        .with_mock_args(mock_args)
+        .build()
+        .await;
+    let request_body = axum_core::body::Body::from(
+        serde_json::to_vec(&json!({
+            "model": "ionet/meta-llama/Llama-3.3-70B-Instruct",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        }))
+        .unwrap(),
+    );
+    let request = Request::builder()
+        .method(Method::POST)
+        // default router
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
+        .body(request_body)
+        .unwrap();
+    let response = harness.call(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
