@@ -32,6 +32,17 @@ anthropic:
   base-url: https://api.anthropic.com/
   version: "2023-06-01"
 
+aibadgr:
+  models:
+    - "basic"
+    - "normal"
+    - "premium"
+    # Power-user model names - automatically mapped by AI Badgr
+    - "phi-3-mini"
+    - "mistral-7b"
+    - "llama3-8b-instruct"
+  base-url: https://aibadgr.com/api/v1
+
 gemini:
   models:
     - "gemini-2.5-flash"

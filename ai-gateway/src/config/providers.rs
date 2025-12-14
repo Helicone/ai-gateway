@@ -173,6 +173,47 @@ mod tests {
     }
 
     #[test]
+    fn test_aibadgr_provider_loads() {
+        let config = ProvidersConfig::default();
+
+        // Verify AI Badgr provider is present
+        let aibadgr_provider = InferenceProvider::Named("aibadgr".into());
+        let aibadgr_config = config.get(&aibadgr_provider);
+        assert!(
+            aibadgr_config.is_some(),
+            "AI Badgr provider should be present in default config"
+        );
+
+        let aibadgr_config = aibadgr_config.unwrap();
+        // Note: URL parser does NOT add trailing slash for paths
+        assert_eq!(
+            aibadgr_config.base_url.as_str(),
+            "https://aibadgr.com/api/v1"
+        );
+
+        // Verify tier models are present (at least 3)
+        assert!(aibadgr_config.models.len() >= 3);
+
+        // Check that basic, normal, and premium models exist
+        let has_basic = aibadgr_config
+            .models
+            .iter()
+            .any(|m| m.to_string().contains("basic"));
+        let has_normal = aibadgr_config
+            .models
+            .iter()
+            .any(|m| m.to_string().contains("normal"));
+        let has_premium = aibadgr_config
+            .models
+            .iter()
+            .any(|m| m.to_string().contains("premium"));
+
+        assert!(has_basic, "Should have 'basic' model");
+        assert!(has_normal, "Should have 'normal' model");
+        assert!(has_premium, "Should have 'premium' model");
+    }
+
+    #[test]
     fn test_providers_config_custom_deserialize() {
         use chrono::TimeZone;
         let yaml = r#"
