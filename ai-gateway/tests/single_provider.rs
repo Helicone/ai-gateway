@@ -347,3 +347,49 @@ async fn mistral() {
     let response = harness.call(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+#[serial_test::serial(default_mock)]
+async fn saladcloud() {
+    let mut config = Config::test_default();
+    config.helicone.features = HeliconeFeatures::None;
+    let router_config = RouterConfigs::new(HashMap::from([(
+        RouterId::Named(CompactString::new("my-router")),
+        RouterConfig {
+            load_balance: BalanceConfig::saladcloud(),
+            ..Default::default()
+        },
+    )]));
+    config.routers = router_config;
+    let mock_args = MockArgs::builder()
+        .stubs(HashMap::from([
+            ("success:saladcloud:chat_completion", 1.into()),
+            ("success:minio:upload_request", 0.into()),
+            ("success:jawn:log_request", 0.into()),
+        ]))
+        .build();
+    let mut harness = Harness::builder()
+        .with_config(config)
+        .with_mock_args(mock_args)
+        .build()
+        .await;
+    let request_body = axum_core::body::Body::from(
+        serde_json::to_vec(&json!({
+            "model": "saladcloud/qwen3.6-35b-a3b",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        }))
+        .unwrap(),
+    );
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("http://router.helicone.com/router/my-router/chat/completions")
+        .body(request_body)
+        .unwrap();
+    let response = harness.call(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

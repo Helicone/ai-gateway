@@ -138,6 +138,9 @@ impl InferenceProvider {
             "Hyperbolic" => Ok(InferenceProvider::Named("hyperbolic".into())),
             "Deepseek" => Ok(InferenceProvider::Named("deepseek".into())),
             "X.AI (Grok)" => Ok(InferenceProvider::Named("xai".into())),
+            "SaladCloud" | "Salad Cloud" | "saladcloud" => {
+                Ok(InferenceProvider::Named("saladcloud".into()))
+            }
             _ => Err(ProviderError::InvalidProviderName(provider_name.into())),
         }
     }
@@ -229,15 +232,25 @@ impl ProviderKey {
                 None
             }
         } else {
-            let provider_str = provider.to_string().to_uppercase();
-            let env_var = format!("{provider_str}_API_KEY");
-            if let Ok(key) = std::env::var(&env_var) {
-                Some(ProviderKey::Secret(Secret::from(key)))
-            } else {
-                None
+            for env_var in provider_api_key_env_vars(provider) {
+                if let Ok(key) = std::env::var(&env_var) {
+                    return Some(ProviderKey::Secret(Secret::from(key)));
+                }
             }
+            None
         }
     }
+}
+
+fn provider_api_key_env_vars(provider: &InferenceProvider) -> Vec<String> {
+    if provider.as_ref().eq_ignore_ascii_case("saladcloud") {
+        return vec![
+            "SALAD_CLOUD_API_KEY".to_string(),
+            "SALADCLOUD_API_KEY".to_string(),
+        ];
+    }
+    let provider_str = provider.to_string().to_uppercase();
+    vec![format!("{provider_str}_API_KEY")]
 }
 
 #[derive(Debug)]
@@ -361,5 +374,25 @@ mod tests {
         let named_provider = InferenceProvider::Named("test".into());
         let named_provider_str = named_provider.to_string();
         assert_eq!("test", named_provider_str);
+    }
+
+    #[test]
+    fn saladcloud_provider_name_maps_to_named_provider() {
+        let provider =
+            InferenceProvider::from_helicone_provider_name("SaladCloud")
+                .unwrap();
+        assert_eq!(provider, InferenceProvider::Named("saladcloud".into()));
+    }
+
+    #[test]
+    fn saladcloud_prefers_documented_env_var() {
+        let provider = InferenceProvider::Named("saladcloud".into());
+        assert_eq!(
+            provider_api_key_env_vars(&provider),
+            vec![
+                "SALAD_CLOUD_API_KEY".to_string(),
+                "SALADCLOUD_API_KEY".to_string(),
+            ]
+        );
     }
 }

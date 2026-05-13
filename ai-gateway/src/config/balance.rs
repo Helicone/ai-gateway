@@ -116,6 +116,20 @@ impl BalanceConfig {
         )]))
     }
 
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn saladcloud() -> Self {
+        Self(HashMap::from([(
+            EndpointType::Chat,
+            BalanceConfigInner::ProviderWeighted {
+                providers: nes![WeightedProvider {
+                    provider: InferenceProvider::Named("saladcloud".into()),
+                    weight: Decimal::from(1),
+                }],
+            },
+        )]))
+    }
+
     #[must_use]
     pub fn providers(&self) -> IndexSet<InferenceProvider> {
         self.0

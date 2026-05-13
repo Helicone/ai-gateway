@@ -1,0 +1,37 @@
+{
+  "id": "success:saladcloud:chat_completion",
+  "request": {
+    "method": "POST",
+    "url": "/v1/chat/completions"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "chatcmpl-saladcloud-test",
+      "object": "chat.completion",
+      "created": 1770000000,
+      "model": "qwen3.6-35b-a3b",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Hello from SaladCloud.",
+            "refusal": null,
+            "annotations": []
+          },
+          "logprobs": null,
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 19,
+        "completion_tokens": 10,
+        "total_tokens": 29
+      }
+    }
+  }
+}

@@ -126,6 +126,13 @@ ollama:
     - "llava"
   base-url: http://localhost:11434/
 
+saladcloud:
+  models:
+    - "qwen3.5-9b"
+    - "qwen3.6-27b"
+    - "qwen3.6-35b-a3b"
+  base-url: https://ai.salad.cloud/
+
 bedrock:
   # bedrock models must be enabled prior to sending
   # requests which use them

@@ -30,6 +30,8 @@ pub struct MockArgs {
     pub global_bedrock_latency: Option<u64>,
     #[builder(setter(strip_option), default = None)]
     pub global_mistral_latency: Option<u64>,
+    #[builder(setter(strip_option), default = None)]
+    pub global_saladcloud_latency: Option<u64>,
 
     #[builder(setter(strip_option), default = None)]
     pub openai_port: Option<u16>,
@@ -47,6 +49,8 @@ pub struct MockArgs {
     pub jawn_port: Option<u16>,
     #[builder(setter(strip_option), default = None)]
     pub mistral_port: Option<u16>,
+    #[builder(setter(strip_option), default = None)]
+    pub saladcloud_port: Option<u16>,
 
     /// Map of stub id to the expectations on the number of times it should be
     /// called.
@@ -65,6 +69,7 @@ pub struct Mock {
     pub minio_mock: Stubr,
     pub jawn_mock: Stubr,
     pub mistral_mock: Stubr,
+    pub saladcloud_mock: Stubr,
     args: MockArgs,
 }
 
@@ -157,6 +162,20 @@ impl Mock {
             .unwrap()
             .base_url = Url::parse(&mistral_mock.uri()).unwrap();
 
+        let saladcloud_mock = start_mock_for_test(
+            &get_stubs_path("saladcloud"),
+            args.global_saladcloud_latency,
+            args.stubs.as_ref(),
+            args.verify,
+            args.saladcloud_port,
+        )
+        .await;
+        config
+            .providers
+            .get_mut(&InferenceProvider::Named("saladcloud".into()))
+            .unwrap()
+            .base_url = Url::parse(&saladcloud_mock.uri()).unwrap();
+
         let minio_mock = start_mock_for_test(
             &get_stubs_path("minio"),
             None,
@@ -189,6 +208,7 @@ impl Mock {
             minio_mock,
             jawn_mock,
             mistral_mock,
+            saladcloud_mock,
             args,
         }
     }
@@ -273,6 +293,16 @@ impl Mock {
         )
         .await;
 
+        let saladcloud_mock = start_mock(
+            &get_stubs_path("saladcloud"),
+            args.global_saladcloud_latency,
+            args.stubs.as_ref(),
+            false,
+            false,
+            args.saladcloud_port,
+        )
+        .await;
+
         Self {
             openai_mock,
             anthropic_mock,
@@ -282,6 +312,7 @@ impl Mock {
             minio_mock,
             jawn_mock,
             mistral_mock,
+            saladcloud_mock,
             args,
         }
     }
@@ -295,6 +326,7 @@ impl Mock {
         self.minio_mock.http_server.verify().await;
         self.jawn_mock.http_server.verify().await;
         self.mistral_mock.http_server.verify().await;
+        self.saladcloud_mock.http_server.verify().await;
     }
 
     pub async fn reset(&self) {
@@ -306,6 +338,7 @@ impl Mock {
         self.minio_mock.http_server.reset().await;
         self.jawn_mock.http_server.reset().await;
         self.mistral_mock.http_server.reset().await;
+        self.saladcloud_mock.http_server.reset().await;
     }
 
     pub async fn stubs(&self, stubs: HashMap<&'static str, Times>) {
@@ -367,6 +400,15 @@ impl Mock {
             &self.jawn_mock,
             &get_stubs_path("jawn"),
             None,
+            &stubs,
+            self.args.verify,
+        )
+        .await;
+
+        register_stubs_for_mock(
+            &self.saladcloud_mock,
+            &get_stubs_path("saladcloud"),
+            self.args.global_saladcloud_latency,
             &stubs,
             self.args.verify,
         )
