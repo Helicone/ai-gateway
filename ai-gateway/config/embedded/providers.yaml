@@ -94,6 +94,17 @@ xai:
     - "grok-2-vision"
   base-url: https://api.x.ai/
 
+empiriolabs:
+  models:
+    - "qwen3-7-plus"
+    - "qwen3-7-max"
+    - "deepseek-v4-pro"
+    - "deepseek-v4-flash"
+    - "glm-5-1"
+    - "kimi-k2-7-code"
+    - "minimax-m3"
+  base-url: https://api.empiriolabs.ai/
+
 hyperbolic:
   models:
     - "moonshotai/Kimi-K2-Instruct"
