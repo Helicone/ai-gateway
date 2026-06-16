@@ -113,6 +113,16 @@ hyperbolic:
     - "NousResearch/Hermes-3-Llama-3.1-70B"
   base-url: https://api.hyperbolic.xyz/
 
+openpaths:
+  models:
+    - "openpaths/auto"
+    - "openpaths/auto-code"
+    - "openpaths/auto-fast"
+    - "openpaths/auto-reasoning"
+    - "openpaths/auto-vision"
+    - "openpaths/auto-cheap"
+  base-url: https://openpaths.io/
+
 ollama:
   models:
     - "deepseek-r1"
