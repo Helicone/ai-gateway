@@ -153,3 +153,11 @@ bedrock:
     - "meta.llama3-2-90b-instruct-v1:0"
     - "meta.llama4-maverick-17b-instruct-v1:0"
   base-url: https://bedrock-runtime.us-east-1.amazonaws.com/
+
+pinstripes:
+  models:
+    - "deepseek-v4-flash"
+    - "glm-4.5-air"
+    - "qwen3-35b"
+    - "minimax-m2.7"
+  base-url: https://pinstripes.io/
